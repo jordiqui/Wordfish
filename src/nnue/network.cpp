@@ -48,7 +48,6 @@
 #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUEBig, EvalFileDefaultNameBig);
 INCBIN(EmbeddedNNUESmall, EvalFileDefaultNameSmall);
-INCBIN(EmbeddedNNUEFalcon, EvalFileDefaultNameFalcon);
 #else
 const unsigned char        gEmbeddedNNUEBigData[1]   = {0x0};
 const unsigned char* const gEmbeddedNNUEBigEnd       = &gEmbeddedNNUEBigData[1];
@@ -56,10 +55,14 @@ const unsigned int         gEmbeddedNNUEBigSize      = 1;
 const unsigned char        gEmbeddedNNUESmallData[1] = {0x0};
 const unsigned char* const gEmbeddedNNUESmallEnd     = &gEmbeddedNNUESmallData[1];
 const unsigned int         gEmbeddedNNUESmallSize    = 1;
+#endif
+
+// The optional Falcon network is not embedded by default to keep builds
+// lightweight. Use empty placeholders so the engine can compile without a
+// Falcon net; if a compatible file is provided at runtime it will be loaded.
 const unsigned char        gEmbeddedNNUEFalconData[1] = {0x0};
 const unsigned char* const gEmbeddedNNUEFalconEnd     = &gEmbeddedNNUEFalconData[1];
 const unsigned int         gEmbeddedNNUEFalconSize    = 1;
-#endif
 
 namespace {
 
