@@ -1,10 +1,10 @@
 #!/bin/bash
-# Run perft validation on the Revolution engine.
+# Run perft validation on the Wordfish engine.
 # Builds the engine if needed and executes the existing test suite.
 
 set -e
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ENGINE="$ROOT_DIR/src/revolution"
+ENGINE="$ROOT_DIR/src/wordfish"
 TEST_DIR="$ROOT_DIR/tests"
 
 if [ ! -x "$ENGINE" ]; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simple SPSA tuner for the Revolution engine."""
+"""Simple SPSA tuner for the Wordfish engine."""
 import argparse
 import os
 import random
@@ -19,9 +19,9 @@ def run_bench(engine, name, value):
     raise RuntimeError("Unexpected bench output")
 
 def main():
-    p = argparse.ArgumentParser(description="SPSA tuning for Revolution")
+    p = argparse.ArgumentParser(description="SPSA tuning for Wordfish")
     p.add_argument("--param", nargs=4, metavar=("NAME", "START", "MIN", "MAX"), action='append', required=True)
-    p.add_argument("--engine", default="src/revolution")
+    p.add_argument("--engine", default="src/wordfish")
     p.add_argument("--iterations", type=int, default=10)
     args = p.parse_args()
 

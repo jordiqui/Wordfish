@@ -1,4 +1,4 @@
-Revolution Chess Engine
+Wordfish Chess Engine
 
 Copyright (c) 2024 Jorge Ruiz Centelles
 
@@ -7,7 +7,7 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-Revolution incorporates code from the following GPLv3 projects:
+Wordfish incorporates code from the following GPLv3 projects:
 
 - Stockfish <https://github.com/official-stockfish/Stockfish>
 - Berserk <https://github.com/jhonnold/berserk/tree/main/src>

@@ -1,6 +1,6 @@
 # Benchmarking Procedure
 
-This document outlines how to benchmark **Revolution** against other engines.
+This document outlines how to benchmark **Wordfish** against other engines.
 
 ## 1. Build the Engine
 ```bash
