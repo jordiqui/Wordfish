@@ -326,11 +326,12 @@ void Engine::verify_networks() const {
     // The Falcon network is optional. Verify it only when a network file
     // is present so builds succeed even if the Falcon net is missing.
     const std::string falconFile = options["EvalFileFalcon"];
+    const std::string falconPath = binaryDirectory + falconFile;
     auto              fileExists = [](const std::string& path) {
         std::ifstream f(path, std::ios::binary);
         return f.good();
     };
-    if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
+    if (fileExists(falconPath) || fileExists(falconFile))
         networks->falcon.verify(falconFile, onVerifyNetworks);
 }
 
