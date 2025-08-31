@@ -21,7 +21,6 @@
 #include <algorithm>
 #include <cassert>
 #include <deque>
-#include <fstream>
 #include <iosfwd>
 #include <memory>
 #include <ostream>
