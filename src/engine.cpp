@@ -63,7 +63,8 @@ Engine::Engine(std::optional<std::string> path) :
       NN::Networks(
         NN::NetworkBig({EvalFileDefaultNameBig, "None", ""}, NN::EmbeddedNNUEType::BIG),
         NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL),
-        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""}, NN::EmbeddedNNUEType::FALCON))) {
+        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""},
+                          NN::EmbeddedNNUEType::FALCON))) {
     pos.set(StartFEN, false, &states->back());
 
 
