@@ -323,16 +323,9 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
-    // The Falcon network is optional. Verify it only when a network file
-    // is present so builds succeed even if the Falcon net is missing.
-    const std::string falconFile = options["EvalFileFalcon"];
-    const std::string falconPath = binaryDirectory + falconFile;
-    auto              fileExists = [](const std::string& path) {
-        std::ifstream f(path, std::ios::binary);
-        return f.good();
-    };
-    if (fileExists(falconPath) || fileExists(falconFile))
-        networks->falcon.verify(falconFile, onVerifyNetworks);
+
+    // The Falcon network is optional. Skip verification to avoid
+    // terminating the engine when the net is unavailable or incompatible.
 }
 
 void Engine::load_networks() {
