@@ -317,50 +317,35 @@ void Engine::set_tt_size(size_t mb) {
 
 void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 
-// network related
-
-void Engine::verify_networks() const {
+ 321  // network related
+   void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
-    networks->falcon.verify(options["EvalFileFalcon"], onVerifyNetworks);
+
+    const std::string falconFile = options["EvalFileFalcon"];
+    auto fileExists = [](const std::string& path) {
+        std::ifstream f(path, std::ios::binary);
+        return f.good();
+    };
+    if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
+        networks->falcon.verify(falconFile, onVerifyNetworks);
 }
 
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
-        networks_.falcon.load(binaryDirectory, options["EvalFileFalcon"]);
+
+        const std::string falconFile = options["EvalFileFalcon"];
+        auto fileExists = [](const std::string& path) {
+            std::ifstream f(path, std::ios::binary);
+            return f.good();
+        };
+        if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
+            networks_.falcon.load(binaryDirectory, falconFile);
     });
     threads.clear();
     threads.ensure_network_replicated();
-}
-
-void Engine::load_big_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) { networks_.big.load(binaryDirectory, file); });
-    threads.clear();
-    threads.ensure_network_replicated();
-}
-
-void Engine::load_small_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
-    threads.clear();
-    threads.ensure_network_replicated();
-}
-
-void Engine::load_falcon_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) { networks_.falcon.load(binaryDirectory, file); });
-    threads.clear();
-    threads.ensure_network_replicated();
-}
-
-void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[3]) {
-    networks.modify_and_replicate([&files](NN::Networks& networks_) {
-        networks_.big.save(files[0].first);
-        networks_.small.save(files[1].first);
-        networks_.falcon.save(files[2].first);
     });
 }
 
