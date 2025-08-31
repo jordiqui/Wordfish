@@ -1,6 +1,8 @@
 /*
-  Wordfish, a UCI chess engine based on Stockfish, Berserk, and Obsidian
+  Wordfish 2.0, a UCI chess engine based on Stockfish, Berserk, and Obsidian
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
   Copyright (C) 2024 Jorge Ruiz Centelles
+  Credits: ChatGPT
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,13 +20,11 @@
 #include "position.h"
 
 #ifndef ENGINE_BUILD_DATE
-// Fallback to compilation date if not provided by the build system
-#define ENGINE_BUILD_DATE __DATE__
+#define ENGINE_BUILD_DATE "310825"
 #endif
 
 #ifndef ENGINE_NAME
-// Override at build time with:  -DENGINE_NAME="\"Wordfish 1.0.1 dev\""
-#define ENGINE_NAME "Wordfish 1.0.1 dev"
+#define ENGINE_NAME "Wordfish 2.0"
 #endif
 
 using namespace Stockfish;
@@ -33,7 +33,8 @@ int main(int argc, char* argv[]) {
 
     // Clear, consistent banner (many GUIs echo this to their logs)
     std::cout << ENGINE_NAME << ' ' << ENGINE_BUILD_DATE << ' ' << __TIME__
-              << " by Jorge Ruiz Centelles" << std::endl;
+              << " by Stockfish developers, Jorge Ruiz Centelles and ChatGPT"
+              << std::endl;
 
     std::cout << compiler_info() << std::endl;
 

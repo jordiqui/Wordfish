@@ -154,13 +154,16 @@ void UCIEngine::loop() {
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
         {
-            std::pair<std::optional<std::string>, std::string> files[2];
+            std::pair<std::optional<std::string>, std::string> files[3];
 
             if (is >> std::skipws >> files[0].second)
                 files[0].first = files[0].second;
 
             if (is >> std::skipws >> files[1].second)
                 files[1].first = files[1].second;
+
+            if (is >> std::skipws >> files[2].second)
+                files[2].first = files[2].second;
 
             engine.save_network(files);
         }
