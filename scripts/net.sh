@@ -72,8 +72,11 @@ fetch_network() {
   return 1
 }
 
+
+# Download the big and small networks automatically
 fetch_network EvalFileDefaultNameBig && \
 fetch_network EvalFileDefaultNameSmall
 
 # Falcon network is optional and not downloaded by default. Download manually
 # if a compatible Falcon net is available.
+
