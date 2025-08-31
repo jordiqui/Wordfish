@@ -1,26 +1,23 @@
-# Revolution Chess Engine
+# Wordfish 2.0 Chess Engine (310825)
 
 <div align="center">
-  <img src="[https://ijccrl.com/wp-content/uploads/2025/08/revolution.png]" 
-  <h3>Revolution</h3>
-  
+  <h3>Wordfish 2.0</h3>
+
   A free and open-source UCI chess engine combining classical algorithms with neural network innovations.
   <br>
-  <strong><a href="#">Explore Revolution Documentation »</a>
+  <em>Authors: Stockfish developers, Jorge Ruiz, ChatGPT</em>
 
-  <em>Author: Jorge Ruiz Centelles</em>
-  
 </div>
 
 ## Overview
 
-**Revolution** is a free, open-source UCI chess engine implementing cutting-edge search algorithms combined with neural network evaluation. Derived from fundamental chess programming principles, Revolution analyzes positions through parallelized alpha-beta search enhanced with null-move pruning and late move reductions.
+**Wordfish** is a free, open-source UCI chess engine implementing cutting-edge search algorithms combined with neural network evaluation. Derived from fundamental chess programming principles, Wordfish analyzes positions through parallelized alpha-beta search enhanced with null-move pruning and late move reductions.
 
-As a UCI-compliant engine, Revolution operates through **standard chess interfaces** without an integrated graphical interface. Users must employ compatible chess GUIs (Arena, Scid vs PC, etc.) for board visualization and move input. Consult your GUI documentation for implementation details.
+As a UCI-compliant engine, Wordfish operates through **standard chess interfaces** without an integrated graphical interface. Users must employ compatible chess GUIs (Arena, Scid vs PC, etc.) for board visualization and move input. Consult your GUI documentation for implementation details.
 
 ## Technical Architecture
 
-Revolution's architecture features:
+Wordfish's architecture features:
 
 - Hybrid evaluation system combining classical heuristics with NNUE networks
 - SMP parallelization with YBWC (Young Brothers Wait Concept)
