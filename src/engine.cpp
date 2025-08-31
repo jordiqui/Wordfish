@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cassert>
 #include <deque>
+#include <fstream>
 #include <iosfwd>
 #include <memory>
 #include <ostream>
@@ -323,15 +324,29 @@ void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
 
-    // The Falcon network is optional. Skip verification to avoid
-    // terminating the engine when the net is unavailable or incompatible.
+    // The Falcon network is optional. Verify it only when a network file
+    // is present so builds succeed even if the Falcon net is missing.
+    const std::string falconFile = options["EvalFileFalcon"];
+    auto              fileExists = [](const std::string& path) {
+        std::ifstream f(path, std::ios::binary);
+        return f.good();
+    };
+    if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
+        networks->falcon.verify(falconFile, onVerifyNetworks);
 }
 
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
-        networks_.falcon.load(binaryDirectory, options["EvalFileFalcon"]);
+
+        const std::string falconFile = options["EvalFileFalcon"];
+        auto              fileExists = [](const std::string& path) {
+            std::ifstream f(path, std::ios::binary);
+            return f.good();
+        };
+        if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
+            networks_.falcon.load(binaryDirectory, falconFile);
     });
     threads.clear();
     threads.ensure_network_replicated();
