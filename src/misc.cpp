@@ -30,10 +30,10 @@
 
 #include "types.h"
 #ifndef ENGINE_BUILD_DATE
-#define ENGINE_BUILD_DATE "310825"
+#define ENGINE_BUILD_DATE "010925"
 #endif
 #ifndef ENGINE_NAME
-#define ENGINE_NAME "Wordfish 2.0"
+#define ENGINE_NAME "Wordfish 2.0 dev"
 #endif
 
 namespace Stockfish {
