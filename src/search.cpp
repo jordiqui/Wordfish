@@ -360,14 +360,17 @@ void Search::Worker::iterative_deepening() {
             // Reset UCI info selDepth for each depth and each PV line
             selDepth = 0;
 
-            // Reset aspiration window starting size
-            delta     = 5 + std::abs(rootMoves[pvIdx].meanSquaredScore) / 11131;
-            Value avg = rootMoves[pvIdx].averageScore;
-            alpha     = std::max(avg - delta, -VALUE_INFINITE);
-            beta      = std::min(avg + delta, VALUE_INFINITE);
+            // Reset aspiration window starting size using last iteration's
+            // final value (previousScore). Tripple the constant factor to
+            // widen the initial window.
+            delta          = 15 + std::abs(rootMoves[pvIdx].meanSquaredScore) / 11131;
+            Value prev     = rootMoves[pvIdx].previousScore;
+            alpha          = std::max(prev - delta, -VALUE_INFINITE);
+            beta           = std::min(prev + delta, VALUE_INFINITE);
+            Move prevBest  = rootMoves[pvIdx].pv[0];
 
-            // Adjust optimism based on root move's averageScore
-            optimism[us]  = 136 * avg / (std::abs(avg) + 93);
+            // Adjust optimism based on root move's previous score
+            optimism[us]  = 136 * prev / (std::abs(prev) + 93);
             optimism[~us] = -optimism[us];
 
             // Start with a small aspiration window and, in the case of a fail
@@ -404,11 +407,16 @@ void Search::Worker::iterative_deepening() {
                     && nodes > 10000000)
                     main_manager()->pv(*this, threads, tt, rootDepth);
 
-                // In case of failing low/high increase aspiration window and re-search,
-                // otherwise exit the loop.
+                // In case of failing low/high increase aspiration window and
+                // re-search, otherwise exit the loop. New bounds depend on the
+                // old window, the score +/- delta and whether the best move
+                // has changed.
+                bool bestMoveChanged = rootMoves[pvIdx].pv[0] != prevBest;
+                prevBest             = rootMoves[pvIdx].pv[0];
+
                 if (bestValue <= alpha)
                 {
-                    beta  = (3 * alpha + beta) / 4;
+                    beta  = (alpha + beta) / 2;  // ignore FLB[0] params
                     alpha = std::max(bestValue - delta, -VALUE_INFINITE);
 
                     failedHighCnt = 0;
@@ -417,14 +425,19 @@ void Search::Worker::iterative_deepening() {
                 }
                 else if (bestValue >= beta)
                 {
+                    if (bestMoveChanged)
+                        alpha = std::max(bestValue - delta, -VALUE_INFINITE);
+                    else
+                        alpha = (alpha + beta) / 2;
+
                     beta = std::min(bestValue + delta, VALUE_INFINITE);
                     ++failedHighCnt;
                 }
                 else
                     break;
 
-                delta += delta / 3;
-
+                delta += 2 * delta;  // triple C behaviour on subsequent tries
+                
                 assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
             }
 

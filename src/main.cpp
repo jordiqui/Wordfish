@@ -1,5 +1,5 @@
 /*
-  Wordfish 2.0, a UCI chess engine based on Stockfish, Berserk, and Obsidian
+  Wordfish 2.0 dev, a UCI chess engine based on Stockfish, Berserk, and Obsidian
   Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
   Copyright (C) 2024 Jorge Ruiz Centelles
   Credits: ChatGPT
@@ -20,11 +20,11 @@
 #include "position.h"
 
 #ifndef ENGINE_BUILD_DATE
-#define ENGINE_BUILD_DATE "310825"
+#define ENGINE_BUILD_DATE "010925"
 #endif
 
 #ifndef ENGINE_NAME
-#define ENGINE_NAME "Wordfish 2.0"
+#define ENGINE_NAME "Wordfish 2.0 dev"
 #endif
 
 using namespace Stockfish;

@@ -128,6 +128,11 @@ void TimeManagement::init(Search::LimitsType& limits,
         maxScale = 1.3 + 0.11 * (centiMTG / 100.0);
     }
 
+    // Scale allocated time according to the Slow Mover option (percentage)
+    double slowMover = options["Slow Mover"] / 100.0;
+    optScale *= slowMover;
+    maxScale *= slowMover;
+
     // Limit the maximum possible time for this move
     optimumTime = TimePoint(optScale * timeLeft);
     maximumTime =

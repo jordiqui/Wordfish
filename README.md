@@ -1,7 +1,7 @@
-# Wordfish 2.0 Chess Engine (310825)
+# Wordfish 2.0 dev Chess Engine (010925)
 
 <div align="center">
-  <h3>Wordfish 2.0</h3>
+  <h3>Wordfish 2.0 dev</h3>
 
   A free and open-source UCI chess engine combining classical algorithms with neural network innovations.
   <br>
@@ -78,6 +78,14 @@ Full compilation guides available in [documentation][doc-link].
  `SyzygyPremap` boolean option. When set to `true`, `Tablebases::init` pre-maps all
  available WDL and DTZ tables during initialization, reducing probe latency at the
  expense of additional startup time and memory usage.
+
+## Slow Mover Option
+
+ The `Slow Mover` UCI option controls how aggressively the engine spends its
+ available time during a game. Higher values make Wordfish use a larger
+ percentage of its clock on each move, playing more slowly, while lower values
+ encourage faster play. This setting only affects game play and has no impact
+ when running analysis.
 
 ## Experience Book
 
