@@ -33,7 +33,7 @@ The distribution includes:
 - `COPYING.txt` ([GNU GPLv3 license][gpl-link])
 - `AUTHORS` (contributor acknowledgments)
 - `src/` (source code with platform-specific Makefiles)
-- Neural network weights (`revolution.nnue`)
+ - Neural network weights (`*.nnue`)
 
 ## Contributing
 
@@ -45,16 +45,16 @@ Contributions must adhere to:
 - Compatibility with UCI protocol standard
 
 ### Testing Infrastructure
-Improvements require extensive testing:
-- Install the [Revolution Test Worker][worker-link]
-- Participate in active tests on [Revolution Test Suite][testsuite-link]
-- Verify ELO gains through SPRT validation
+ Improvements require extensive testing:
+ - Install the [Wordfish Test Worker][worker-link]
+ - Participate in active tests on [Wordfish Test Suite][testsuite-link]
+ - Verify ELO gains through SPRT validation
 
 ### Community
-Technical discussions occur primarily through:
-- [Revolution Discord Server][discord-link]
-- [GitHub Discussions][discussions-link]
-- [Chess Programming Wiki][chesswiki-link]
+ Technical discussions occur primarily through:
+ - [Wordfish Discord Server][discord-link]
+ - [GitHub Discussions][discussions-link]
+ - [Chess Programming Wiki][chesswiki-link]
 
 ## Compilation
 
@@ -73,19 +73,19 @@ Full compilation guides available in [documentation][doc-link].
 
 ## Syzygy Tablebases
 
-Revolution can probe [Syzygy](https://github.com/syzygy1) endgame tablebases when a
-directory is supplied via the `SyzygyPath` UCI option. The engine also exposes a
-`SyzygyPremap` boolean option. When set to `true`, `Tablebases::init` pre-maps all
-available WDL and DTZ tables during initialization, reducing probe latency at the
-expense of additional startup time and memory usage.
+ Wordfish can probe [Syzygy](https://github.com/syzygy1) endgame tablebases when a
+ directory is supplied via the `SyzygyPath` UCI option. The engine also exposes a
+ `SyzygyPremap` boolean option. When set to `true`, `Tablebases::init` pre-maps all
+ available WDL and DTZ tables during initialization, reducing probe latency at the
+ expense of additional startup time and memory usage.
 
 ## Experience Book
 
-Revolution puede aprender de partidas previas guardando datos en un archivo `.exp` en formato binario.
+ Wordfish puede aprender de partidas previas guardando datos en un archivo `.exp` en formato binario.
 Las siguientes opciones UCI controlan este sistema:
 
 - `Experience Enabled`: activa o desactiva la experiencia (por defecto `true`).
-- `Experience File`: nombre del archivo donde se almacena la experiencia (por defecto `revolution.exp`).
+ - `Experience File`: nombre del archivo donde se almacena la experiencia (por defecto `wordfish.exp`).
 - `Experience Readonly`: si es `true`, no se escriben cambios en el archivo.
 - `Experience Book`: usa la experiencia como libro de aperturas.
 - `Experience Book Width`: número de movimientos principales a considerar (1–20).
@@ -98,14 +98,14 @@ El archivo se carga al iniciar el motor y se actualiza tras cada partida si la o
 
 ## License
 
-Revolution is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
+ Wordfish is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
 It integrates source code from:
 
 - [Stockfish](https://github.com/official-stockfish/Stockfish)
 - [Berserk](https://github.com/jhonnold/berserk/tree/main/src)
 - [Obsidian](https://github.com/gab8192/Obsidian)
 
-Because these projects are GPLv3, any distribution of Revolution must also comply with GPLv3.
+ Because these projects are GPLv3, any distribution of Wordfish must also comply with GPLv3.
 When redistributing, you must:
 1. Include the original license text (`COPYING.txt`)
 2. Provide complete corresponding source code
@@ -113,7 +113,7 @@ When redistributing, you must:
 
 ## Acknowledgements
 
-Revolution also benefits from:
+ Wordfish also benefits from:
 - Neural networks trained on [Lichess open database][lichess-db]
 - Search techniques from [CCC testing community][ccc-link]
 - Positional analysis concepts from [CPW research][cpw-link]
