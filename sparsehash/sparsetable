@@ -1,0 +1,7 @@
+#ifndef REVOLUTION_SPARSEHASH_SPARSETABLE_H
+#define REVOLUTION_SPARSEHASH_SPARSETABLE_H
+
+// Placeholder sparsetable for the Revolution project.
+// Implementation intentionally minimal.
+
+#endif // REVOLUTION_SPARSEHASH_SPARSETABLE_H

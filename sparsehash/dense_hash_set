@@ -1,0 +1,7 @@
+#ifndef REVOLUTION_SPARSEHASH_DENSE_HASH_SET_H
+#define REVOLUTION_SPARSEHASH_DENSE_HASH_SET_H
+
+// Placeholder dense_hash_set for the Revolution project.
+// Implementation intentionally minimal.
+
+#endif // REVOLUTION_SPARSEHASH_DENSE_HASH_SET_H
