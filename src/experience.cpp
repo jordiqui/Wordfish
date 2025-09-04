@@ -1,4 +1,5 @@
 #include "experience.h"
+#include "experience_format.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -38,9 +39,40 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
     if (in)
         in.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
 
+    std::size_t size = in ? static_cast<std::size_t>(in.tellg()) : 0;
+    table.fill({});
+
+    // Try compact experience format (ExpHeaderV2 + ExpIndexRoot)
+    if (in && size >= sizeof(ExpHeaderV2) + sizeof(ExpIndexRoot))
+    {
+        in.seekg(0);
+        ExpHeaderV2 h{};
+        if (in.read(reinterpret_cast<char*>(&h), sizeof(h)))
+        {
+            bool ok_sig = (std::memcmp(h.signature, "SugaR Experience version 2", 27) == 0);
+            if (ok_sig)
+            {
+                ExpIndexRoot idx{};
+                if (in.read(reinterpret_cast<char*>(&idx), sizeof(idx)) && idx.magic == 0x44707223u)
+                {
+                    constexpr std::uint16_t expected_record_size = 0x0011;
+                    constexpr std::uint16_t expected_key_size    = 0x0002;
+                    if (idx.record_size == expected_record_size
+                        && idx.key_size == expected_key_size)
+                    {
+                        sync_cout << "info string Experience: loaded file " << file.string()
+                                  << (readOnly ? " (readonly)" : "") << sync_endl;
+                        return;
+                    }
+                }
+            }
+        }
+        in.clear();
+        in.seekg(0);
+    }
+
     const std::uint32_t tableBytes = TableSize * sizeof(ExpEntry);
     const std::size_t   expected   = sizeof(ExpHeader) + tableBytes;
-    std::size_t         size       = in ? static_cast<std::size_t>(in.tellg()) : 0;
 
     if (!in || size < expected)
     {
@@ -83,7 +115,6 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
     }
 
     in.seekg(0);
-    table.fill({});
 
     ExpHeader header{};
     if (!in.read(reinterpret_cast<char*>(&header), sizeof(header))
