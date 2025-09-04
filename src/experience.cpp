@@ -5,8 +5,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
-#include <cstring>
 #include <array>
 
 #include "misc.h"
@@ -52,11 +50,11 @@ void Experience::insert_entry(uint64_t key, uint16_t move, int value, int depth,
 }
 
 void Experience::load(const std::string& file) {
-    std::string path = file;
-    bool        convertBin   = false;
-    bool        binaryFormat = false;
-    bool        isBL         = false;
-    bool        isV2         = false;
+    std::string   path = file;
+    bool          convertBin   = false;
+    bool          binaryFormat = false;
+    bool          isBL         = false;
+    bool          isV2         = false;
 
     const std::string sigV2 = "SugaR Experience version 2";
 
