@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <string>
 
 #include "position.h"
 #include "types.h"
@@ -45,6 +46,7 @@ class Experience {
     void clear();
     void load(const std::filesystem::path& file, bool readonly);
     void save(const std::filesystem::path& file) const;
+    void create_empty_file(const std::string& path);
     Move probe(const Position&      pos,
                [[maybe_unused]] int width,
                int                  evalImportance,
