@@ -11,6 +11,7 @@
 
 #include "misc.h"
 #include "rpd4.hpp"
+#include "experience_v2.hpp"  // seed_dummy_if_empty()
 
 namespace Stockfish {
 
@@ -52,7 +53,7 @@ void Experience::insert_entry(uint64_t key, uint16_t move, int value, int depth,
 
 void Experience::load(const std::string& file) {
     std::string   path = file;
-    std::ifstream in;
+    std::ifstream in(path, std::ios::binary);
     bool          convertBin   = false;
     bool          binaryFormat = false;
     bool          isBL         = false;
@@ -69,24 +70,25 @@ void Experience::load(const std::string& file) {
         if (ext == ".bin")
         {
             convertBin = true;
-            in.open(path, std::ios::binary);
             path = path.substr(0, path.size() - 4) + ".exp";
             sync_cout << "info string '.bin' experience files are deprecated; converting to '"
                       << path << "'" << sync_endl;
         }
     }
 
-    if (!convertBin)
-        in.open(path, std::ios::binary);
-
     std::string display = path;
     if (path != file)
         display += " (from " + file + ")";
+    if (!in) {
+        // Si no existe o no abre, crea el exp mínimo (32B firma + 32B #rpD4 + 62B subheader)
+        seed_dummy_if_empty(path);
 
-    if (!in)
-    {
-        sync_cout << "info string Could not open " << display << sync_endl;
-        return;
+        in.clear();
+        in.open(path, std::ios::binary);
+        if (!in) {
+            sync_cout << "info string Could not open " << display << sync_endl;
+            return;
+        }
     }
 
     // Detect format: check for SugaR Experience v2 signature
