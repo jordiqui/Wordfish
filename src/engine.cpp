@@ -166,10 +166,10 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Experience Enabled", Option(true, [this](const Option& o) {
                     if (bool(o)) {
-                        experience.load(options["Experience File"]);
+                        experience.load(experience_path(options["Experience File"]));
                     } else {
                         if (!(bool) options["Experience Readonly"])
-                            experience.save(options["Experience File"]);
+                            experience.save(experience_path(options["Experience File"]));
                         experience.clear();
                     }
                     return std::nullopt;
@@ -178,9 +178,9 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Experience File", Option("wordfish.exp", [this](const Option& o) {
                     if ((bool) options["Experience Enabled"]) {
                         if (!(bool) options["Experience Readonly"])
-                            experience.save(options["Experience File"]);
+                            experience.save(experience_path(options["Experience File"]));
                         experience.clear();
-                        experience.load(o);
+                        experience.load(experience_path(o));
                     }
                     return std::nullopt;
                 }));
@@ -211,7 +211,7 @@ Engine::Engine(std::optional<std::string> path) :
       }));
 
     if ((bool) options["Experience Enabled"])
-        experience.load(options["Experience File"]);
+        experience.load(experience_path(options["Experience File"]));
 
     load_networks();
     resize_threads();
@@ -242,7 +242,17 @@ void Engine::search_clear() {
     Tablebases::release();
 
     if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
-        experience.save(options["Experience File"]);
+        experience.save(experience_path(options["Experience File"]));
+}
+
+std::string Engine::experience_path(const std::string& file) const {
+#ifdef _WIN32
+    bool isAbsolute = (file.size() > 1 && file[1] == ':')
+                      || (!file.empty() && (file[0] == '/' || file[0] == '\\'));
+#else
+    bool isAbsolute = !file.empty() && file[0] == '/';
+#endif
+    return (isAbsolute || binaryDirectory.empty()) ? file : binaryDirectory + file;
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {

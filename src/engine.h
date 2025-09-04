@@ -123,6 +123,8 @@ class Engine {
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetworks;
+
+    std::string experience_path(const std::string& file) const;
 };
 
 }  // namespace Stockfish
