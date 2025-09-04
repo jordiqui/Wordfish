@@ -13,12 +13,12 @@ namespace Stockfish {
 #pragma pack(push, 1)
 
 struct ExpHeader {
-    char          magic[26];
-    std::uint16_t version;
+    char          magic[32];
+    std::uint32_t version;
     std::uint64_t seed;
-    std::uint16_t headerSize;
+    std::uint32_t headerSize;
     std::uint32_t tableBytes;
-    std::uint8_t  reserved[256 - 26 - 2 - 8 - 2 - 4];
+    std::uint8_t  reserved[256 - 32 - 4 - 8 - 4 - 4];
 };
 
 struct ExpEntry {
@@ -56,7 +56,7 @@ class Experience {
     static constexpr std::size_t TableSize = 1ULL << 16;  // must be power of two
     static_assert((TableSize & (TableSize - 1)) == 0, "TableSize must be power of two");
     std::array<ExpEntry, TableSize> table{};
-    bool                                  readOnly = false;
+    bool                            readOnly = false;
 };
 
 extern Experience experience;

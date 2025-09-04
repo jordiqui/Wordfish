@@ -17,8 +17,8 @@ Experience experience;
 
 namespace {
 
-constexpr char         ExpMagic[] = "SugaR Experience version 2";
-constexpr std::uint64_t ExpSeed   = 0x06103380A463E280ULL;
+constexpr char          ExpMagic[] = "SugaR Experience version 2";
+constexpr std::uint64_t ExpSeed    = 0x06103380A463E280ULL;
 
 struct ProbeEntry {
     Move move;
@@ -62,6 +62,7 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
         header.seed       = ExpSeed;
         header.headerSize = sizeof(ExpHeader);
         header.tableBytes = tableBytes;
+        std::memset(header.reserved, 1, sizeof(header.reserved));
         out.write(reinterpret_cast<const char*>(&header), sizeof(header));
         ExpEntry zero{};
         for (std::size_t i = 0; i < TableSize; ++i)
@@ -86,9 +87,9 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
 
     ExpHeader header{};
     if (!in.read(reinterpret_cast<char*>(&header), sizeof(header))
-        || std::memcmp(header.magic, ExpMagic, sizeof(ExpMagic) - 1) != 0
-        || header.version != 2 || header.headerSize != sizeof(ExpHeader)
-        || header.tableBytes != tableBytes || size < header.headerSize + header.tableBytes)
+        || std::memcmp(header.magic, ExpMagic, sizeof(ExpMagic) - 1) != 0 || header.version != 2
+        || header.headerSize != sizeof(ExpHeader) || header.tableBytes != tableBytes
+        || size < header.headerSize + header.tableBytes)
     {
         sync_cout << "info string Experience: invalid or too small" << sync_endl;
         return;
@@ -115,6 +116,7 @@ void Experience::save(const std::filesystem::path& file) const {
     header.seed       = ExpSeed;
     header.headerSize = sizeof(ExpHeader);
     header.tableBytes = tableBytes;
+    std::memset(header.reserved, 1, sizeof(header.reserved));
     out.seekp(0);
     out.write(reinterpret_cast<const char*>(&header), sizeof(header));
     out.write(reinterpret_cast<const char*>(table.data()), table.size() * sizeof(ExpEntry));
@@ -182,7 +184,8 @@ void Experience::update(const Position& pos, Move move, int score, int depth) {
             int newDepth = depth;
             int total    = oldDepth + newDepth;
             if (total)
-                rec.score = static_cast<std::int16_t>((rec.score * oldDepth + score * newDepth) / total);
+                rec.score =
+                  static_cast<std::int16_t>((rec.score * oldDepth + score * newDepth) / total);
             rec.depth = static_cast<std::int16_t>(std::max(oldDepth, newDepth));
             if (rec.count < 32767)
                 rec.count++;
