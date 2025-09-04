@@ -42,30 +42,24 @@ bool is_compact_file(std::ifstream& in) {
 void write_compact_skeleton(const std::filesystem::path& file) {
     std::fstream out(file, std::ios::binary | std::ios::out | std::ios::trunc);
 
-    // Firma de 32 bytes (padded)
-    char sig[32] = {};
-    std::memcpy(sig, "SugaR Experience version 2", 27);
-    out.write(sig, sizeof(sig));
+    // Cabecera de 32 bytes con la firma del formato
+    ExpHeaderV2 header{};
+    std::memset(header.signature, 0, sizeof(header.signature));
+    std::memcpy(header.signature, "SugaR Experience version 2", 27);
+    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
 
-    // Bloque índice raíz mínimo
-    const std::uint32_t magic = kIndexMagic;
-    out.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+    // Índice raíz mínimo (equivalente a ExpIndexRoot)
+    ExpIndexRoot idx{};
+    idx.magic        = kIndexMagic;
+    idx.salt_or_uuid = 0;  // campo libre
+    idx.record_size  = kRecordSize;
+    idx.key_size     = kKeySize;
+    idx.reserved0    = 0;
+    out.write(reinterpret_cast<const char*>(&idx), sizeof(idx));
 
-    // Relleno genérico / campos reservados (dejamos 8 bytes a cero como timestamp/seed)
-    std::uint64_t zero64 = 0;
-    out.write(reinterpret_cast<const char*>(&zero64), sizeof(zero64));
-
-    // Tamaños de registro y clave
-    out.write(reinterpret_cast<const char*>(&kRecordSize), sizeof(kRecordSize));
-    out.write(reinterpret_cast<const char*>(&kKeySize), sizeof(kKeySize));
-
-    // Más reservado a cero para no romper lectores estrictos
-    out.write(reinterpret_cast<const char*>(&zero64), sizeof(zero64));
-    out.write(reinterpret_cast<const char*>(&zero64), sizeof(zero64));
-
-    // Añade una “dummy” de 17 bytes a cero (evita recuento=0)
-    char dummy[0x11] = {};
-    out.write(dummy, sizeof(dummy));
+    // Registro "dummy" para que el archivo no aparezca vacío
+    ExpDummyEntry dummy{};
+    out.write(reinterpret_cast<const char*>(&dummy), sizeof(dummy));
 
     out.flush();
 }
