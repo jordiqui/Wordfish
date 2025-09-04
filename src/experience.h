@@ -55,6 +55,7 @@ class Experience {
     void update(const Position& pos, Move move, int score, int depth);
 
    private:
+    void print_stats(const std::filesystem::path& file) const;
     static constexpr std::size_t TableSize = 1ULL << 16;  // must be power of two
     static_assert((TableSize & (TableSize - 1)) == 0, "TableSize must be power of two");
     std::array<ExpEntry, TableSize> table{};
