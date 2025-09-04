@@ -169,7 +169,7 @@ Engine::Engine(std::optional<std::string> path) :
                     return std::nullopt;
                 }));
 
-    options.add("Experience File", Option("wordfish.exp", [this](const Option& o) {
+    options.add("Experience File", Option("revolution.exp", [this](const Option& o) {
                     if ((bool) options["Experience Enabled"])
                         experience.load(o);
                     return std::nullopt;
