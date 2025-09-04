@@ -25,3 +25,13 @@ static void write_index_root(std::ofstream& os) {
     idx.reserved0    = 0;
     os.write(reinterpret_cast<const char*>(&idx), sizeof(idx));
 }
+
+static void write_dummy_entry(std::ofstream& os) {
+    ExpDummyEntry e{};
+    e.zobrist = 0x9e3779b97f4a7c15ULL; // constante dorada / cualquier hash
+    e.move    = 0x1208;                // ejemplo: from e2->e4 si usas 6+6 bits (ajusta)
+    e.score   = 0;                     // neutro
+    e.depth   = 1;                     // mínima profundidad
+    e.count   = 1;                     // al menos 1
+    os.write(reinterpret_cast<const char*>(&e), sizeof(e));
+}
