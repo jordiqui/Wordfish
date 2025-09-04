@@ -1,4 +1,8 @@
-Wordfish Chess Engine
+Revolution Chess Engine
+Copyright (c)  Stockfish developers (see AUTHORS file)
+
+Revolution is a UCI chess engine derived from Stockfish. This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.
+
 
 Copyright (c) 2024 Jorge Ruiz Centelles
 
@@ -7,14 +11,15 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-Wordfish incorporates code from the following GPLv3 projects:
+
+Revolution incorporates code from the following GPLv3 project:
 
 - Stockfish <https://github.com/official-stockfish/Stockfish>
-- Berserk <https://github.com/jhonnold/berserk/tree/main/src>
-- Obsidian <https://github.com/gab8192/Obsidian>
+
+No code from Berserk or Obsidian is currently included.
 
 As such, this distribution is also released under the terms of the GNU General
 Public License, version 3.
 
 You should have received a copy of the GNU General Public License along with
-this program in the file Copying.txt. If not, see <https://www.gnu.org/licenses/>.
+this program in the file Copying.txt. If not, see <https://www.gnu.org/licenses/>. For a concise overview of GPLv3 requirements, visit <https://www.gnu.org/licenses/quick-guide-gplv3.html>.
