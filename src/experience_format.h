@@ -28,11 +28,14 @@ struct ExpDummyEntry {
     int16_t  score;    // eval acumulada
     uint8_t  depth;    // profundidad media
     uint8_t  count;    // ocurrencias
+    // campo de relleno para alcanzar los 17 bytes que espera record_size
+    uint8_t  pad[3]{};
     // ajusta si tu formato guarda más campos; mantén pack(1)
 };
 
 #pragma pack(pop)
 
 static_assert(sizeof(ExpHeaderV2) == 32, "Header must be 32 bytes");
+static_assert(sizeof(ExpDummyEntry) == 17, "Dummy entry must be 17 bytes");
 
 // Nota sobre record_size y key_size: En Revolution el bloque que sigue a la cabecera contiene estas parejas como 0x0011 y 0x0002 (vistas en LE como bytes 11 00 y 02 00). Si tu layout final difiere, actualiza ambos para reflejar el tamaño real de tus registros y de la clave.
