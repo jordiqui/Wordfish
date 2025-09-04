@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "../src/rpd4.hpp"
+
 namespace {
 
 #pragma pack(push,1)
@@ -25,14 +27,6 @@ static_assert(sizeof(EntryV2) == 34, "EntryV2 must be 34 bytes");
 
 constexpr const char* kSig = "SugaR Experience version 2";
 
-// Bloque #rpD4 de Revolution (32 bytes)
-static const unsigned char kRPD4[32] = {
-    0x23, 0x72, 0x70, 0x44, 0x34, 0x9C, 0xE9, 0xF6,
-    0xDC, 0x04, 0x01, 0x00, 0x11, 0x00, 0x02, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x91, 0xD5,
-    0xA4, 0xC0, 0x78, 0xE2, 0xC0, 0x52, 0xEF, 0x02
-};
-
 // Cabecera v2 completa: versión+seed+bucket+entry + 2 metabloques (22B * 2) = 62B
 static const unsigned char kHeaderExtra[] = {
     0x02,
@@ -53,7 +47,9 @@ std::string WriteExpFile(const std::string& path, size_t nEntries) {
     os.write(kSig, std::char_traits<char>::length(kSig));
     static const char zeroPad[6] = {0};
     os.write(zeroPad, sizeof(zeroPad));
-    os.write(reinterpret_cast<const char*>(kRPD4), sizeof(kRPD4));
+    RPD4Block rpd4{};
+    fill_rpd4(rpd4, "Wordfish 2.0 dev");
+    os.write(reinterpret_cast<const char*>(&rpd4), sizeof(rpd4));
     os.write(reinterpret_cast<const char*>(kHeaderExtra), sizeof(kHeaderExtra));
 
     // entradas (si las hay)
@@ -88,7 +84,7 @@ std::string WriteExpFile(const std::string& path, size_t nEntries) {
     if (std::string(buf.begin(), buf.end()) != sig)
         return ::testing::AssertionFailure() << "Firma inválida";
 
-    const std::size_t headerExtra = 6 + sizeof(kRPD4) + sizeof(kHeaderExtra); // 6 pad + 32 + 62 = 100
+    const std::size_t headerExtra = 6 + sizeof(RPD4Block) + sizeof(kHeaderExtra); // 6 pad + 32 + 62 = 100
     if (size < static_cast<std::streamsize>(sig.size() + headerExtra))
         return ::testing::AssertionFailure() << "Cabecera incompleta";
 
