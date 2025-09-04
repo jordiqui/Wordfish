@@ -145,6 +145,14 @@ void Experience::load(const std::string& file) {
         }
         else if (isV2)
         {
+            unsigned char pad[6];
+            in.read(reinterpret_cast<char*>(pad), sizeof(pad));
+            if (!in)
+                return;
+            std::array<unsigned char, 32> rpd4{};
+            in.read(reinterpret_cast<char*>(rpd4.data()), rpd4.size());
+            if (!in)
+                return;
             std::array<unsigned char, 62> hdr{};
             in.read(reinterpret_cast<char*>(hdr.data()), hdr.size());
             if (!in)
@@ -267,6 +275,14 @@ void Experience::save(const std::string& file) const {
 
     const std::string sig = "SugaR Experience version 2";  // 26 bytes
     buffer.append(sig);
+    buffer.resize(32, '\0');
+    static const unsigned char RPD4[32] = {
+        0x23,0x72,0x70,0x44,0x34,0x9C,0xE9,0xF6,
+        0xDC,0x04,0x01,0x00,0x11,0x00,0x02,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x91,0xD5,
+        0xA4,0xC0,0x78,0xE2,0xC0,0x52,0xEF,0x02
+    };
+    buffer.append(reinterpret_cast<const char*>(RPD4), sizeof(RPD4));
     static const unsigned char kExpHeader62[] = {
         0x02,
         0x00,0x80,0xE2,0x63,0xA4,0x80,0x33,0x10,
@@ -294,7 +310,7 @@ void Experience::save(const std::string& file) const {
         wroteAny = true;
     }
 
-    const size_t headerLen = sig.size() + sizeof(kExpHeader62);  // 26 + 62 = 88
+    const size_t headerLen = 32 + sizeof(RPD4) + sizeof(kExpHeader62);
     if (buffer.size() < headerLen)
         return;
     const size_t bodyLen = buffer.size() - headerLen;

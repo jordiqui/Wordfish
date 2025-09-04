@@ -39,6 +39,7 @@
 #include "polybook.h"
 #include "position.h"
 #include "experience.h"
+#include "experience_v2.hpp"
 #include "search.h"
 #include "syzygy/tbprobe.h"
 #include "types.h"
@@ -244,7 +245,15 @@ void Engine::search_clear() {
     Tablebases::release();
 
     if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
-        experience.save(options["Experience File"]);
+        {
+            if (experience.dirty())
+            {
+                experience.save(options["Experience File"]);
+                experience.clear_dirty();
+            }
+            else if (experience.empty())
+                seed_dummy_if_empty(options["Experience File"]);
+        }
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
