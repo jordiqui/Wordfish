@@ -18,6 +18,58 @@ Experience experience;
 
 namespace {
 
+// Constantes del formato compacto que espera HypnoS/BrainLearn
+constexpr std::uint32_t kIndexMagic = 0x44707223u;  // "#rpD" en little-endian
+constexpr std::uint16_t kRecordSize = 0x0011;       // 17 bytes / entrada
+constexpr std::uint16_t kKeySize    = 0x0002;       // 2 bytes de clave
+
+// ¿Tiene cabecera compacta válida (firma + magic de índice)?
+bool is_compact_file(std::ifstream& in) {
+    in.clear();
+    in.seekg(0, std::ios::beg);
+    char sig[32] = {};
+    if (!in.read(sig, 32))
+        return false;
+    if (std::memcmp(sig, "SugaR Experience version 2", 27) != 0)
+        return false;
+    std::uint32_t magic = 0;
+    if (!in.read(reinterpret_cast<char*>(&magic), sizeof(magic)))
+        return false;
+    return magic == kIndexMagic;
+}
+
+// Crea un esqueleto compacto mínimo: firma (32) + índice + 1 registro “dummy”
+void write_compact_skeleton(const std::filesystem::path& file) {
+    std::fstream out(file, std::ios::binary | std::ios::out | std::ios::trunc);
+
+    // Firma de 32 bytes (padded)
+    char sig[32] = {};
+    std::memcpy(sig, "SugaR Experience version 2", 27);
+    out.write(sig, sizeof(sig));
+
+    // Bloque índice raíz mínimo
+    const std::uint32_t magic = kIndexMagic;
+    out.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+
+    // Relleno genérico / campos reservados (dejamos 8 bytes a cero como timestamp/seed)
+    std::uint64_t zero64 = 0;
+    out.write(reinterpret_cast<const char*>(&zero64), sizeof(zero64));
+
+    // Tamaños de registro y clave
+    out.write(reinterpret_cast<const char*>(&kRecordSize), sizeof(kRecordSize));
+    out.write(reinterpret_cast<const char*>(&kKeySize), sizeof(kKeySize));
+
+    // Más reservado a cero para no romper lectores estrictos
+    out.write(reinterpret_cast<const char*>(&zero64), sizeof(zero64));
+    out.write(reinterpret_cast<const char*>(&zero64), sizeof(zero64));
+
+    // Añade una “dummy” de 17 bytes a cero (evita recuento=0)
+    char dummy[0x11] = {};
+    out.write(dummy, sizeof(dummy));
+
+    out.flush();
+}
+
 constexpr char          ExpMagic[] = "SugaR Experience version 2";
 constexpr std::uint64_t ExpSeed    = 0x06103380A463E280ULL;
 
@@ -80,38 +132,13 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
         if (readonly)
             return;
 
-        std::vector<char> outBuffer(1 << 20);
-        std::fstream      out(file, std::ios::binary | std::ios::out | std::ios::trunc);
-        if (!out)
-        {
-            sync_cout << "info string Experience: invalid or too small" << sync_endl;
-            return;
-        }
-        out.rdbuf()->pubsetbuf(outBuffer.data(), outBuffer.size());
-        ExpHeader header{};
-        std::memcpy(header.magic, ExpMagic, sizeof(ExpMagic) - 1);
-        header.version    = 2;
-        header.seed       = ExpSeed;
-        header.headerSize = sizeof(ExpHeader);
-        header.tableBytes = tableBytes;
-        std::memset(header.reserved, 1, sizeof(header.reserved));
-        out.write(reinterpret_cast<const char*>(&header), sizeof(header));
-        ExpEntry zero{};
-        for (std::size_t i = 0; i < TableSize; ++i)
-            out.write(reinterpret_cast<const char*>(&zero), sizeof(zero));
-        out.flush();
-        out.close();
+        // Antes: escribir ExpHeader (antiguo) + tabla.
+        // Ahora: crear esqueleto compacto compatible con HypnoS/BrainLearn.
+        write_compact_skeleton(file);
 
-        std::filesystem::resize_file(file, expected);
-
-        in.open(file, std::ios::binary | std::ios::ate);
-        if (!in)
-        {
-            sync_cout << "info string Experience: invalid or too small" << sync_endl;
-            return;
-        }
-        in.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
-        size = static_cast<std::size_t>(in.tellg());
+        sync_cout << "info string Experience: created compact experience " << file.string()
+                  << sync_endl;
+        return;  // Ya está listo; no intentes leer como formato antiguo.
     }
 
     in.seekg(0);
@@ -135,6 +162,14 @@ void Experience::save(const std::filesystem::path& file) const {
     if (readOnly)
         return;
 
+    // Si el archivo ya es compacto, no lo sobreescribas con el formato antiguo.
+    {
+        std::ifstream fin(file, std::ios::binary);
+        if (fin && is_compact_file(fin))  // firma ok + magic 0x44707223 en offset 32
+            return;
+    }
+
+    // (Si no es compacto, conservamos el guardado antiguo por compatibilidad)
     std::vector<char> buffer(1 << 20);
     std::fstream      out(file, std::ios::binary | std::ios::in | std::ios::out);
     if (!out)
