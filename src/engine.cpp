@@ -166,7 +166,9 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Experience Enabled", Option(true, [this](const Option& o) {
                     if (bool(o)) {
-                        experience.load(experience_path(options["Experience File"]));
+                        experience.load(
+                          experience_path(options["Experience File"]),
+                          (bool) options["Experience Readonly"]);
                     } else {
                         if (!(bool) options["Experience Readonly"])
                             experience.save(experience_path(options["Experience File"]));
@@ -180,7 +182,8 @@ Engine::Engine(std::optional<std::string> path) :
                         if (!(bool) options["Experience Readonly"])
                             experience.save(experience_path(options["Experience File"]));
                         experience.clear();
-                        experience.load(experience_path(o));
+                        experience.load(
+                          experience_path(o), (bool) options["Experience Readonly"]);
                     }
                     return std::nullopt;
                 }));
@@ -211,7 +214,9 @@ Engine::Engine(std::optional<std::string> path) :
       }));
 
     if ((bool) options["Experience Enabled"])
-        experience.load(experience_path(options["Experience File"]));
+        experience.load(
+          experience_path(options["Experience File"]),
+          (bool) options["Experience Readonly"]);
 
     load_networks();
     resize_threads();

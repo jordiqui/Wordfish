@@ -41,24 +41,25 @@ static_assert(sizeof(SugarEntry) == 34, "SugarEntry must be 34 bytes");
 
 }  // namespace
 
-void Experience::load(const std::string& file) {
+void Experience::load(const std::string& file, bool readonly) {
     std::ifstream in(file, std::ios::binary | std::ios::ate);
-    bool          create = false;
-    if (!in)
-        create = true;
-    else if (std::size_t(in.tellg()) < SugarExpHeaderSize + sizeof(SugarEntry) * SugarExpTableSize)
-        create = true;
+    std::size_t   size = in ? static_cast<std::size_t>(in.tellg()) : 0;
 
-    if (create)
+    if (!in || size < SugarExpHeaderSize + sizeof(SugarEntry) * SugarExpTableSize)
     {
+        if (readonly)
+            return;
+
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         if (!out)
             return;
+
         out.write(SugarExpMagic, sizeof(SugarExpMagic) - 1);
         out.write(reinterpret_cast<const char*>(SugarExpBlock), sizeof(SugarExpBlock));
         std::vector<char> zero(sizeof(SugarEntry) * SugarExpTableSize, 0);
         out.write(zero.data(), zero.size());
         out.close();
+
         in.open(file, std::ios::binary | std::ios::ate);
         if (!in)
             return;
@@ -71,10 +72,10 @@ void Experience::load(const std::string& file) {
     if (!in.read(magic, sizeof(magic)) || std::memcmp(magic, SugarExpMagic, sizeof(magic)) != 0)
         return;
 
-    std::uint8_t block[sizeof(SugarExpBlock)];
-    if (!in.read(reinterpret_cast<char*>(block), sizeof(block))
-        || std::memcmp(block, SugarExpBlock, sizeof(block)) != 0)
+    std::uint8_t version;
+    if (!in.read(reinterpret_cast<char*>(&version), 1) || version != 2)
         return;
+    in.ignore(sizeof(SugarExpBlock) - 1);
 
     SugarEntry rec;
     for (std::size_t i = 0;

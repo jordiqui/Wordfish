@@ -21,7 +21,7 @@ struct ExperienceEntry {
 class Experience {
    public:
     void clear();
-    void load(const std::string& file);
+    void load(const std::string& file, bool readonly);
     void save(const std::string& file) const;
     Move probe(
       Position& pos, [[maybe_unused]] int width, int evalImportance, int minDepth, int maxMoves);
