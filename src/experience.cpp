@@ -43,7 +43,7 @@ inline void write_u64(std::ostream& os, std::uint64_t v) {
 }
 
 inline void write_signature32(std::ostream& os) {
-    char sig[32]{};
+    char sig[kHdrSize]{};
     std::memcpy(sig, "SugaR Experience version 2", 27);
     os.write(sig, sizeof(sig));
 }
@@ -51,8 +51,8 @@ inline void write_signature32(std::ostream& os) {
 inline bool is_compact_exp(std::istream& in) {
     in.clear();
     in.seekg(0, std::ios::beg);
-    char sig[32]{};
-    if (!in.read(sig, 32))
+    char sig[kHdrSize]{};
+    if (!in.read(sig, kHdrSize))
         return false;
     if (std::memcmp(sig, "SugaR Experience version 2", 27) != 0)
         return false;
