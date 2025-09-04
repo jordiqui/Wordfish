@@ -11,7 +11,17 @@
 namespace Stockfish {
 
 #pragma pack(push, 1)
-struct ExperienceSlot {
+
+struct ExpHeader {
+    char          magic[26];
+    std::uint16_t version;
+    std::uint64_t seed;
+    std::uint16_t headerSize;
+    std::uint32_t tableBytes;
+    std::uint8_t  reserved[256 - 26 - 2 - 8 - 2 - 4];
+};
+
+struct ExpEntry {
     std::uint64_t key;
     std::uint16_t move;
     std::int16_t  score;
@@ -24,9 +34,11 @@ struct ExperienceSlot {
     std::int16_t  age;
     std::int16_t  pad;
 };
+
 #pragma pack(pop)
 
-static_assert(sizeof(ExperienceSlot) == 34, "ExperienceSlot must be 34 bytes");
+static_assert(sizeof(ExpHeader) == 256, "header size");
+static_assert(sizeof(ExpEntry) == 34, "ExpEntry must be 34 bytes");
 
 class Experience {
    public:
@@ -43,7 +55,7 @@ class Experience {
    private:
     static constexpr std::size_t TableSize = 1ULL << 16;  // must be power of two
     static_assert((TableSize & (TableSize - 1)) == 0, "TableSize must be power of two");
-    std::array<ExperienceSlot, TableSize> table{};
+    std::array<ExpEntry, TableSize> table{};
     bool                                  readOnly = false;
 };
 

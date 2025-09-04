@@ -17,13 +17,10 @@ Experience experience;
 
 namespace {
 
-constexpr char         SugarExpMagic[]   = "SugaR Experience version 2";
-constexpr std::uint8_t SugarExpBlock[16] = {0x02, 0x00, 0x80, 0xE2, 0x63, 0xA4, 0x80, 0x33,
-                                            0x10, 0x06, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00};
+constexpr char         ExpMagic[] = "SugaR Experience version 2";
+constexpr std::uint64_t ExpSeed   = 0x06103380A463E280ULL;
 
-constexpr std::size_t SugarExpHeaderSize = (sizeof(SugarExpMagic) - 1) + sizeof(SugarExpBlock);
-
-struct ExperienceEntry {
+struct ProbeEntry {
     Move move;
     int  score;
     int  depth;
@@ -40,29 +37,39 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
     std::ifstream     in(file, std::ios::binary | std::ios::ate);
     if (in)
         in.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
-    std::size_t size = in ? static_cast<std::size_t>(in.tellg()) : 0;
 
-    if (!in || size < SugarExpHeaderSize + sizeof(ExperienceSlot) * TableSize)
+    const std::uint32_t tableBytes = TableSize * sizeof(ExpEntry);
+    const std::size_t   expected   = sizeof(ExpHeader) + tableBytes;
+    std::size_t         size       = in ? static_cast<std::size_t>(in.tellg()) : 0;
+
+    if (!in || size < expected)
     {
         sync_cout << "info string Experience: invalid or too small" << sync_endl;
         if (readonly)
             return;
 
         std::vector<char> outBuffer(1 << 20);
-        std::fstream      out(file, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+        std::fstream      out(file, std::ios::binary | std::ios::out | std::ios::trunc);
         if (!out)
         {
             sync_cout << "info string Experience: invalid or too small" << sync_endl;
             return;
         }
         out.rdbuf()->pubsetbuf(outBuffer.data(), outBuffer.size());
-        out.write(SugarExpMagic, sizeof(SugarExpMagic) - 1);
-        out.write(reinterpret_cast<const char*>(SugarExpBlock), sizeof(SugarExpBlock));
-        ExperienceSlot zero{};
+        ExpHeader header{};
+        std::memcpy(header.magic, ExpMagic, sizeof(ExpMagic) - 1);
+        header.version    = 2;
+        header.seed       = ExpSeed;
+        header.headerSize = sizeof(ExpHeader);
+        header.tableBytes = tableBytes;
+        out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+        ExpEntry zero{};
         for (std::size_t i = 0; i < TableSize; ++i)
             out.write(reinterpret_cast<const char*>(&zero), sizeof(zero));
         out.flush();
         out.close();
+
+        std::filesystem::resize_file(file, expected);
 
         in.open(file, std::ios::binary | std::ios::ate);
         if (!in)
@@ -71,27 +78,23 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
             return;
         }
         in.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
+        size = static_cast<std::size_t>(in.tellg());
     }
 
     in.seekg(0);
     table.fill({});
 
-    char magic[sizeof(SugarExpMagic) - 1];
-    if (!in.read(magic, sizeof(magic)) || std::memcmp(magic, SugarExpMagic, sizeof(magic)) != 0)
+    ExpHeader header{};
+    if (!in.read(reinterpret_cast<char*>(&header), sizeof(header))
+        || std::memcmp(header.magic, ExpMagic, sizeof(ExpMagic) - 1) != 0
+        || header.version != 2 || header.headerSize != sizeof(ExpHeader)
+        || header.tableBytes != tableBytes || size < header.headerSize + header.tableBytes)
     {
         sync_cout << "info string Experience: invalid or too small" << sync_endl;
         return;
     }
 
-    std::uint8_t version;
-    if (!in.read(reinterpret_cast<char*>(&version), 1) || version != 2)
-    {
-        sync_cout << "info string Experience: invalid or too small" << sync_endl;
-        return;
-    }
-    in.ignore(sizeof(SugarExpBlock) - 1);
-
-    in.read(reinterpret_cast<char*>(table.data()), table.size() * sizeof(ExperienceSlot));
+    in.read(reinterpret_cast<char*>(table.data()), table.size() * sizeof(ExpEntry));
     sync_cout << "info string Experience: loaded file " << file.string()
               << (readOnly ? " (readonly)" : "") << sync_endl;
 }
@@ -105,22 +108,29 @@ void Experience::save(const std::filesystem::path& file) const {
     if (!out)
         return;
     out.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
+    const std::uint32_t tableBytes = TableSize * sizeof(ExpEntry);
+    ExpHeader           header{};
+    std::memcpy(header.magic, ExpMagic, sizeof(ExpMagic) - 1);
+    header.version    = 2;
+    header.seed       = ExpSeed;
+    header.headerSize = sizeof(ExpHeader);
+    header.tableBytes = tableBytes;
     out.seekp(0);
-    out.write(SugarExpMagic, sizeof(SugarExpMagic) - 1);
-    out.write(reinterpret_cast<const char*>(SugarExpBlock), sizeof(SugarExpBlock));
-    out.write(reinterpret_cast<const char*>(table.data()), table.size() * sizeof(ExperienceSlot));
+    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    out.write(reinterpret_cast<const char*>(table.data()), table.size() * sizeof(ExpEntry));
     out.flush();
+    std::filesystem::resize_file(file, sizeof(ExpHeader) + tableBytes);
 }
 
 Move Experience::probe(
   const Position& pos, [[maybe_unused]] int width, int evalImportance, int minDepth, int maxMoves) {
-    Key                          key = pos.key();
-    std::vector<ExperienceEntry> vec;
+    Key                     key = pos.key();
+    std::vector<ProbeEntry> vec;
 
     std::size_t idx = static_cast<std::size_t>(key) & (TableSize - 1);
     for (std::size_t n = 0; n < TableSize; ++n)
     {
-        const ExperienceSlot& rec = table[idx];
+        const ExpEntry& rec = table[idx];
         if (rec.move == 0)
             break;
         if (rec.key == key)
@@ -134,7 +144,7 @@ Move Experience::probe(
     if (vec.empty())
         return Move::none();
 
-    std::sort(vec.begin(), vec.end(), [&](const ExperienceEntry& a, const ExperienceEntry& b) {
+    std::sort(vec.begin(), vec.end(), [&](const ProbeEntry& a, const ProbeEntry& b) {
         return (a.score + evalImportance * a.depth) > (b.score + evalImportance * b.depth);
     });
 
@@ -156,7 +166,7 @@ void Experience::update(const Position& pos, Move move, int score, int depth) {
 
     for (std::size_t n = 0; n < TableSize; ++n)
     {
-        ExperienceSlot& rec = table[idx];
+        ExpEntry& rec = table[idx];
         if (rec.move == 0)
         {
             rec.key   = key;
