@@ -1,4 +1,4 @@
-# Wordfish 2.0 dev Chess Engine (010925)
+#Wordfish 2.0 dev Chess Engine(010925)
 
 <div align="center">
   <h3>Wordfish 2.0 dev</h3>
@@ -93,7 +93,7 @@ Full compilation guides available in [documentation][doc-link].
 Las siguientes opciones UCI controlan este sistema:
 
 - `Experience Enabled`: activa o desactiva la experiencia (por defecto `true`).
- - `Experience File`: nombre del archivo donde se almacena la experiencia (por defecto `wordfish.exp`).
+- `Experience File`: nombre del archivo donde se almacena la experiencia (por defecto `wordfish.exp`). La ruta admite caracteres Unicode y se recarga al usar `setoption`, `isready` y `ucinewgame`.
 - `Experience Readonly`: si es `true`, no se escriben cambios en el archivo.
 - `Experience Book`: usa la experiencia como libro de aperturas.
 - `Experience Book Width`: número de movimientos principales a considerar (1–20).

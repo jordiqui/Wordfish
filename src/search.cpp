@@ -173,7 +173,16 @@ void Search::Worker::start_searching() {
                             main_manager()->originalTimeAdjust);
     tt.new_search();
 
+    Move orderMove = Move::none();
+    if ((bool) options["Experience Enabled"])
+        orderMove = experience.probe(rootPos, (int) options["Experience Book Width"],
+                                     (int) options["Experience Book Eval Importance"],
+                                     (int) options["Experience Book Min Depth"],
+                                     (int) options["Experience Book Max Moves"]);
+
     Move bookMove = Move::none();
+    if ((bool) options["Experience Enabled"] && (bool) options["Experience Book"])
+        bookMove = orderMove;
 
     if (rootMoves.empty())
     {
@@ -185,12 +194,6 @@ void Search::Worker::start_searching() {
     {
         if (!limits.infinite && !limits.mate)
         {
-            if ((bool) options["Experience Enabled"] && (bool) options["Experience Book"])
-                bookMove = experience.probe(rootPos, (int) options["Experience Book Width"],
-                                            (int) options["Experience Book Eval Importance"],
-                                            (int) options["Experience Book Min Depth"],
-                                            (int) options["Experience Book Max Moves"]);
-
             if (bookMove == Move::none() && (bool) options["Book1"]
                 && rootPos.game_ply() / 2 < (int) options["Book1 Depth"])
                 bookMove = polybook[0].probe(rootPos, (bool) options["Book1 BestBookMove"],
@@ -212,6 +215,13 @@ void Search::Worker::start_searching() {
         }
         else
         {
+            if (orderMove != Move::none()
+                && std::find(rootMoves.begin(), rootMoves.end(), orderMove) != rootMoves.end())
+                for (auto&& th : threads)
+                    std::swap(th->worker.get()->rootMoves[0],
+                              *std::find(th->worker.get()->rootMoves.begin(),
+                                         th->worker.get()->rootMoves.end(), orderMove));
+
             threads.start_searching();  // start non-main threads
             iterative_deepening();      // main thread start searching
         }
@@ -262,7 +272,7 @@ void Search::Worker::start_searching() {
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);
 
-    if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
+    if ((bool) options["Experience Enabled"])
         experience.update(rootPos, bestThread->rootMoves[0].pv[0], bestThread->rootMoves[0].score,
                           bestThread->completedDepth);
 }
@@ -363,11 +373,11 @@ void Search::Worker::iterative_deepening() {
             // Reset aspiration window starting size using last iteration's
             // final value (previousScore). Tripple the constant factor to
             // widen the initial window.
-            delta          = 15 + std::abs(rootMoves[pvIdx].meanSquaredScore) / 11131;
-            Value prev     = rootMoves[pvIdx].previousScore;
-            alpha          = std::max(prev - delta, -VALUE_INFINITE);
-            beta           = std::min(prev + delta, VALUE_INFINITE);
-            Move prevBest  = rootMoves[pvIdx].pv[0];
+            delta         = 15 + std::abs(rootMoves[pvIdx].meanSquaredScore) / 11131;
+            Value prev    = rootMoves[pvIdx].previousScore;
+            alpha         = std::max(prev - delta, -VALUE_INFINITE);
+            beta          = std::min(prev + delta, VALUE_INFINITE);
+            Move prevBest = rootMoves[pvIdx].pv[0];
 
             // Adjust optimism based on root move's previous score
             optimism[us]  = 136 * prev / (std::abs(prev) + 93);
@@ -437,7 +447,7 @@ void Search::Worker::iterative_deepening() {
                     break;
 
                 delta += 2 * delta;  // triple C behaviour on subsequent tries
-                
+
                 assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
             }
 
@@ -965,7 +975,12 @@ Value Search::Worker::search(
     {
         assert(probCutBeta < VALUE_INFINITE && probCutBeta > beta);
 
-        MovePicker mp(pos, ttData.move, probCutBeta - ss->staticEval, &captureHistory);
+        Move expMove = Move::none();
+        if ((bool) options["Experience Enabled"])
+            expMove = experience.probe(pos, 0, (int) options["Experience Book Eval Importance"],
+                                       (int) options["Experience Book Min Depth"],
+                                       (int) options["Experience Book Max Moves"]);
+        MovePicker mp(pos, ttData.move, probCutBeta - ss->staticEval, &captureHistory, expMove);
         Depth      dynamicReduction = (ss->staticEval - beta) / 300;
         Depth      probCutDepth     = std::max(depth - 5 - dynamicReduction, 0);
 
@@ -1017,8 +1032,13 @@ moves_loop:  // When in check, search starts here
       (ss - 4)->continuationHistory, (ss - 5)->continuationHistory, (ss - 6)->continuationHistory};
 
 
+    Move expMove = Move::none();
+    if ((bool) options["Experience Enabled"])
+        expMove = experience.probe(pos, 0, (int) options["Experience Book Eval Importance"],
+                                   (int) options["Experience Book Min Depth"],
+                                   (int) options["Experience Book Max Moves"]);
     MovePicker mp(pos, ttData.move, depth, &mainHistory, &lowPlyHistory, &captureHistory, contHist,
-                  &pawnHistory, ss->ply);
+                  &pawnHistory, ss->ply, expMove);
 
     value = bestValue;
 
@@ -1653,8 +1673,13 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // Initialize a MovePicker object for the current position, and prepare to search
     // the moves. We presently use two stages of move generator in quiescence search:
     // captures, or evasions only when in check.
+    Move expMove = Move::none();
+    if ((bool) options["Experience Enabled"])
+        expMove = experience.probe(pos, 0, (int) options["Experience Book Eval Importance"],
+                                   (int) options["Experience Book Min Depth"],
+                                   (int) options["Experience Book Max Moves"]);
     MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
-                  contHist, &pawnHistory, ss->ply);
+                  contHist, &pawnHistory, ss->ply, expMove);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.
