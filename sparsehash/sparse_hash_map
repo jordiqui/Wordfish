@@ -1,7 +1,7 @@
-#ifndef REVOLUTION_SPARSEHASH_SPARSE_HASH_MAP_H
-#define REVOLUTION_SPARSEHASH_SPARSE_HASH_MAP_H
+#ifndef WORDFISH_SPARSEHASH_SPARSE_HASH_MAP_H
+#define WORDFISH_SPARSEHASH_SPARSE_HASH_MAP_H
 
-// Placeholder sparse_hash_map for the Revolution project.
+// Placeholder sparse_hash_map for the Wordfish project.
 // Implementation intentionally minimal.
 
-#endif // REVOLUTION_SPARSEHASH_SPARSE_HASH_MAP_H
+#endif // WORDFISH_SPARSEHASH_SPARSE_HASH_MAP_H
