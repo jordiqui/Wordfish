@@ -165,16 +165,23 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Book2 Width", Option(1, 1, 10));
 
     options.add("Experience Enabled", Option(true, [this](const Option& o) {
-                    if (bool(o))
+                    if (bool(o)) {
                         experience.load(options["Experience File"]);
-                    else
+                    } else {
+                        if (!(bool) options["Experience Readonly"])
+                            experience.save(options["Experience File"]);
                         experience.clear();
+                    }
                     return std::nullopt;
                 }));
 
     options.add("Experience File", Option("wordfish.exp", [this](const Option& o) {
-                    if ((bool) options["Experience Enabled"])
+                    if ((bool) options["Experience Enabled"]) {
+                        if (!(bool) options["Experience Readonly"])
+                            experience.save(options["Experience File"]);
+                        experience.clear();
                         experience.load(o);
+                    }
                     return std::nullopt;
                 }));
 

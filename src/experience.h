@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <cstdint>
 
 #include "position.h"
 #include "types.h"
@@ -11,10 +12,10 @@
 namespace Stockfish {
 
 struct ExperienceEntry {
-    Move move;
-    int  score;
-    int  depth;
-    int  count;
+    Move      move;
+    int16_t   score;
+    int16_t   depth;
+    uint16_t  count;
 };
 
 class Experience {
