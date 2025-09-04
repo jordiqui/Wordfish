@@ -12,10 +12,10 @@
 namespace Stockfish {
 
 struct ExperienceEntry {
-    Move      move;
-    int16_t   score;
-    int16_t   depth;
-    uint16_t  count;
+    Move move;
+    int  score;
+    int  depth;
+    int  count;
 };
 
 class Experience {
@@ -23,8 +23,8 @@ class Experience {
     void clear();
     void load(const std::string& file);
     void save(const std::string& file) const;
-    Move probe(Position& pos, [[maybe_unused]] int width, int evalImportance,
-               int minDepth, int maxMoves);
+    Move probe(
+      Position& pos, [[maybe_unused]] int width, int evalImportance, int minDepth, int maxMoves);
     void update(Position& pos, Move move, int score, int depth);
 
    private:

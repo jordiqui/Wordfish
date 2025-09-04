@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Generate a minimal Hypnos-compatible .exp file for Wordfish.
+"""Generate an empty SugaR/BrainLearn v2 experience file.
 
-The output file contains the 42-byte "SugaR Experience version 2" header,
-followed by a single 56-byte record with placeholder values. This avoids
-shipping binary data in the repository while still allowing users to create
-the required file.
+The generated file contains the 42-byte "SugaR Experience version 2" header
+followed by a zero-filled table of 65,536 entries in the v2 layout (34 bytes
+per entry).  This matches the format used by Revolution and allows external
+tools such as HypnoS to recognise the file even before any experience data is
+stored.
 """
 
 import struct
@@ -18,23 +19,13 @@ def main(path: str = "wordfish.exp") -> None:
          0x22, 0x00, 0x00, 0x00]
     )
 
-    # Single placeholder record; slots 2/extra fields left empty
-    record = struct.pack(
-        '<14I',
-        0x0000070C,  # move1
-        1,           # visits1
-        0, 0,        # key1_lo, key1_hi
-        20,          # score1 (centipawns)
-        10,          # depth1 (plies)
-        0, 0, 0, 0,  # move2, visits2, key2_lo, key2_hi
-        0, 0,        # score2, depth2
-        0, 0         # extraA, extraB
-    )
+    entry_size = 34
+    table_size = 1 << 16
 
     with open(path, 'wb') as f:
         f.write(header)
-        f.write(record)
-    print(f"Wrote {path} ({len(header) + len(record)} bytes)")
+        f.write(b"\x00" * (entry_size * table_size))
+    print(f"Wrote {path} ({len(header) + entry_size * table_size} bytes)")
 
 if __name__ == '__main__':
     main()
