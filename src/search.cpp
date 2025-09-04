@@ -32,6 +32,7 @@
 #include <ratio>
 #include <string>
 #include <utility>
+#include <mutex>
 
 #include "bitboard.h"
 #include "evaluate.h"
@@ -73,6 +74,8 @@ using SearchedList                  = ValueList<Move, SEARCHEDLIST_CAPACITY>;
 // They are optimized to time controls of 180 + 1.8 and longer,
 // so changing them or adding conditions that are similar requires
 // tests at these types of time controls.
+// (*Scaler) All tuned parameters at time controls shorter than
+// optimized for require verifications at longer time controls
 
 int correction_value(const Worker& w, const Position& pos, const Stack* const ss) {
     const Color us    = pos.side_to_move();
@@ -173,16 +176,7 @@ void Search::Worker::start_searching() {
                             main_manager()->originalTimeAdjust);
     tt.new_search();
 
-    Move orderMove = Move::none();
-    if ((bool) options["Experience Enabled"])
-        orderMove = experience.probe(rootPos, (int) options["Experience Book Width"],
-                                     (int) options["Experience Book Eval Importance"],
-                                     (int) options["Experience Book Min Depth"],
-                                     (int) options["Experience Book Max Moves"]);
-
     Move bookMove = Move::none();
-    if ((bool) options["Experience Enabled"] && (bool) options["Experience Book"])
-        bookMove = orderMove;
 
     if (rootMoves.empty())
     {
@@ -194,6 +188,12 @@ void Search::Worker::start_searching() {
     {
         if (!limits.infinite && !limits.mate)
         {
+            if ((bool) options["Experience Enabled"] && (bool) options["Experience Book"])
+                bookMove = experience.probe(rootPos, (int) options["Experience Book Width"],
+                                            (int) options["Experience Book Eval Importance"],
+                                            (int) options["Experience Book Min Depth"],
+                                            (int) options["Experience Book Max Moves"]);
+
             if (bookMove == Move::none() && (bool) options["Book1"]
                 && rootPos.game_ply() / 2 < (int) options["Book1 Depth"])
                 bookMove = polybook[0].probe(rootPos, (bool) options["Book1 BestBookMove"],
@@ -215,13 +215,6 @@ void Search::Worker::start_searching() {
         }
         else
         {
-            if (orderMove != Move::none()
-                && std::find(rootMoves.begin(), rootMoves.end(), orderMove) != rootMoves.end())
-                for (auto&& th : threads)
-                    std::swap(th->worker.get()->rootMoves[0],
-                              *std::find(th->worker.get()->rootMoves.begin(),
-                                         th->worker.get()->rootMoves.end(), orderMove));
-
             threads.start_searching();  // start non-main threads
             iterative_deepening();      // main thread start searching
         }
@@ -272,9 +265,16 @@ void Search::Worker::start_searching() {
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);
 
-    if ((bool) options["Experience Enabled"])
-        experience.update(rootPos, bestThread->rootMoves[0].pv[0], bestThread->rootMoves[0].score,
-                          bestThread->completedDepth);
+    if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
+    {
+        const std::string           path = options["Experience File"];
+        std::lock_guard<std::mutex> lk(experience.mtx);
+        if (experience.dirty())
+        {
+            experience.save(path);
+            experience.clear_dirty();
+        }
+    }
 }
 
 // Main iterative deepening loop. It calls search()
@@ -335,6 +335,10 @@ void Search::Worker::iterative_deepening() {
 
     int searchAgainCounter = 0;
 
+    // Start searches at depth 2 to skip the shallowest iteration and reach
+    // deeper analysis faster.
+    rootDepth = 1;
+
     lowPlyHistory.fill(89);
 
     // Iterative deepening loop until requested to stop or the target depth is reached
@@ -370,17 +374,14 @@ void Search::Worker::iterative_deepening() {
             // Reset UCI info selDepth for each depth and each PV line
             selDepth = 0;
 
-            // Reset aspiration window starting size using last iteration's
-            // final value (previousScore). Tripple the constant factor to
-            // widen the initial window.
-            delta         = 15 + std::abs(rootMoves[pvIdx].meanSquaredScore) / 11131;
-            Value prev    = rootMoves[pvIdx].previousScore;
-            alpha         = std::max(prev - delta, -VALUE_INFINITE);
-            beta          = std::min(prev + delta, VALUE_INFINITE);
-            Move prevBest = rootMoves[pvIdx].pv[0];
+            // Reset aspiration window starting size
+            delta     = 5 + std::abs(rootMoves[pvIdx].meanSquaredScore) / 11131;
+            Value avg = rootMoves[pvIdx].averageScore;
+            alpha     = std::max(avg - delta, -VALUE_INFINITE);
+            beta      = std::min(avg + delta, VALUE_INFINITE);
 
-            // Adjust optimism based on root move's previous score
-            optimism[us]  = 136 * prev / (std::abs(prev) + 93);
+            // Adjust optimism based on root move's averageScore
+            optimism[us]  = 136 * avg / (std::abs(avg) + 93);
             optimism[~us] = -optimism[us];
 
             // Start with a small aspiration window and, in the case of a fail
@@ -417,16 +418,11 @@ void Search::Worker::iterative_deepening() {
                     && nodes > 10000000)
                     main_manager()->pv(*this, threads, tt, rootDepth);
 
-                // In case of failing low/high increase aspiration window and
-                // re-search, otherwise exit the loop. New bounds depend on the
-                // old window, the score +/- delta and whether the best move
-                // has changed.
-                bool bestMoveChanged = rootMoves[pvIdx].pv[0] != prevBest;
-                prevBest             = rootMoves[pvIdx].pv[0];
-
+                // In case of failing low/high increase aspiration window and re-search,
+                // otherwise exit the loop.
                 if (bestValue <= alpha)
                 {
-                    beta  = (alpha + beta) / 2;  // ignore FLB[0] params
+                    beta  = (3 * alpha + beta) / 4;
                     alpha = std::max(bestValue - delta, -VALUE_INFINITE);
 
                     failedHighCnt = 0;
@@ -435,18 +431,13 @@ void Search::Worker::iterative_deepening() {
                 }
                 else if (bestValue >= beta)
                 {
-                    if (bestMoveChanged)
-                        alpha = std::max(bestValue - delta, -VALUE_INFINITE);
-                    else
-                        alpha = (alpha + beta) / 2;
-
                     beta = std::min(bestValue + delta, VALUE_INFINITE);
                     ++failedHighCnt;
                 }
                 else
                     break;
 
-                delta += 2 * delta;  // triple C behaviour on subsequent tries
+                delta += delta / 3;
 
                 assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
             }
@@ -491,6 +482,21 @@ void Search::Worker::iterative_deepening() {
 
         if (!mainThread)
             continue;
+
+        if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"]
+            && (bool) options["Experience Book"]
+            && rootDepth >= (int) options["Experience Book Min Depth"])
+        {
+            const Move best = rootMoves[0].pv[0];
+            if (best != Move::none())
+            {
+                const uint64_t key = Experience::compose_key(rootPos.key(), (uint16_t) best.raw());
+                std::lock_guard<std::mutex> lk(experience.mtx);
+                experience.insert_entry(key, (uint16_t) best.raw(), rootMoves[0].score, rootDepth,
+                                        1);
+                experience.mark_dirty();
+            }
+        }
 
         // Have we found a "mate in x"?
         if (limits.mate && rootMoves[0].score == rootMoves[0].uciScore
@@ -883,7 +889,9 @@ Value Search::Worker::search(
     // bigger than the previous static evaluation at our turn (if we were in
     // check at our previous move we go back until we weren't in check) and is
     // false otherwise. The improving flag is used in various pruning heuristics.
-    improving         = ss->staticEval > (ss - 2)->staticEval;
+    // Allow a small margin so that minor setbacks are still considered
+    // improving which helps to avoid over-pruning in quiet positions.
+    improving         = ss->staticEval >= (ss - 2)->staticEval - 45;
     opponentWorsening = ss->staticEval > -(ss - 1)->staticEval;
 
     if (priorReduction >= (depth < 10 ? 1 : 3) && !opponentWorsening)
@@ -975,12 +983,7 @@ Value Search::Worker::search(
     {
         assert(probCutBeta < VALUE_INFINITE && probCutBeta > beta);
 
-        Move expMove = Move::none();
-        if ((bool) options["Experience Enabled"])
-            expMove = experience.probe(pos, 0, (int) options["Experience Book Eval Importance"],
-                                       (int) options["Experience Book Min Depth"],
-                                       (int) options["Experience Book Max Moves"]);
-        MovePicker mp(pos, ttData.move, probCutBeta - ss->staticEval, &captureHistory, expMove);
+        MovePicker mp(pos, ttData.move, probCutBeta - ss->staticEval, &captureHistory);
         Depth      dynamicReduction = (ss->staticEval - beta) / 300;
         Depth      probCutDepth     = std::max(depth - 5 - dynamicReduction, 0);
 
@@ -1032,13 +1035,8 @@ moves_loop:  // When in check, search starts here
       (ss - 4)->continuationHistory, (ss - 5)->continuationHistory, (ss - 6)->continuationHistory};
 
 
-    Move expMove = Move::none();
-    if ((bool) options["Experience Enabled"])
-        expMove = experience.probe(pos, 0, (int) options["Experience Book Eval Importance"],
-                                   (int) options["Experience Book Min Depth"],
-                                   (int) options["Experience Book Max Moves"]);
     MovePicker mp(pos, ttData.move, depth, &mainHistory, &lowPlyHistory, &captureHistory, contHist,
-                  &pawnHistory, ss->ply, expMove);
+                  &pawnHistory, ss->ply);
 
     value = bestValue;
 
@@ -1086,12 +1084,6 @@ moves_loop:  // When in check, search starts here
         int delta = beta - alpha;
 
         Depth r = reduction(improving, depth, moveCount, delta);
-
-        // Don't over-reduce moves that give check. Checking moves often have
-        // high tactical significance, so we allow them slightly more search
-        // depth by decreasing the late move reduction.
-        if (givesCheck)
-            r = std::max<Depth>(0, r - 512);
 
         // Increase reduction for ttPv nodes (*Scaler)
         // Smaller or even negative value is better for short time controls
@@ -1673,13 +1665,8 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // Initialize a MovePicker object for the current position, and prepare to search
     // the moves. We presently use two stages of move generator in quiescence search:
     // captures, or evasions only when in check.
-    Move expMove = Move::none();
-    if ((bool) options["Experience Enabled"])
-        expMove = experience.probe(pos, 0, (int) options["Experience Book Eval Importance"],
-                                   (int) options["Experience Book Min Depth"],
-                                   (int) options["Experience Book Max Moves"]);
     MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
-                  contHist, &pawnHistory, ss->ply, expMove);
+                  contHist, &pawnHistory, ss->ply);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.
@@ -1805,7 +1792,12 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
 Depth Search::Worker::reduction(bool i, Depth d, int mn, int delta) const {
     int reductionScale = reductions[d] * reductions[mn];
-    return reductionScale - delta * 731 / rootDelta + !i * reductionScale * 216 / 512 + 1089;
+    // Increase the difference between improving and non-improving lines.
+    // Improving moves get a slightly smaller reduction while non-improving
+    // moves are reduced more aggressively to speed up the search without
+    // harming tactical strength at longer time controls.
+    int improvingBonus = i ? -reductionScale * 57 / 512 : reductionScale * 273 / 512;
+    return reductionScale - delta * 731 / rootDelta + improvingBonus + 1089;
 }
 
 // elapsed() returns the time elapsed since the search started. If the

@@ -21,10 +21,9 @@
 #include <algorithm>
 #include <cassert>
 #include <deque>
-#include <fstream>
-#include <filesystem>
 #include <iosfwd>
 #include <memory>
+#include <mutex>
 #include <ostream>
 #include <sstream>
 #include <string_view>
@@ -63,8 +62,7 @@ Engine::Engine(std::optional<std::string> path) :
       numaContext,
       NN::Networks(
         NN::NetworkBig({EvalFileDefaultNameBig, "None", ""}, NN::EmbeddedNNUEType::BIG),
-        NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL),
-        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""}, NN::EmbeddedNNUEType::FALCON))) {
+        NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL))) {
     pos.set(StartFEN, false, &states->back());
 
 
@@ -108,7 +106,6 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Skill Level", Option(20, 0, 20));
 
     options.add("Move Overhead", Option(10, 0, 5000));
-    options.add("Slow Mover", Option(100, 10, 1000));
 
     options.add("nodestime", Option(0, 0, 10000));
 
@@ -166,27 +163,15 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Experience Enabled", Option(true, [this](const Option& o) {
                     if (bool(o))
-                    {
-                        experience.load(experience_path(options["Experience File"]),
-                                        (bool) options["Experience Readonly"]);
-                    }
+                        experience.load(options["Experience File"]);
                     else
-                    {
-                        if (!(bool) options["Experience Readonly"])
-                            experience.save(experience_path(options["Experience File"]));
                         experience.clear();
-                    }
                     return std::nullopt;
                 }));
 
-    options.add("Experience File", Option("wordfish.exp", [this](const Option& o) {
+    options.add("Experience File", Option("revolution.exp", [this](const Option& o) {
                     if ((bool) options["Experience Enabled"])
-                    {
-                        if (!(bool) options["Experience Readonly"])
-                            experience.save(experience_path(options["Experience File"]));
-                        experience.clear();
-                        experience.load(experience_path(o), (bool) options["Experience Readonly"]);
-                    }
+                        experience.load(o);
                     return std::nullopt;
                 }));
 
@@ -196,6 +181,15 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Experience Book Eval Importance", Option(5, 0, 10));
     options.add("Experience Book Min Depth", Option(27, 4, 64));
     options.add("Experience Book Max Moves", Option(16, 1, 100));
+    options.add("Experience Save Now", Option([this](const Option&) {
+                    if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
+                    {
+                        std::lock_guard<std::mutex> lk(experience.mtx);
+                        experience.save(options["Experience File"]);
+                        experience.clear_dirty();
+                    }
+                    return std::nullopt;
+                }));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
@@ -209,15 +203,8 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
-    options.add(  //
-      "EvalFileFalcon", Option(EvalFileDefaultNameFalcon, [this](const Option& o) {
-          load_falcon_network(o);
-          return std::nullopt;
-      }));
-
     if ((bool) options["Experience Enabled"])
-        experience.load(experience_path(options["Experience File"]),
-                        (bool) options["Experience Readonly"]);
+        experience.load(options["Experience File"]);
 
     load_networks();
     resize_threads();
@@ -248,20 +235,7 @@ void Engine::search_clear() {
     Tablebases::release();
 
     if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
-        experience.save(experience_path(options["Experience File"]));
-}
-
-void Engine::reload_experience() {
-    if ((bool) options["Experience Enabled"])
-        experience.load(experience_path(options["Experience File"]),
-                        (bool) options["Experience Readonly"]);
-}
-
-std::filesystem::path Engine::experience_path(const std::string& file) const {
-    namespace fs = std::filesystem;
-    fs::path p   = fs::u8path(file);
-    fs::path bp  = fs::u8path(binaryDirectory) / p;
-    return fs::exists(bp) ? bp : p;
+        experience.save(options["Experience File"]);
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -350,31 +324,12 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
-    // The Falcon network is optional. Skip verification to avoid
-    // terminating the engine when the net is unavailable or incompatible.
-    // This allows builds and benchmarks to succeed even if the Falcon
-    // network file is absent.
-    const std::string falconFile = options["EvalFileFalcon"];
-    auto              fileExists = [](const std::string& path) {
-        std::ifstream f(path, std::ios::binary);
-        return f.good();
-    };
-    if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
-        networks->falcon.verify(falconFile, onVerifyNetworks);
 }
 
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
-
-        const std::string falconFile = options["EvalFileFalcon"];
-        auto              fileExists = [](const std::string& path) {
-            std::ifstream f(path, std::ios::binary);
-            return f.good();
-        };
-        if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
-            networks_.falcon.load(binaryDirectory, falconFile);
     });
     threads.clear();
     threads.ensure_network_replicated();
@@ -394,18 +349,10 @@ void Engine::load_small_network(const std::string& file) {
     threads.ensure_network_replicated();
 }
 
-void Engine::load_falcon_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) { networks_.falcon.load(binaryDirectory, file); });
-    threads.clear();
-    threads.ensure_network_replicated();
-}
-
-void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[3]) {
+void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
     networks.modify_and_replicate([&files](NN::Networks& networks_) {
         networks_.big.save(files[0].first);
         networks_.small.save(files[1].first);
-        networks_.falcon.save(files[2].first);
     });
 }
 

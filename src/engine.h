@@ -27,7 +27,6 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <filesystem>
 
 #include "nnue/network.h"
 #include "numa.h"
@@ -75,7 +74,6 @@ class Engine {
     void set_tt_size(size_t mb);
     void set_ponderhit(bool);
     void search_clear();
-    void reload_experience();
 
     void set_on_update_no_moves(std::function<void(const InfoShort&)>&&);
     void set_on_update_full(std::function<void(const InfoFull&)>&&);
@@ -89,8 +87,7 @@ class Engine {
     void load_networks();
     void load_big_network(const std::string& file);
     void load_small_network(const std::string& file);
-    void load_falcon_network(const std::string& file);
-    void save_network(const std::pair<std::optional<std::string>, std::string> files[3]);
+    void save_network(const std::pair<std::optional<std::string>, std::string> files[2]);
 
     // utility functions
 
@@ -125,8 +122,6 @@ class Engine {
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetworks;
-
-    std::filesystem::path experience_path(const std::string& file) const;
 };
 
 }  // namespace Stockfish

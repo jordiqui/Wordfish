@@ -1,65 +1,66 @@
+/*
+  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+
+  Stockfish is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  Stockfish is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
+*/
+
 #ifndef EXPERIENCE_H_INCLUDED
 #define EXPERIENCE_H_INCLUDED
 
-#include <array>
-#include <cstdint>
-#include <filesystem>
+#include <unordered_map>
+#include <vector>
 #include <string>
+#include <atomic>
+#include <mutex>
 
 #include "position.h"
 #include "types.h"
 
 namespace Stockfish {
 
-#pragma pack(push, 1)
-
-struct ExpHeader {
-    char          magic[32];
-    std::uint32_t version;
-    std::uint64_t seed;
-    std::uint32_t headerSize;
-    std::uint32_t tableBytes;
-    std::uint8_t  reserved[256 - 32 - 4 - 8 - 4 - 4];
+struct ExperienceEntry {
+    Move move;
+    int  score;
+    int  depth;
+    int  count;
 };
-
-struct ExpEntry {
-    std::uint64_t key;
-    std::uint16_t move;
-    std::int16_t  score;
-    std::int16_t  depth;
-    std::int16_t  count;
-    std::int32_t  wins;
-    std::int32_t  losses;
-    std::int32_t  draws;
-    std::int16_t  flags;
-    std::int16_t  age;
-    std::int16_t  pad;
-};
-
-#pragma pack(pop)
-
-static_assert(sizeof(ExpHeader) == 256, "header size");
-static_assert(sizeof(ExpEntry) == 34, "ExpEntry must be 34 bytes");
 
 class Experience {
    public:
     void clear();
-    void load(const std::filesystem::path& file, bool readonly);
-    void save(const std::filesystem::path& file) const;
-    void create_empty_file(const std::string& path);
-    Move probe(const Position&      pos,
-               [[maybe_unused]] int width,
-               int                  evalImportance,
-               int                  minDepth,
-               int                  maxMoves);
-    void update(const Position& pos, Move move, int score, int depth);
+    void load(const std::string& file);
+    void save(const std::string& file) const;
+    Move probe(Position& pos, [[maybe_unused]] int width, int evalImportance,
+               int minDepth, int maxMoves);
+    void update(Position& pos, Move move, int score, int depth);
+    void insert_entry(uint64_t key, uint16_t move, int value, int depth, int count);
+
+    // Dirty / flush helpers
+    void mark_dirty()        { dirty_.store(true, std::memory_order_relaxed); }
+    void clear_dirty() const { dirty_.store(false, std::memory_order_relaxed); }
+    bool dirty()       const { return dirty_.load(std::memory_order_relaxed); }
+
+    static uint64_t compose_key(uint64_t posKey, uint16_t move16);
+
+    mutable std::mutex mtx;
 
    private:
-    void print_stats(const std::filesystem::path& file) const;
-    static constexpr std::size_t TableSize = 1ULL << 16;  // must be power of two
-    static_assert((TableSize & (TableSize - 1)) == 0, "TableSize must be power of two");
-    std::array<ExpEntry, TableSize> table{};
-    bool                            readOnly = false;
+    std::unordered_map<Key, std::vector<ExperienceEntry>> table;
+    mutable std::atomic<bool> dirty_{false};
 };
 
 extern Experience experience;

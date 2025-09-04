@@ -88,8 +88,7 @@ MovePicker::MovePicker(const Position&              p,
                        const CapturePieceToHistory* cph,
                        const PieceToHistory**       ch,
                        const PawnHistory*           ph,
-                       int                          pl,
-                       Move                         em) :
+                       int                          pl) :
     pos(p),
     mainHistory(mh),
     lowPlyHistory(lph),
@@ -98,8 +97,7 @@ MovePicker::MovePicker(const Position&              p,
     pawnHistory(ph),
     ttMove(ttm),
     depth(d),
-    ply(pl),
-    expMove(em) {
+    ply(pl) {
 
     if (pos.checkers())
         stage = EVASION_TT + !(ttm && pos.pseudo_legal(ttm));
@@ -110,13 +108,11 @@ MovePicker::MovePicker(const Position&              p,
 
 // MovePicker constructor for ProbCut: we generate captures with Static Exchange
 // Evaluation (SEE) greater than or equal to the given threshold.
-MovePicker::MovePicker(
-  const Position& p, Move ttm, int th, const CapturePieceToHistory* cph, Move em) :
+MovePicker::MovePicker(const Position& p, Move ttm, int th, const CapturePieceToHistory* cph) :
     pos(p),
     captureHistory(cph),
     ttMove(ttm),
-    threshold(th),
-    expMove(em) {
+    threshold(th) {
     assert(!pos.checkers());
 
     stage = PROBCUT_TT
@@ -196,9 +192,6 @@ ExtMove* MovePicker::score(MoveList<Type>& ml) {
                     m.value += 2 * (*lowPlyHistory)[ply][m.from_to()] / (1 + ply);
             }
         }
-
-        if (expMove && m == expMove)
-            m.value += 1 << 30;
     }
     return it;
 }
