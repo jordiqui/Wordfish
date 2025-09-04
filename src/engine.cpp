@@ -22,6 +22,7 @@
 #include <cassert>
 #include <deque>
 #include <fstream>
+#include <filesystem>
 #include <iosfwd>
 #include <memory>
 #include <ostream>
@@ -63,8 +64,7 @@ Engine::Engine(std::optional<std::string> path) :
       NN::Networks(
         NN::NetworkBig({EvalFileDefaultNameBig, "None", ""}, NN::EmbeddedNNUEType::BIG),
         NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL),
-        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""},
-                          NN::EmbeddedNNUEType::FALCON))) {
+        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""}, NN::EmbeddedNNUEType::FALCON))) {
     pos.set(StartFEN, false, &states->back());
 
 
@@ -165,11 +165,13 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Book2 Width", Option(1, 1, 10));
 
     options.add("Experience Enabled", Option(true, [this](const Option& o) {
-                    if (bool(o)) {
-                        experience.load(
-                          experience_path(options["Experience File"]),
-                          (bool) options["Experience Readonly"]);
-                    } else {
+                    if (bool(o))
+                    {
+                        experience.load(experience_path(options["Experience File"]),
+                                        (bool) options["Experience Readonly"]);
+                    }
+                    else
+                    {
                         if (!(bool) options["Experience Readonly"])
                             experience.save(experience_path(options["Experience File"]));
                         experience.clear();
@@ -178,12 +180,12 @@ Engine::Engine(std::optional<std::string> path) :
                 }));
 
     options.add("Experience File", Option("wordfish.exp", [this](const Option& o) {
-                    if ((bool) options["Experience Enabled"]) {
+                    if ((bool) options["Experience Enabled"])
+                    {
                         if (!(bool) options["Experience Readonly"])
                             experience.save(experience_path(options["Experience File"]));
                         experience.clear();
-                        experience.load(
-                          experience_path(o), (bool) options["Experience Readonly"]);
+                        experience.load(experience_path(o), (bool) options["Experience Readonly"]);
                     }
                     return std::nullopt;
                 }));
@@ -214,9 +216,8 @@ Engine::Engine(std::optional<std::string> path) :
       }));
 
     if ((bool) options["Experience Enabled"])
-        experience.load(
-          experience_path(options["Experience File"]),
-          (bool) options["Experience Readonly"]);
+        experience.load(experience_path(options["Experience File"]),
+                        (bool) options["Experience Readonly"]);
 
     load_networks();
     resize_threads();
@@ -250,9 +251,17 @@ void Engine::search_clear() {
         experience.save(experience_path(options["Experience File"]));
 }
 
-std::string Engine::experience_path(const std::string& file) const {
-    std::ifstream in(binaryDirectory + file);
-    return in.good() ? binaryDirectory + file : file;
+void Engine::reload_experience() {
+    if ((bool) options["Experience Enabled"])
+        experience.load(experience_path(options["Experience File"]),
+                        (bool) options["Experience Readonly"]);
+}
+
+std::filesystem::path Engine::experience_path(const std::string& file) const {
+    namespace fs = std::filesystem;
+    fs::path p   = fs::u8path(file);
+    fs::path bp  = fs::u8path(binaryDirectory) / p;
+    return fs::exists(bp) ? bp : p;
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {

@@ -116,8 +116,8 @@ void UCIEngine::loop() {
         {
             // Force a stable, explicit UCI name so GUIs show "Wordfish 2.0 dev <date>"
             sync_cout << "id name " << ENGINE_NAME << ' ' << ENGINE_BUILD_DATE << "\n"
-                << "id author Stockfish developers, Jorge Ruiz Centelles and ChatGPT" << "\n"
-                << engine.get_options() << sync_endl;
+                      << "id author Stockfish developers, Jorge Ruiz Centelles and ChatGPT" << "\n"
+                      << engine.get_options() << sync_endl;
 
             sync_cout << "uciok" << sync_endl;
         }
@@ -134,9 +134,15 @@ void UCIEngine::loop() {
         else if (token == "position")
             position(is);
         else if (token == "ucinewgame")
+        {
             engine.search_clear();
+            engine.reload_experience();
+        }
         else if (token == "isready")
+        {
+            engine.reload_experience();
             sync_cout << "readyok" << sync_endl;
+        }
 
         // Add custom non-UCI commands, mainly for debugging purposes.
         // These commands must not be used during a search!
