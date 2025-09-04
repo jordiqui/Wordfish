@@ -9,6 +9,8 @@
 #include <vector>
 
 #include <iostream>
+#include <unordered_set>
+#include <iomanip>
 
 #include "misc.h"
 
@@ -106,8 +108,7 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
                     if (idx.record_size == expected_record_size
                         && idx.key_size == expected_key_size)
                     {
-                        sync_cout << "info string Experience: loaded file " << file.string()
-                                  << (readOnly ? " (readonly)" : "") << sync_endl;
+                        print_stats(file);
                         return;
                     }
                 }
@@ -148,8 +149,7 @@ void Experience::load(const std::filesystem::path& file, bool readonly) {
     }
 
     in.read(reinterpret_cast<char*>(table.data()), table.size() * sizeof(ExpEntry));
-    sync_cout << "info string Experience: loaded file " << file.string()
-              << (readOnly ? " (readonly)" : "") << sync_endl;
+    print_stats(file);
 }
 
 void Experience::save(const std::filesystem::path& file) const {
@@ -253,6 +253,59 @@ void Experience::update(const Position& pos, Move move, int score, int depth) {
         }
         idx = (idx + 1) & (TableSize - 1);
     }
+}
+
+void Experience::print_stats(const std::filesystem::path& file) const {
+    std::ifstream in(file, std::ios::binary | std::ios::ate);
+    if (!in)
+    {
+        sync_cout << "info string " << file.filename().string()
+                  << " -> Total moves: 0. Total positions: 0. Duplicate moves: 0. Fragmentation: 0.00%)" << sync_endl;
+        return;
+    }
+
+    std::vector<char> buffer(1 << 20);
+    in.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
+
+    std::unordered_set<std::uint64_t> keys;
+    std::size_t                       totalMoves      = 0;
+    std::size_t                       totalPositions  = 0;
+
+    in.seekg(0, std::ios::beg);
+    if (is_compact_file(in))
+    {
+        in.seekg(sizeof(ExpHeaderV2) + sizeof(ExpIndexRoot), std::ios::beg);
+        ExpDummyEntry e{};
+        while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
+        {
+            if (e.move == 0)
+                continue;
+            ++totalMoves;
+            if (keys.insert(e.zobrist).second)
+                ++totalPositions;
+        }
+    }
+    else
+    {
+        in.seekg(sizeof(ExpHeader), std::ios::beg);
+        ExpEntry e{};
+        while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
+        {
+            if (e.move == 0)
+                continue;
+            ++totalMoves;
+            if (keys.insert(e.key).second)
+                ++totalPositions;
+        }
+    }
+
+    std::size_t duplicates    = totalMoves >= totalPositions ? totalMoves - totalPositions : 0;
+    double      fragmentation = totalMoves ? (100.0 * duplicates / totalMoves) : 0.0;
+
+    sync_cout << "info string " << file.filename().string() << " -> Total moves: " << totalMoves
+              << ". Total positions: " << totalPositions
+              << ". Duplicate moves: " << duplicates
+              << ". Fragmentation: " << std::fixed << std::setprecision(2) << fragmentation << "%)" << sync_endl;
 }
 
 }  // namespace Stockfish
