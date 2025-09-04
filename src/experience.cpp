@@ -1,10 +1,9 @@
 #include "experience.h"
 
 #include <algorithm>
-#include <fstream>
-#include <sstream>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 
 namespace Stockfish {
 
@@ -14,13 +13,13 @@ void Experience::clear() { table.clear(); }
 
 namespace {
 
-constexpr char SugarExpMagic[] = "SugaR Experience version 2\n";
+constexpr char         SugarExpMagic[]   = "SugaR Experience version 2";
+constexpr std::uint8_t SugarExpBlock[16] = {0x02, 0x00, 0x80, 0xE2, 0x63, 0xA4, 0x80, 0x33,
+                                            0x10, 0x06, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00};
+
+constexpr std::size_t SugarExpHeaderSize = (sizeof(SugarExpMagic) - 1) + sizeof(SugarExpBlock);
 
 #pragma pack(push, 1)
-struct SugarHeader {
-    uint32_t version;
-    uint32_t reserved;
-};
 
 struct SugarRecord {
     uint32_t move1, visits1, key1_lo, key1_hi;
@@ -38,42 +37,47 @@ static_assert(sizeof(SugarRecord) == 56);
 }  // namespace
 
 void Experience::load(const std::string& file) {
-    std::ifstream in(file, std::ios::binary);
+    std::ifstream in(file, std::ios::binary | std::ios::ate);
     if (!in)
         return;
+
+    auto size = in.tellg();
+    if (size <= std::streampos(SugarExpHeaderSize)
+        || (static_cast<std::uint64_t>(size) - SugarExpHeaderSize) % sizeof(SugarRecord) != 0)
+        return;
+
+    in.seekg(0);
     table.clear();
 
     char magic[sizeof(SugarExpMagic) - 1];
-    if (!in.read(magic, sizeof(magic))
-        || std::memcmp(magic, SugarExpMagic, sizeof(magic)) != 0)
+    if (!in.read(magic, sizeof(magic)) || std::memcmp(magic, SugarExpMagic, sizeof(magic)) != 0)
         return;
 
-    SugarHeader header;
-    if (!in.read(reinterpret_cast<char*>(&header), sizeof(header))
-        || header.version != 2)
+    std::uint8_t block[sizeof(SugarExpBlock)];
+    if (!in.read(reinterpret_cast<char*>(block), sizeof(block))
+        || std::memcmp(block, SugarExpBlock, sizeof(block)) != 0)
         return;
 
     SugarRecord rec;
-    while (in.read(reinterpret_cast<char*>(&rec), sizeof(rec))) {
-        if (rec.move1) {
+    while (in.read(reinterpret_cast<char*>(&rec), sizeof(rec)))
+    {
+        if (rec.move1)
+        {
             uint64_t key = (uint64_t(rec.key1_hi) << 32) | rec.key1_lo;
             table[key].emplace_back(
-              ExperienceEntry{Move(static_cast<int>(rec.move1)),
-                              static_cast<int16_t>(rec.score1),
+              ExperienceEntry{Move(static_cast<int>(rec.move1)), static_cast<int16_t>(rec.score1),
                               static_cast<int16_t>(rec.depth1),
                               static_cast<uint16_t>(
-                                std::max<uint32_t>(1,
-                                  std::min(rec.visits1, uint32_t(65535))))});
+                                std::max<uint32_t>(1, std::min(rec.visits1, uint32_t(65535))))});
         }
-        if (rec.move2) {
+        if (rec.move2)
+        {
             uint64_t key = (uint64_t(rec.key2_hi) << 32) | rec.key2_lo;
             table[key].emplace_back(
-              ExperienceEntry{Move(static_cast<int>(rec.move2)),
-                              static_cast<int16_t>(rec.score2),
+              ExperienceEntry{Move(static_cast<int>(rec.move2)), static_cast<int16_t>(rec.score2),
                               static_cast<int16_t>(rec.depth2),
                               static_cast<uint16_t>(
-                                std::max<uint32_t>(1,
-                                  std::min(rec.visits2, uint32_t(65535))))});
+                                std::max<uint32_t>(1, std::min(rec.visits2, uint32_t(65535))))});
         }
     }
 }
@@ -84,33 +88,34 @@ void Experience::save(const std::string& file) const {
         return;
 
     out.write(SugarExpMagic, sizeof(SugarExpMagic) - 1);
-    SugarHeader header{2, 0};
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    out.write(reinterpret_cast<const char*>(SugarExpBlock), sizeof(SugarExpBlock));
 
-    for (const auto& [key, vecOrig] : table) {
+    for (const auto& [key, vecOrig] : table)
+    {
         auto vec = vecOrig;
-        std::sort(vec.begin(), vec.end(),
-                  [](const ExperienceEntry& a, const ExperienceEntry& b) {
-                      return a.count > b.count;
-                  });
-        for (size_t i = 0; i < vec.size(); i += 2) {
+        std::sort(vec.begin(), vec.end(), [](const ExperienceEntry& a, const ExperienceEntry& b) {
+            return a.count > b.count;
+        });
+        for (size_t i = 0; i < vec.size(); i += 2)
+        {
             SugarRecord rec{};
             const auto& e1 = vec[i];
-            rec.move1   = static_cast<uint32_t>(e1.move.raw());
-            rec.visits1 = static_cast<uint32_t>(e1.count);
-            rec.key1_lo = static_cast<uint32_t>(key & 0xFFFFFFFFu);
-            rec.key1_hi = static_cast<uint32_t>(key >> 32);
-            rec.score1  = static_cast<int32_t>(e1.score);
-            rec.depth1  = static_cast<uint32_t>(e1.depth);
+            rec.move1      = static_cast<uint32_t>(e1.move.raw());
+            rec.visits1    = static_cast<uint32_t>(e1.count);
+            rec.key1_lo    = static_cast<uint32_t>(key & 0xFFFFFFFFu);
+            rec.key1_hi    = static_cast<uint32_t>(key >> 32);
+            rec.score1     = static_cast<int32_t>(e1.score);
+            rec.depth1     = static_cast<uint32_t>(e1.depth);
 
-            if (i + 1 < vec.size()) {
+            if (i + 1 < vec.size())
+            {
                 const auto& e2 = vec[i + 1];
-                rec.move2   = static_cast<uint32_t>(e2.move.raw());
-                rec.visits2 = static_cast<uint32_t>(e2.count);
-                rec.key2_lo = rec.key1_lo;
-                rec.key2_hi = rec.key1_hi;
-                rec.score2  = static_cast<int32_t>(e2.score);
-                rec.depth2  = static_cast<uint32_t>(e2.depth);
+                rec.move2      = static_cast<uint32_t>(e2.move.raw());
+                rec.visits2    = static_cast<uint32_t>(e2.count);
+                rec.key2_lo    = rec.key1_lo;
+                rec.key2_hi    = rec.key1_hi;
+                rec.score2     = static_cast<int32_t>(e2.score);
+                rec.depth2     = static_cast<uint32_t>(e2.depth);
             }
 
             out.write(reinterpret_cast<const char*>(&rec), sizeof(rec));
@@ -118,8 +123,8 @@ void Experience::save(const std::string& file) const {
     }
 }
 
-Move Experience::probe(Position& pos, [[maybe_unused]] int width,
-                       int evalImportance, int minDepth, int maxMoves) {
+Move Experience::probe(
+  Position& pos, [[maybe_unused]] int width, int evalImportance, int minDepth, int maxMoves) {
     auto it = table.find(pos.key());
     if (it == table.end())
         return Move::none();

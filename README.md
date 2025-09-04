@@ -104,6 +104,16 @@ Las siguientes opciones UCI controlan este sistema:
 El archivo se carga al iniciar el motor y se actualiza tras cada partida si la opción
 `Experience Readonly` está desactivada.
 
+Para crear un archivo de ejemplo compatible con Hypnos sin incluir datos
+binarios en el repositorio, puede ejecutar:
+
+```
+python scripts/generate_wordfish_exp.py
+```
+
+Este script genera `wordfish.exp` con la cabecera "SugaR Experience version 2"
+y un único registro de 56 bytes de muestra.
+
 ## License
 
  Wordfish is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
