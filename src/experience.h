@@ -48,6 +48,7 @@ class Experience {
                int minDepth, int maxMoves);
     void update(Position& pos, Move move, int score, int depth);
     void insert_entry(uint64_t key, uint16_t move, int value, int depth, int count);
+    bool empty() const { return table.empty(); }
 
     // Dirty / flush helpers
     void mark_dirty()        { dirty_.store(true, std::memory_order_relaxed); }

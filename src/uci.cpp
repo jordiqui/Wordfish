@@ -36,6 +36,7 @@
 #include "memory.h"
 #include "movegen.h"
 #include "experience.h"
+#include "experience_v2.hpp"
 #include "position.h"
 #include "score.h"
 #include "search.h"
@@ -118,6 +119,8 @@ void UCIEngine::loop() {
                     experience.save(options["Experience File"]);
                     experience.clear_dirty();
                 }
+                else if (experience.empty())
+                    seed_dummy_if_empty(options["Experience File"]);
             }
         }
         else if (token == "quit")
@@ -128,8 +131,13 @@ void UCIEngine::loop() {
             if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
             {
                 std::lock_guard<std::mutex> lk(experience.mtx);
-                experience.save(options["Experience File"]);
-                experience.clear_dirty();
+                if (experience.dirty())
+                {
+                    experience.save(options["Experience File"]);
+                    experience.clear_dirty();
+                }
+                else if (experience.empty())
+                    seed_dummy_if_empty(options["Experience File"]);
             }
             break;
         }

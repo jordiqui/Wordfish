@@ -25,25 +25,23 @@ static_assert(sizeof(EntryV2) == 34, "EntryV2 must be 34 bytes");
 
 constexpr const char* kSig = "SugaR Experience version 2";
 
-// Cabecera v2 completa: versión+seed+bucket+entry + 2 metabloques (22B * 2) = 61B
-// Bytes idénticos a los de tu save():
+// Bloque #rpD4 de Revolution (32 bytes)
+static const unsigned char kRPD4[32] = {
+    0x23, 0x72, 0x70, 0x44, 0x34, 0x9C, 0xE9, 0xF6,
+    0xDC, 0x04, 0x01, 0x00, 0x11, 0x00, 0x02, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x91, 0xD5,
+    0xA4, 0xC0, 0x78, 0xE2, 0xC0, 0x52, 0xEF, 0x02
+};
+
+// Cabecera v2 completa: versión+seed+bucket+entry + 2 metabloques (22B * 2) = 62B
 static const unsigned char kHeaderExtra[] = {
-    0x02,                                                              // version
-    0x00, 0x80, 0xE2, 0x63, 0xA4, 0x80, 0x33, 0x10,                    // seed
-    0x06, 0x00, 0x00, 0x00,                                            // bucket_size = 6
-    0x22, 0x00, 0x00, 0x00,                                            // entry_size  = 34
-    // Meta #1
-    0x17, 0x00, 0x00, 0x00,                                            // hash_bits = 23
-    0x01, 0x00, 0x00, 0x00,                                            // reserved
-    0x02, 0x00,                                                        // endian_tag = 0x0002
-    0xE4, 0x6C, 0x3F, 0x41,                                            // k_factor = 11.978f
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,                    // counters = 0
-    // Meta #2 (duplicado)
-    0x17, 0x00, 0x00, 0x00,
-    0x01, 0x00, 0x00, 0x00,
-    0x02, 0x00,
-    0xE4, 0x6C, 0x3F, 0x41,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    0x02,
+    0x00, 0x80, 0xE2, 0x63, 0xA4, 0x80, 0x33, 0x10,
+    0x06, 0x00, 0x00, 0x00,
+    0x22, 0x00, 0x00, 0x00,
+    0x17, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0xE4, 0x6C, 0x3F, 0x41, 0x8B, 0x26, 0x6D, 0x09, 0x00, 0x00, 0x19, 0x00,
+    0x17, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0xE4, 0x6C, 0x3F, 0x41, 0x8B, 0x26, 0xE7, 0x0B, 0x00, 0x00, 0x14, 0x00,
+    0x00, 0x00
 };
 
 // Utilidad: escribir archivo .exp con N entradas EntryV2
@@ -51,8 +49,11 @@ std::string WriteExpFile(const std::string& path, size_t nEntries) {
     std::ofstream os(path, std::ios::binary);
     if (!os) return {};
 
-    // firma + cabecera
+    // firma + padding + subheader + cabecera
     os.write(kSig, std::char_traits<char>::length(kSig));
+    static const char zeroPad[6] = {0};
+    os.write(zeroPad, sizeof(zeroPad));
+    os.write(reinterpret_cast<const char*>(kRPD4), sizeof(kRPD4));
     os.write(reinterpret_cast<const char*>(kHeaderExtra), sizeof(kHeaderExtra));
 
     // entradas (si las hay)
@@ -87,7 +88,7 @@ std::string WriteExpFile(const std::string& path, size_t nEntries) {
     if (std::string(buf.begin(), buf.end()) != sig)
         return ::testing::AssertionFailure() << "Firma inválida";
 
-    const std::size_t headerExtra = sizeof(kHeaderExtra); // 61
+    const std::size_t headerExtra = 6 + sizeof(kRPD4) + sizeof(kHeaderExtra); // 6 pad + 32 + 62 = 100
     if (size < static_cast<std::streamsize>(sig.size() + headerExtra))
         return ::testing::AssertionFailure() << "Cabecera incompleta";
 
