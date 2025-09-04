@@ -50,11 +50,11 @@ void Experience::insert_entry(uint64_t key, uint16_t move, int value, int depth,
 }
 
 void Experience::load(const std::string& file) {
-    std::string   path = file;
-    bool          convertBin   = false;
-    bool          binaryFormat = false;
-    bool          isBL         = false;
-    bool          isV2         = false;
+    std::string path = file;
+    bool convertBin = false;
+    bool binaryFormat = false;
+    bool isBL = false;
+    bool isV2 = false;
 
     const std::string sigV2 = "SugaR Experience version 2";
 
@@ -67,14 +67,14 @@ void Experience::load(const std::string& file) {
         if (ext == ".bin")
         {
             convertBin = true;
-            path       = path.substr(0, path.size() - 4) + ".exp";
+            path = path.substr(0, path.size() - 4) + ".exp";
             sync_cout << "info string '.bin' experience files are deprecated; converting to '"
                       << path << "'" << sync_endl;
         }
     }
 
     std::ifstream in(path, std::ios::binary);
-    std::string   display = path;
+    std::string display = path;
     if (path != file)
         display += " (from " + file + ")";
 
