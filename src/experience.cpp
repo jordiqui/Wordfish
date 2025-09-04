@@ -11,6 +11,7 @@
 
 #include "misc.h"
 #include "rpd4.hpp"
+#include "experience_v2.hpp"  // seed_dummy_if_empty()
 
 namespace Stockfish {
 
@@ -83,10 +84,16 @@ void Experience::load(const std::string& file) {
     if (path != file)
         display += " (from " + file + ")";
 
-    if (!in)
-    {
-        sync_cout << "info string Could not open " << display << sync_endl;
-        return;
+    if (!in) {
+        // Si no existe o no abre, crea el exp mínimo (32B firma + 32B #rpD4 + 62B subheader)
+        seed_dummy_if_empty(path);
+
+        in.clear();
+        in.open(path, std::ios::binary);
+        if (!in) {
+            sync_cout << "info string Could not open " << display << sync_endl;
+            return;
+        }
     }
 
     // Detect format: check for SugaR Experience v2 signature
