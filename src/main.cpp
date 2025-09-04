@@ -25,13 +25,13 @@
 #include "position.h"
 
 #ifndef ENGINE_BUILD_DATE
-    // ddmmyy; override at build time with:  -DENGINE_BUILD_DATE=040825
-    #define ENGINE_BUILD_DATE "040825"
+    // ddmmyy; override at build time with:  -DENGINE_BUILD_DATE=040925
+    #define ENGINE_BUILD_DATE "040925"
 #endif
 
 #ifndef ENGINE_NAME
-    // override at build time with:  -DENGINE_NAME="\"Revolution 2.0.1 dev\""
-    #define ENGINE_NAME "Revolution 2.0.1 dev"
+    // override at build time with:  -DENGINE_NAME="\"Wordfish 2.0 dev\""
+    #define ENGINE_NAME "Wordfish 2.0 dev"
 #endif
 
 using namespace Stockfish;

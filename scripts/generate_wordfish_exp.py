@@ -3,7 +3,7 @@
 
 The generated file contains the full 256-byte "SugaR Experience version 2"
 header followed by a zero-filled table of 65,536 entries in the v2 layout (34
-bytes per entry).  This matches the format used by Revolution and allows
+bytes per entry).  This matches the format used by Wordfish and allows
 external tools such as HypnoS to recognise the file even before any experience
 data is stored.
 """
