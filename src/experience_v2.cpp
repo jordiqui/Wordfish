@@ -1,53 +1,69 @@
 #include "experience_v2.hpp"
-#include "position.h"
 
-#include <cstring>
+#include <cstdio>   // std::FILE, std::fopen, std::fclose, std::fwrite, std::fseek, std::ftell, SEEK_END
+#include <cstring>  // std::memcpy, std::strlen
 
 namespace Stockfish {
+
+// Exact 32-byte #rpD4 block for Wordfish (10-byte engine_id + CRC32 over those 10 bytes)
+static const unsigned char RPD4_BLOCK[32] = {
+    // "#rpD4"
+    0x23, 0x72, 0x70, 0x44, 0x34,
+    // CRC32 little-endian over the 10-byte engine_id (0x2BF08754)
+    0x54, 0x87, 0xF0, 0x2B,
+    // fields as in Revolution (ver/flags etc.)
+    0x04, 0x01, 0x00, 0x11, 0x00, 0x02,
+    // 7 zero bytes
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 10-byte engine_id = first 10 bytes of MD5("Wordfish 2.0 dev")
+    0x68, 0x12, 0xD4, 0xB0, 0xC3, 0x8B, 0x75, 0xD2, 0x6C, 0x9F
+};
+
+// Exact 62-byte subheader as seen in Revolution (required by HypnoS/loader)
+static const unsigned char SUBHEADER62[62] = {
+    0x07, 0x00, 0x13, 0x00, 0x04, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x02, 0x00, 0x80, 0xE2, 0x63, 0xA4,
+    0x80, 0x33, 0x10, 0x06, 0x00, 0x00, 0x22, 0x00,
+    0x00, 0x00, 0x17, 0x00, 0x00, 0x00, 0x05, 0x00,
+    0x00, 0x00, 0x02, 0x00, 0xE4, 0x6C, 0x3F, 0x41,
+    0x8B, 0x26, 0x6D, 0x09, 0x00, 0x00, 0x19, 0x00,
+    0x17, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 0x00,
+    0x02, 0x00, 0x02, 0x00
+};
+
+// Helper: fast file size or -1 if not accessible
+static inline long file_size(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return -1;
+    std::fseek(f, 0, SEEK_END);
+    long sz = std::ftell(f);
+    std::fclose(f);
+    return sz;
+}
 
 void write_sugar_v2_header(std::FILE* f) {
     SugarV2Header h{};
     const char* sig = "SugaR Experience version 2";
     std::memcpy(h.signature, sig, std::strlen(sig));
-    fill_rpd4(h.rpd4, "Wordfish 2.0 dev");
+    std::memcpy(h.rpd4, RPD4_BLOCK, 32);
+    // 64B header (signature + rpd4)
     std::fwrite(&h, 1, sizeof(h), f);
+    // followed by the 62B subheader
+    std::fwrite(SUBHEADER62, 1, sizeof(SUBHEADER62), f);
 }
 
-#pragma pack(push,1)
-struct ExpEntry {
-    uint64_t key;
-    int32_t  depth;
-    int32_t  score;
-    int32_t  mov;
-    int32_t  perf;
-};
-#pragma pack(pop)
-
-static inline int32_t pack_book_move(int from, int to, int promo) {
-    return (to & 63) << 6 | (from & 63) | ((promo & 15) << 12);
-}
-
+// Minimal, non-blocking seeding: if file is missing or shorter than 64+62 bytes,
+// create it with just the header + subheader. Actual entries will be added later
+// by the normal save path, outside of "isready"/"ucinewgame" latency-sensitive paths.
 void seed_dummy_if_empty(const std::string& path) {
-    std::FILE* f = std::fopen(path.c_str(), "ab");
-    if (!f)
-        return;
+    const long need = 64 + 62; // header + subheader
+    long sz = file_size(path);
+    if (sz >= need) return; // already valid
 
-    constexpr const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    StateInfo st;
-    Position pos;
-    pos.set(StartFEN, false, &st);
-    uint64_t key = pos.key();
-
-    ExpEntry e{};
-    e.key   = key;
-    e.depth = 8;
-    e.score = 0;
-    e.mov   = pack_book_move(12, 28, 0); // e2e4
-    e.perf  = 0;
-
-    std::fwrite(&e, 1, sizeof(e), f);
+    std::FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) return;
+    write_sugar_v2_header(f);
     std::fclose(f);
 }
 
 } // namespace Stockfish
-
