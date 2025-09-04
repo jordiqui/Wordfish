@@ -21,49 +21,88 @@ Experience experience;
 namespace {
 
 // Constantes del formato compacto que espera HypnoS/BrainLearn
-constexpr std::uint32_t kIndexMagic = 0x44707223u;  // "#rpD" en little-endian
-constexpr std::uint16_t kRecordSize = 0x0011;       // 17 bytes / entrada
-constexpr std::uint16_t kKeySize    = 0x0002;       // 2 bytes de clave
+constexpr std::uint32_t kMagic   = 0x44707223u;  // "#rpD" en little-endian
+constexpr std::uint16_t kRecSize = 0x0011;       // 17 bytes / entrada
+constexpr std::uint16_t kKeySize = 0x0002;       // 2 bytes de clave
+constexpr std::size_t   kHdrSize = 32;           // firma padded
 
-// ¿Tiene cabecera compacta válida (firma + magic de índice)?
-bool is_compact_file(std::ifstream& in) {
+inline void write_le32(std::ostream& os, std::uint32_t v) {
+    os.put(static_cast<char>(v & 0xFF));
+    os.put(static_cast<char>((v >> 8) & 0xFF));
+    os.put(static_cast<char>((v >> 16) & 0xFF));
+    os.put(static_cast<char>((v >> 24) & 0xFF));
+}
+
+inline void write_le16(std::ostream& os, std::uint16_t v) {
+    os.put(static_cast<char>(v & 0xFF));
+    os.put(static_cast<char>((v >> 8) & 0xFF));
+}
+
+inline void write_u64(std::ostream& os, std::uint64_t v) {
+    os.write(reinterpret_cast<const char*>(&v), sizeof(v));
+}
+
+inline void write_signature32(std::ostream& os) {
+    char sig[32]{};
+    std::memcpy(sig, "SugaR Experience version 2", 27);
+    os.write(sig, sizeof(sig));
+}
+
+inline bool is_compact_exp(std::istream& in) {
     in.clear();
     in.seekg(0, std::ios::beg);
-    char sig[32] = {};
+    char sig[32]{};
     if (!in.read(sig, 32))
         return false;
     if (std::memcmp(sig, "SugaR Experience version 2", 27) != 0)
         return false;
     std::uint32_t magic = 0;
-    if (!in.read(reinterpret_cast<char*>(&magic), sizeof(magic)))
+    if (!in.read(reinterpret_cast<char*>(&magic), 4))
         return false;
-    return magic == kIndexMagic;
+    return magic == kMagic;
 }
 
-// Crea un esqueleto compacto mínimo: firma (32) + índice + 1 registro “dummy”
-void write_compact_skeleton(const std::filesystem::path& file) {
-    std::fstream out(file, std::ios::binary | std::ios::out | std::ios::trunc);
+// Esqueleto compacto mínimo + dummy de 17 bytes
+inline void create_compact_skeleton(const std::filesystem::path& path) {
+    std::ofstream os(path, std::ios::binary | std::ios::trunc);
+    if (!os)
+        return;
 
-    // Cabecera de 32 bytes con la firma del formato
-    ExpHeaderV2 header{};
-    std::memset(header.signature, 0, sizeof(header.signature));
-    std::memcpy(header.signature, "SugaR Experience version 2", 27);
-    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    write_signature32(os);
+    write_le32(os, kMagic);
+    write_u64(os, 0);             // salt/uuid
+    write_le16(os, kRecSize);
+    write_le16(os, kKeySize);
+    write_u64(os, 0);             // reservado
+    write_u64(os, 0);             // reservado
 
-    // Índice raíz mínimo (equivalente a ExpIndexRoot)
-    ExpIndexRoot idx{};
-    idx.magic        = kIndexMagic;
-    idx.salt_or_uuid = 0;  // campo libre
-    idx.record_size  = kRecordSize;
-    idx.key_size     = kKeySize;
-    idx.reserved0    = 0;
-    out.write(reinterpret_cast<const char*>(&idx), sizeof(idx));
+    char dummy[0x11]{};
+    os.write(dummy, sizeof(dummy));
+    os.flush();
+}
 
-    // Registro "dummy" para que el archivo no aparezca vacío
-    ExpDummyEntry dummy{};
-    out.write(reinterpret_cast<const char*>(&dummy), sizeof(dummy));
+// Si el archivo existe pero es demasiado corto, padéalo hasta 0x40 y añade dummy
+inline void normalize_minimal_compact(const std::filesystem::path& path) {
+    std::fstream f(path, std::ios::binary | std::ios::in | std::ios::out);
+    if (!f)
+        return;
+    f.seekg(0, std::ios::end);
+    auto sz = static_cast<std::size_t>(f.tellg());
 
-    out.flush();
+    if (sz < 0x40) {
+        f.clear();
+        f.seekp(0, std::ios::end);
+        std::vector<char> pad(0x40 - sz, 0);
+        f.write(pad.data(), pad.size());
+        sz = 0x40;
+    }
+    if (sz < 0x40 + 0x11) {
+        f.clear();
+        f.seekp(0, std::ios::end);
+        char dummy[0x11]{};
+        f.write(dummy, sizeof(dummy));
+    }
+    f.flush();
 }
 
 constexpr char          ExpMagic[] = "SugaR Experience version 2";
@@ -82,69 +121,55 @@ void Experience::clear() { table.fill({}); }
 
 void Experience::load(const std::filesystem::path& file, bool readonly) {
     readOnly = readonly;
+    table.fill({});
+
     std::vector<char> buffer(1 << 20);
     std::ifstream     in(file, std::ios::binary | std::ios::ate);
     if (in)
         in.rdbuf()->pubsetbuf(buffer.data(), buffer.size());
-
     std::size_t size = in ? static_cast<std::size_t>(in.tellg()) : 0;
-    table.fill({});
 
-    // Try compact experience format (ExpHeaderV2 + ExpIndexRoot)
-    if (in && size >= sizeof(ExpHeaderV2) + sizeof(ExpIndexRoot))
-    {
-        in.seekg(0);
-        ExpHeaderV2 h{};
-        if (in.read(reinterpret_cast<char*>(&h), sizeof(h)))
-        {
-            bool ok_sig = (std::memcmp(h.signature, "SugaR Experience version 2", 27) == 0);
-            if (ok_sig)
-            {
-                ExpIndexRoot idx{};
-                if (in.read(reinterpret_cast<char*>(&idx), sizeof(idx)) && idx.magic == 0x44707223u)
-                {
-                    constexpr std::uint16_t expected_record_size = 0x0011;
-                    constexpr std::uint16_t expected_key_size    = 0x0002;
-                    if (idx.record_size == expected_record_size
-                        && idx.key_size == expected_key_size)
-                    {
-                        print_stats(file);
-                        return;
-                    }
-                }
-            }
-        }
-        in.clear();
-        in.seekg(0);
+    if (!in) {
+        if (readonly)
+            return;
+        create_compact_skeleton(file);
+        sync_cout << "info string Experience: created compact experience " << file.string()
+                  << sync_endl;
+        return;
+    }
+
+    if (is_compact_exp(in)) {
+        if (size < 0x40 + 0x11)
+            normalize_minimal_compact(file);
+        print_stats(file);
+        return;
     }
 
     const std::uint32_t tableBytes = TableSize * sizeof(ExpEntry);
     const std::size_t   expected   = sizeof(ExpHeader) + tableBytes;
-
-    if (!in || size < expected)
-    {
+    if (size < expected) {
         sync_cout << "info string Experience: invalid or too small" << sync_endl;
-        if (readonly)
-            return;
-
-        // Antes: escribir ExpHeader (antiguo) + tabla.
-        // Ahora: crear esqueleto compacto compatible con HypnoS/BrainLearn.
-        write_compact_skeleton(file);
-
-        sync_cout << "info string Experience: created compact experience " << file.string()
-                  << sync_endl;
-        return;  // Ya está listo; no intentes leer como formato antiguo.
+        if (!readonly) {
+            create_compact_skeleton(file);
+            sync_cout << "info string Experience: created compact experience " << file.string()
+                      << sync_endl;
+        }
+        return;
     }
 
+    in.clear();
     in.seekg(0);
-
     ExpHeader header{};
     if (!in.read(reinterpret_cast<char*>(&header), sizeof(header))
         || std::memcmp(header.magic, ExpMagic, sizeof(ExpMagic) - 1) != 0 || header.version != 2
         || header.headerSize != sizeof(ExpHeader) || header.tableBytes != tableBytes
-        || size < header.headerSize + header.tableBytes)
-    {
+        || size < header.headerSize + header.tableBytes) {
         sync_cout << "info string Experience: invalid or too small" << sync_endl;
+        if (!readonly) {
+            create_compact_skeleton(file);
+            sync_cout << "info string Experience: created compact experience " << file.string()
+                      << sync_endl;
+        }
         return;
     }
 
@@ -157,11 +182,8 @@ void Experience::save(const std::filesystem::path& file) const {
         return;
 
     // Si el archivo ya es compacto, no lo sobreescribas con el formato antiguo.
-    {
-        std::ifstream fin(file, std::ios::binary);
-        if (fin && is_compact_file(fin))  // firma ok + magic 0x44707223 en offset 32
-            return;
-    }
+    if (std::ifstream fin(file, std::ios::binary); fin && is_compact_exp(fin))
+        return;
 
     // (Si no es compacto, conservamos el guardado antiguo por compatibilidad)
     std::vector<char> buffer(1 << 20);
@@ -272,7 +294,7 @@ void Experience::print_stats(const std::filesystem::path& file) const {
     std::size_t                       totalPositions  = 0;
 
     in.seekg(0, std::ios::beg);
-    if (is_compact_file(in))
+    if (is_compact_exp(in))
     {
         in.seekg(sizeof(ExpHeaderV2) + sizeof(ExpIndexRoot), std::ios::beg);
         ExpDummyEntry e{};
