@@ -32,6 +32,7 @@
 #include <ratio>
 #include <string>
 #include <utility>
+#include <mutex>
 
 #include "bitboard.h"
 #include "evaluate.h"
@@ -73,6 +74,8 @@ using SearchedList                  = ValueList<Move, SEARCHEDLIST_CAPACITY>;
 // They are optimized to time controls of 180 + 1.8 and longer,
 // so changing them or adding conditions that are similar requires
 // tests at these types of time controls.
+// (*Scaler) All tuned parameters at time controls shorter than
+// optimized for require verifications at longer time controls
 
 int correction_value(const Worker& w, const Position& pos, const Stack* const ss) {
     const Color us    = pos.side_to_move();
@@ -263,8 +266,15 @@ void Search::Worker::start_searching() {
     main_manager()->updates.onBestmove(bestmove, ponder);
 
     if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
-        experience.update(rootPos, bestThread->rootMoves[0].pv[0], bestThread->rootMoves[0].score,
-                          bestThread->completedDepth);
+    {
+        const std::string           path = options["Experience File"];
+        std::lock_guard<std::mutex> lk(experience.mtx);
+        if (experience.dirty())
+        {
+            experience.save(path);
+            experience.clear_dirty();
+        }
+    }
 }
 
 // Main iterative deepening loop. It calls search()
@@ -324,6 +334,10 @@ void Search::Worker::iterative_deepening() {
     multiPV = std::min(multiPV, rootMoves.size());
 
     int searchAgainCounter = 0;
+
+    // Start searches at depth 2 to skip the shallowest iteration and reach
+    // deeper analysis faster.
+    rootDepth = 1;
 
     lowPlyHistory.fill(89);
 
@@ -468,6 +482,21 @@ void Search::Worker::iterative_deepening() {
 
         if (!mainThread)
             continue;
+
+        if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"]
+            && (bool) options["Experience Book"]
+            && rootDepth >= (int) options["Experience Book Min Depth"])
+        {
+            const Move best = rootMoves[0].pv[0];
+            if (best != Move::none())
+            {
+                const uint64_t key = Experience::compose_key(rootPos.key(), (uint16_t) best.raw());
+                std::lock_guard<std::mutex> lk(experience.mtx);
+                experience.insert_entry(key, (uint16_t) best.raw(), rootMoves[0].score, rootDepth,
+                                        1);
+                experience.mark_dirty();
+            }
+        }
 
         // Have we found a "mate in x"?
         if (limits.mate && rootMoves[0].score == rootMoves[0].uciScore
@@ -860,7 +889,9 @@ Value Search::Worker::search(
     // bigger than the previous static evaluation at our turn (if we were in
     // check at our previous move we go back until we weren't in check) and is
     // false otherwise. The improving flag is used in various pruning heuristics.
-    improving         = ss->staticEval > (ss - 2)->staticEval;
+    // Allow a small margin so that minor setbacks are still considered
+    // improving which helps to avoid over-pruning in quiet positions.
+    improving         = ss->staticEval >= (ss - 2)->staticEval - 45;
     opponentWorsening = ss->staticEval > -(ss - 1)->staticEval;
 
     if (priorReduction >= (depth < 10 ? 1 : 3) && !opponentWorsening)
@@ -1053,12 +1084,6 @@ moves_loop:  // When in check, search starts here
         int delta = beta - alpha;
 
         Depth r = reduction(improving, depth, moveCount, delta);
-
-        // Don't over-reduce moves that give check. Checking moves often have
-        // high tactical significance, so we allow them slightly more search
-        // depth by decreasing the late move reduction.
-        if (givesCheck)
-            r = std::max<Depth>(0, r - 512);
 
         // Increase reduction for ttPv nodes (*Scaler)
         // Smaller or even negative value is better for short time controls
@@ -1767,7 +1792,12 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
 Depth Search::Worker::reduction(bool i, Depth d, int mn, int delta) const {
     int reductionScale = reductions[d] * reductions[mn];
-    return reductionScale - delta * 731 / rootDelta + !i * reductionScale * 216 / 512 + 1089;
+    // Increase the difference between improving and non-improving lines.
+    // Improving moves get a slightly smaller reduction while non-improving
+    // moves are reduced more aggressively to speed up the search without
+    // harming tactical strength at longer time controls.
+    int improvingBonus = i ? -reductionScale * 57 / 512 : reductionScale * 273 / 512;
+    return reductionScale - delta * 731 / rootDelta + improvingBonus + 1089;
 }
 
 // elapsed() returns the time elapsed since the search started. If the

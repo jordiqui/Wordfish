@@ -14,6 +14,8 @@
 
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  
+  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
 */
 
 #include "uci.h"
@@ -33,6 +35,8 @@
 #include "engine.h"
 #include "memory.h"
 #include "movegen.h"
+#include "experience.h"
+#include "experience_v2.hpp"
 #include "position.h"
 #include "score.h"
 #include "search.h"
@@ -102,8 +106,41 @@ void UCIEngine::loop() {
         token.clear();  // Avoid a stale if getline() returns nothing or a blank line
         is >> std::skipws >> token;
 
-        if (token == "quit" || token == "stop")
+        if (token == "stop")
+        {
             engine.stop();
+            engine.wait_for_search_finished();
+            const auto& options = engine.get_options();
+            if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
+            {
+                std::lock_guard<std::mutex> lk(experience.mtx);
+                if (experience.dirty())
+                {
+                    experience.save(options["Experience File"]);
+                    experience.clear_dirty();
+                }
+                else if (experience.empty())
+                    seed_dummy_if_empty(options["Experience File"]);
+            }
+        }
+        else if (token == "quit")
+        {
+            engine.stop();
+            engine.wait_for_search_finished();
+            const auto& options = engine.get_options();
+            if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
+            {
+                std::lock_guard<std::mutex> lk(experience.mtx);
+                if (experience.dirty())
+                {
+                    experience.save(options["Experience File"]);
+                    experience.clear_dirty();
+                }
+                else if (experience.empty())
+                    seed_dummy_if_empty(options["Experience File"]);
+            }
+            break;
+        }
 
         // The GUI sends 'ponderhit' to tell that the user has played the expected move.
         // So, 'ponderhit' is sent if pondering was done on the same move that the user
@@ -114,9 +151,9 @@ void UCIEngine::loop() {
 
         else if (token == "uci")
         {
-            // Force a stable, explicit UCI name so GUIs show "Wordfish 1.0.1 dev <date>"
+            // Force a stable, explicit UCI name so GUIs show "Wordfish 2.0 dev <date>"
             sync_cout << "id name " << ENGINE_NAME << ' ' << ENGINE_BUILD_DATE << "\n"
-                << "id author Jorge Ruiz Centelles" << "\n"
+                << "id author Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)" << "\n"
                 << engine.get_options() << sync_endl;
 
             sync_cout << "uciok" << sync_endl;
@@ -154,16 +191,13 @@ void UCIEngine::loop() {
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
         {
-            std::pair<std::optional<std::string>, std::string> files[3];
+            std::pair<std::optional<std::string>, std::string> files[2];
 
             if (is >> std::skipws >> files[0].second)
                 files[0].first = files[0].second;
 
             if (is >> std::skipws >> files[1].second)
                 files[1].first = files[1].second;
-
-            if (is >> std::skipws >> files[2].second)
-                files[2].first = files[2].second;
 
             engine.save_network(files);
         }

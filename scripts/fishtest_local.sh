@@ -1,10 +1,10 @@
 #!/bin/bash
-# Launch a local fishtest worker for tuning Revolution.
+# Launch a local fishtest worker for tuning Wordfish.
 # Requires a fishtest repository cloned locally.
 
 set -e
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ENGINE="$ROOT_DIR/src/revolution"
+ENGINE="$ROOT_DIR/src/wordfish"
 FISHTEST_DIR="${FISHTEST_DIR:-$HOME/fishtest}"
 
 if [ ! -x "$ENGINE" ]; then

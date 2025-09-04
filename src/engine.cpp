@@ -23,6 +23,7 @@
 #include <deque>
 #include <iosfwd>
 #include <memory>
+#include <mutex>
 #include <ostream>
 #include <sstream>
 #include <string_view>
@@ -38,6 +39,7 @@
 #include "polybook.h"
 #include "position.h"
 #include "experience.h"
+#include "experience_v2.hpp"
 #include "search.h"
 #include "syzygy/tbprobe.h"
 #include "types.h"
@@ -62,8 +64,7 @@ Engine::Engine(std::optional<std::string> path) :
       NN::Networks(
         NN::NetworkBig({EvalFileDefaultNameBig, "None", ""}, NN::EmbeddedNNUEType::BIG),
         NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL),
-        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""},
-                          NN::EmbeddedNNUEType::FALCON))) {
+        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""}, NN::EmbeddedNNUEType::BIG))) {
     pos.set(StartFEN, false, &states->back());
 
 
@@ -109,6 +110,8 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Move Overhead", Option(10, 0, 5000));
 
     options.add("nodestime", Option(0, 0, 10000));
+
+    options.add("Slow Mover", Option(100, 10, 1000));
 
     options.add("UCI_Chess960", Option(false));
 
@@ -182,6 +185,15 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Experience Book Eval Importance", Option(5, 0, 10));
     options.add("Experience Book Min Depth", Option(27, 4, 64));
     options.add("Experience Book Max Moves", Option(16, 1, 100));
+    options.add("Experience Save Now", Option([this](const Option&) {
+                    if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
+                    {
+                        std::lock_guard<std::mutex> lk(experience.mtx);
+                        experience.save(options["Experience File"]);
+                        experience.clear_dirty();
+                    }
+                    return std::nullopt;
+                }));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
@@ -233,7 +245,15 @@ void Engine::search_clear() {
     Tablebases::release();
 
     if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
-        experience.save(options["Experience File"]);
+        {
+            if (experience.dirty())
+            {
+                experience.save(options["Experience File"]);
+                experience.clear_dirty();
+            }
+            else if (experience.empty())
+                seed_dummy_if_empty(options["Experience File"]);
+        }
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -317,35 +337,49 @@ void Engine::set_tt_size(size_t mb) {
 
 void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 
- 321  // network related
-   void Engine::verify_networks() const {
+// network related
+
+void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
-
-    const std::string falconFile = options["EvalFileFalcon"];
-    auto fileExists = [](const std::string& path) {
-        std::ifstream f(path, std::ios::binary);
-        return f.good();
-    };
-    if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
-        networks->falcon.verify(falconFile, onVerifyNetworks);
+    networks->falcon.verify(options["EvalFileFalcon"], onVerifyNetworks);
 }
 
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
-
-        const std::string falconFile = options["EvalFileFalcon"];
-        auto fileExists = [](const std::string& path) {
-            std::ifstream f(path, std::ios::binary);
-            return f.good();
-        };
-        if (fileExists(binaryDirectory + falconFile) || fileExists(falconFile))
-            networks_.falcon.load(binaryDirectory, falconFile);
+        networks_.falcon.load(binaryDirectory, options["EvalFileFalcon"]);
     });
     threads.clear();
     threads.ensure_network_replicated();
+}
+
+void Engine::load_big_network(const std::string& file) {
+    networks.modify_and_replicate(
+      [this, &file](NN::Networks& networks_) { networks_.big.load(binaryDirectory, file); });
+    threads.clear();
+    threads.ensure_network_replicated();
+}
+
+void Engine::load_small_network(const std::string& file) {
+    networks.modify_and_replicate(
+      [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
+    threads.clear();
+    threads.ensure_network_replicated();
+}
+
+void Engine::load_falcon_network(const std::string& file) {
+    networks.modify_and_replicate(
+      [this, &file](NN::Networks& networks_) { networks_.falcon.load(binaryDirectory, file); });
+    threads.clear();
+    threads.ensure_network_replicated();
+}
+
+void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
+    networks.modify_and_replicate([&files](NN::Networks& networks_) {
+        networks_.big.save(files[0].first);
+        networks_.small.save(files[1].first);
     });
 }
 

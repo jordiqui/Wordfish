@@ -1,17 +1,22 @@
-# Wordfish 2.0 Chess Engine (310825)
+# Wordfish Chess Engine
+
+**Version 2.0**
 
 <div align="center">
-  <h3>Wordfish 2.0</h3>
-
+  <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
+  <h3>Wordfish</h3>
+  
   A free and open-source UCI chess engine combining classical algorithms with neural network innovations.
   <br>
-  <em>Authors: Stockfish developers, Jorge Ruiz, ChatGPT</em>
+  <strong><a href="#">Explore Wordfish Documentation »</a>
 
+  <em>Author: This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.</em>
+  
 </div>
 
 ## Overview
 
-**Wordfish** is a free, open-source UCI chess engine implementing cutting-edge search algorithms combined with neural network evaluation. Derived from fundamental chess programming principles, Wordfish analyzes positions through parallelized alpha-beta search enhanced with null-move pruning and late move reductions.
+**Wordfish** is a free, open-source UCI chess engine derived from **Stockfish**. Jorge Ruiz Centelles, with credit to ChatGPT, modifies and extends the code to explore new concepts. The engine implements cutting-edge search algorithms combined with neural network evaluation. Derived from fundamental chess programming principles, Wordfish analyzes positions through parallelized alpha-beta search enhanced with null-move pruning and late move reductions.
 
 As a UCI-compliant engine, Wordfish operates through **standard chess interfaces** without an integrated graphical interface. Users must employ compatible chess GUIs (Arena, Scid vs PC, etc.) for board visualization and move input. Consult your GUI documentation for implementation details.
 
@@ -23,7 +28,7 @@ Wordfish's architecture features:
 - SMP parallelization with YBWC (Young Brothers Wait Concept)
 - Advanced pruning techniques (Reverse Futility Pruning, Late Move Pruning)
 - Efficient move ordering with history heuristics and killer moves
-- Tuned search parameters through reinforcement learning
+- Optional root experience book storing previously played moves
 
 ## Files
 
@@ -33,7 +38,7 @@ The distribution includes:
 - `COPYING.txt` ([GNU GPLv3 license][gpl-link])
 - `AUTHORS` (contributor acknowledgments)
 - `src/` (source code with platform-specific Makefiles)
-- Neural network weights (`revolution.nnue`)
+- Neural network weights (`wordfish.nnue`)
 
 ## Contributing
 
@@ -46,13 +51,13 @@ Contributions must adhere to:
 
 ### Testing Infrastructure
 Improvements require extensive testing:
-- Install the [Revolution Test Worker][worker-link]
-- Participate in active tests on [Revolution Test Suite][testsuite-link]
+- Install the [Wordfish Test Worker][worker-link]
+- Participate in active tests on [Wordfish Test Suite][testsuite-link]
 - Verify ELO gains through SPRT validation
 
 ### Community
 Technical discussions occur primarily through:
-- [Revolution Discord Server][discord-link]
+- [Wordfish Discord Server][discord-link]
 - [GitHub Discussions][discussions-link]
 - [Chess Programming Wiki][chesswiki-link]
 
@@ -73,7 +78,7 @@ Full compilation guides available in [documentation][doc-link].
 
 ## Syzygy Tablebases
 
-Revolution can probe [Syzygy](https://github.com/syzygy1) endgame tablebases when a
+Wordfish can probe [Syzygy](https://github.com/syzygy1) endgame tablebases when a
 directory is supplied via the `SyzygyPath` UCI option. The engine also exposes a
 `SyzygyPremap` boolean option. When set to `true`, `Tablebases::init` pre-maps all
 available WDL and DTZ tables during initialization, reducing probe latency at the
@@ -81,31 +86,31 @@ expense of additional startup time and memory usage.
 
 ## Experience Book
 
-Revolution puede aprender de partidas previas guardando datos en un archivo `.exp` en formato binario.
-Las siguientes opciones UCI controlan este sistema:
+Wordfish includes a simple text-based cache that stores root moves from
+previous games. It functions as a lightweight opening book and does not
+influence the internal search beyond the root. The following UCI options
+control this system:
 
-- `Experience Enabled`: activa o desactiva la experiencia (por defecto `true`).
-- `Experience File`: nombre del archivo donde se almacena la experiencia (por defecto `revolution.exp`).
-- `Experience Readonly`: si es `true`, no se escriben cambios en el archivo.
-- `Experience Book`: usa la experiencia como libro de aperturas.
-- `Experience Book Width`: número de movimientos principales a considerar (1–20).
-- `Experience Book Eval Importance`: ponderación de la evaluación al ordenar movimientos (0–10).
-- `Experience Book Min Depth`: profundidad mínima para almacenar un movimiento (4–64).
-- `Experience Book Max Moves`: máximo de movimientos guardados por posición (1–100).
+- `Experience Enabled`: enables or disables the experience feature (default `true`).
+- `Experience File`: name of the file where the experience data is stored (default `wordfish.exp`; legacy `.bin` files are converted automatically).
+- `Experience Readonly`: if `true`, no changes are written to the file.
+- `Experience Book`: uses the experience data as an opening book.
+- `Experience Book Width`: number of principal moves to consider (1–20).
+- `Experience Book Eval Importance`: weighting of evaluation when ordering moves (0–10).
+- `Experience Book Min Depth`: minimum depth required to store a move (4–64).
+- `Experience Book Max Moves`: maximum number of moves saved per position (1–100).
 
-El archivo se carga al iniciar el motor y se actualiza tras cada partida si la opción
-`Experience Readonly` está desactivada.
+The file is loaded at engine startup and updated after each game if `Experience Readonly` is disabled.
 
 ## License
 
-Revolution is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
+Wordfish is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
 It integrates source code from:
 
 - [Stockfish](https://github.com/official-stockfish/Stockfish)
-- [Berserk](https://github.com/jhonnold/berserk/tree/main/src)
-- [Obsidian](https://github.com/gab8192/Obsidian)
 
-Because these projects are GPLv3, any distribution of Revolution must also comply with GPLv3.
+Because Stockfish is GPLv3, any distribution of Wordfish must also comply with GPLv3.
+For a summary of your obligations under GPLv3 see <https://www.gnu.org/licenses/quick-guide-gplv3.html>.
 When redistributing, you must:
 1. Include the original license text (`COPYING.txt`)
 2. Provide complete corresponding source code
@@ -113,7 +118,7 @@ When redistributing, you must:
 
 ## Acknowledgements
 
-Revolution also benefits from:
+Wordfish also benefits from:
 - Neural networks trained on [Lichess open database][lichess-db]
 - Search techniques from [CCC testing community][ccc-link]
 - Positional analysis concepts from [CPW research][cpw-link]

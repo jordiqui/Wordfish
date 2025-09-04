@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-EXE = wordfish.exe
+        EXE = wordfish-2.0-dev-040925.exe
 else
-EXE = wordfish
+        EXE = wordfish-2.0-dev-040925
 endif
 
 ### Installation dir definitions
@@ -56,7 +56,7 @@ SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
         misc.cpp movegen.cpp movepick.cpp polybook.cpp position.cpp \
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
         nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/features/half_ka_v2_hm.cpp nnue/network.cpp \
-        engine.cpp score.cpp memory.cpp experience.cpp
+        engine.cpp score.cpp memory.cpp experience.cpp experience_v2.cpp
 
 HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
 		nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/layers/affine_transform.h \
@@ -65,7 +65,7 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.
 		nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h position.h \
                 search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
                 tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h \
-                experience.h
+                experience.h experience_v2.hpp
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
@@ -842,12 +842,12 @@ endif
 ### 3.8.4 Engine identity (UCI id name / build date)
 # UCI "id name" string shown in GUIs.
 # Defaults:
-#   - ENGINE_NAME: "Wordfish 1.0.1 dev"
-#   - ENGINE_BUILD_DATE: system date in yymmdd format
+#   - ENGINE_NAME: "Wordfish 2.0 dev"
+#   - ENGINE_BUILD_DATE: 040925 (ddmmyy format)
 # You can override on the command line:
-#   make ENGINE_NAME="Wordfish 1.0.1 beta" ENGINE_BUILD_DATE=251001
-ENGINE_NAME        ?= Wordfish 1.0.1 dev
-ENGINE_BUILD_DATE  ?= $(shell date +%y%m%d)
+#   make ENGINE_NAME="Wordfish 2.0 dev" ENGINE_BUILD_DATE=040925
+ENGINE_NAME        ?= Wordfish 2.0 dev
+ENGINE_BUILD_DATE  ?= 040925
 CXXFLAGS += -DENGINE_NAME='"$(ENGINE_NAME)"' -DENGINE_BUILD_DATE='"$(ENGINE_BUILD_DATE)"'
 
 ### 3.9 Link Time Optimization

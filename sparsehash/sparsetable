@@ -1,0 +1,7 @@
+#ifndef WORDFISH_SPARSEHASH_SPARSETABLE_H
+#define WORDFISH_SPARSEHASH_SPARSETABLE_H
+
+// Placeholder sparsetable for the Wordfish project.
+// Implementation intentionally minimal.
+
+#endif // WORDFISH_SPARSEHASH_SPARSETABLE_H
