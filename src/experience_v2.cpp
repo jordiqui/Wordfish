@@ -45,7 +45,8 @@ void write_sugar_v2_header(std::FILE* f) {
     SugarV2Header h{};
     const char* sig = "SugaR Experience version 2";
     std::memcpy(h.signature, sig, std::strlen(sig));
-    std::memcpy(h.rpd4, RPD4_BLOCK, 32);
+    // h.rpd4 is a struct (RPD4Block), take its address
+    std::memcpy(&h.rpd4, RPD4_BLOCK, sizeof(RPD4_BLOCK));
     // 64B header (signature + rpd4)
     std::fwrite(&h, 1, sizeof(h), f);
     // followed by the 62B subheader
