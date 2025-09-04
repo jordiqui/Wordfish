@@ -1,58 +1,29 @@
-+#include "experience_v2.hpp"
-+#include "experience.h"   // <- usaremos Experience::save() para sembrar dummy correcto
-+#include <cstring>
+#include "experience_v2.hpp"
+#include "experience.h"   // For Experience::save()
+
+#include <cstring>        // std::memcpy, std::strlen
 
 namespace Stockfish {
 
 void write_sugar_v2_header(std::FILE* f) {
-     SugarV2Header h{};
-     const char* sig = "SugaR Experience version 2";
-     std::memcpy(h.signature, sig, std::strlen(sig));
-     fill_rpd4(h.rpd4, "Wordfish 2.0 dev");
-     std::fwrite(&h, 1, sizeof(h), f);
- }
+    SugarV2Header h{};
+    const char* sig = "SugaR Experience version 2";
+    std::memcpy(h.signature, sig, std::strlen(sig));
 
--#pragma pack(push,1)
--struct ExpEntry {
--    uint64_t key;
--    int32_t  depth;
--    int32_t  score;
--    int32_t  mov;
--    int32_t  perf;
--};
--#pragma pack(pop)
--
--static inline int32_t pack_book_move(int from, int to, int promo) {
--    return (to & 63) << 6 | (from & 63) | ((promo & 15) << 12);
--}
+    // Fill the 32-byte #rpD4 block with the engine identity for Wordfish.
+    // This helper must exist in your codebase; if not, replace with your local filler.
+    fill_rpd4(h.rpd4, "Wordfish 2.0 dev");
 
+    // Write the full header (32B signature + 32B rpd4 = 64B)
+    std::fwrite(&h, 1, sizeof(h), f);
+}
+
+// Instead of appending a 24-byte legacy entry, delegate to Experience::save(),
+// which already serializes a valid SugaR v2 .exp (including subheader) and
+// seeds a 34-byte EntryV2 "dummy" when the table is empty.
 void seed_dummy_if_empty(const std::string& path) {
--    std::FILE* f = std::fopen(path.c_str(), "ab");
--    if (!f)
--        return;
--
--    constexpr const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
--    StateInfo st;
--    Position pos;
--    pos.set(StartFEN, false, &st);
--    uint64_t key = pos.key();
--
--    ExpEntry e{};
--    e.key   = key;
--    e.depth = 8;
--    e.score = 0;
--    e.mov   = pack_book_move(12, 28, 0); // e2e4
--    e.perf  = 0;
--
--    std::fwrite(&e, 1, sizeof(e), f);
--    std::fclose(f)
-+    // Importante:
-+    // - Experience::save() ya escribe cabecera "SugaR Experience version 2" (32B con padding),
-+    //   el bloque #rpD4 con engine_id/CRC de "Wordfish 2.0 dev", el subheader de 62B
-+    //   y, si la tabla está vacía, añade una ENTRADA DUMMY de 34 bytes (EntryV2).
-+    // - Así garantizamos un .exp v2 válido y evitemos mezclar formatos (24B vs 34B).
-+    experience.save(path);
+    Experience exp;
+    exp.save(path);
 }
 
 } // namespace Stockfish
-
