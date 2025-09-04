@@ -11,7 +11,7 @@ struct ExpHeaderV2 {
 
 struct ExpIndexRoot {
     // Bytes inmediatamente después de la cabecera.
-    // Campos deducidos por comparación con Revolution.
+    // Campos deducidos por comparación con Wordfish.
     // No uses tipos dependientes de plataforma (nada de time_t).
     uint32_t magic;        // 0x44707223 (LE)  // 'Dp r#' en hex al revés
     uint64_t salt_or_uuid; // semilla aleatoria/uuid (puede ser rand64)
@@ -40,4 +40,4 @@ static_assert(sizeof(ExpHeaderV2) == 32, "Header must be 32 bytes");
 static_assert(sizeof(ExpIndexRoot) == 32, "Index root must be 32 bytes");
 static_assert(sizeof(ExpDummyEntry) == 17, "Dummy entry must be 17 bytes");
 
-// Nota sobre record_size y key_size: En Revolution el bloque que sigue a la cabecera contiene estas parejas como 0x0011 y 0x0002 (vistas en LE como bytes 11 00 y 02 00). Si tu layout final difiere, actualiza ambos para reflejar el tamaño real de tus registros y de la clave.
+// Nota sobre record_size y key_size: En Wordfish el bloque que sigue a la cabecera contiene estas parejas como 0x0011 y 0x0002 (vistas en LE como bytes 11 00 y 02 00). Si tu layout final difiere, actualiza ambos para reflejar el tamaño real de tus registros y de la clave.

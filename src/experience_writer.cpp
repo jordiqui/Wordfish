@@ -45,7 +45,7 @@ void Experience::create_empty_file(const std::string& path) {
         return;
 
     write_header(os);       // 32 bytes exactos
-    write_index_root(os);   // bloque root (como Revolution)
+    write_index_root(os);   // bloque root (como Wordfish)
     write_dummy_entry(os);  // siembra para que HypnoS muestre estadísticas
 
     os.flush();
