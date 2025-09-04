@@ -62,7 +62,8 @@ Engine::Engine(std::optional<std::string> path) :
       numaContext,
       NN::Networks(
         NN::NetworkBig({EvalFileDefaultNameBig, "None", ""}, NN::EmbeddedNNUEType::BIG),
-        NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL))) {
+        NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL),
+        NN::NetworkFalcon({EvalFileDefaultNameFalcon, "None", ""}, NN::EmbeddedNNUEType::BIG))) {
     pos.set(StartFEN, false, &states->back());
 
 
@@ -108,6 +109,8 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Move Overhead", Option(10, 0, 5000));
 
     options.add("nodestime", Option(0, 0, 10000));
+
+    options.add("Slow Mover", Option(100, 10, 1000));
 
     options.add("UCI_Chess960", Option(false));
 
@@ -169,7 +172,7 @@ Engine::Engine(std::optional<std::string> path) :
                     return std::nullopt;
                 }));
 
-    options.add("Experience File", Option("revolution.exp", [this](const Option& o) {
+    options.add("Experience File", Option("wordfish.exp", [this](const Option& o) {
                     if ((bool) options["Experience Enabled"])
                         experience.load(o);
                     return std::nullopt;
@@ -200,6 +203,12 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "EvalFileSmall", Option(EvalFileDefaultNameSmall, [this](const Option& o) {
           load_small_network(o);
+          return std::nullopt;
+      }));
+
+    options.add(  //
+      "EvalFileFalcon", Option(EvalFileDefaultNameFalcon, [this](const Option& o) {
+          load_falcon_network(o);
           return std::nullopt;
       }));
 
@@ -324,12 +333,14 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
+    networks->falcon.verify(options["EvalFileFalcon"], onVerifyNetworks);
 }
 
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
+        networks_.falcon.load(binaryDirectory, options["EvalFileFalcon"]);
     });
     threads.clear();
     threads.ensure_network_replicated();
@@ -345,6 +356,13 @@ void Engine::load_big_network(const std::string& file) {
 void Engine::load_small_network(const std::string& file) {
     networks.modify_and_replicate(
       [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
+    threads.clear();
+    threads.ensure_network_replicated();
+}
+
+void Engine::load_falcon_network(const std::string& file) {
+    networks.modify_and_replicate(
+      [this, &file](NN::Networks& networks_) { networks_.falcon.load(binaryDirectory, file); });
     threads.clear();
     threads.ensure_network_replicated();
 }

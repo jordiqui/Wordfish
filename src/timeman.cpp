@@ -108,6 +108,8 @@ void TimeManagement::init(Search::LimitsType& limits,
         if (originalTimeAdjust < 0)
             originalTimeAdjust = 0.3128 * std::log10(timeLeft) - 0.4354;
 
+        originalTimeAdjust *= double(options["Slow Mover"]) / 100.0;
+
         // Calculate time constants based on current time left.
         double logTimeInSec = std::log10(scaledTime / 1000.0);
         double optConstant  = std::min(0.0032116 + 0.000321123 * logTimeInSec, 0.00508017);
