@@ -57,13 +57,6 @@ const unsigned char* const gEmbeddedNNUESmallEnd     = &gEmbeddedNNUESmallData[1
 const unsigned int         gEmbeddedNNUESmallSize    = 1;
 #endif
 
-// The optional Falcon network is not embedded by default to keep builds
-// lightweight. Use empty placeholders so the engine can compile without a
-// Falcon net; if a compatible file is provided at runtime it will be loaded.
-const unsigned char        gEmbeddedNNUEFalconData[1] = {0x0};
-const unsigned char* const gEmbeddedNNUEFalconEnd     = &gEmbeddedNNUEFalconData[1];
-const unsigned int         gEmbeddedNNUEFalconSize    = 1;
-
 namespace {
 
 struct EmbeddedNNUE {
@@ -83,9 +76,8 @@ using namespace Stockfish::Eval::NNUE;
 EmbeddedNNUE get_embedded(EmbeddedNNUEType type) {
     if (type == EmbeddedNNUEType::BIG)
         return EmbeddedNNUE(gEmbeddedNNUEBigData, gEmbeddedNNUEBigEnd, gEmbeddedNNUEBigSize);
-    if (type == EmbeddedNNUEType::SMALL)
+    else
         return EmbeddedNNUE(gEmbeddedNNUESmallData, gEmbeddedNNUESmallEnd, gEmbeddedNNUESmallSize);
-    return EmbeddedNNUE(gEmbeddedNNUEFalconData, gEmbeddedNNUEFalconEnd, gEmbeddedNNUEFalconSize);
 }
 
 }
