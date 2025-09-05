@@ -1,7 +1,7 @@
-Revolution Chess Engine
+Wordfish Chess Engine
 Copyright (c) the Stockfish developers (see AUTHORS file)
 
-Revolution is a UCI chess engine derived from Stockfish. This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.
+Wordfish is a UCI chess engine derived from Stockfish. This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.
 
 
 Copyright (c) 2025 Jorge Ruiz Centelles
@@ -11,7 +11,7 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-Revolution incorporates code from the following GPLv3 project:
+Wordfish incorporates code from the following GPLv3 project:
 
 - Stockfish <https://github.com/official-stockfish/Stockfish>
 

@@ -1,14 +1,16 @@
-# Revolution Chess Engine
+# Wordfish Chess Engine
 
-**Version 1.0**
+**Version 2.0**
+
+This build identifies as `wordfish 2.0 dev-060925 avx`.
 
 <div align="center">
-  <img src="[https://ijccrl.com/wp-content/uploads/2025/08/revolution.png]" 
-  <h3>Revolution</h3>
+  <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
+  <h3>Wordfish</h3>
   
   A free and open-source UCI chess engine combining classical algorithms with neural network innovations.
   <br>
-  <strong><a href="#">Explore Revolution Documentation »</a>
+  <strong><a href="#">Explore Wordfish Documentation »</a>
 
   <em>Author: This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.</em>
   
@@ -16,13 +18,13 @@
 
 ## Overview
 
-**Revolution** is a free, open-source UCI chess engine derived from **Stockfish**. Jorge Ruiz Centelles, with credit to ChatGPT, modifies and extends the code to explore new concepts. The engine implements cutting-edge search algorithms combined with neural network evaluation. Derived from fundamental chess programming principles, Revolution analyzes positions through parallelized alpha-beta search enhanced with null-move pruning and late move reductions.
+**Wordfish** is a free, open-source UCI chess engine derived from **Stockfish**. Jorge Ruiz Centelles, with credit to ChatGPT, modifies and extends the code to explore new concepts. The engine implements cutting-edge search algorithms combined with neural network evaluation. Derived from fundamental chess programming principles, Wordfish analyzes positions through parallelized alpha-beta search enhanced with null-move pruning and late move reductions.
 
-As a UCI-compliant engine, Revolution operates through **standard chess interfaces** without an integrated graphical interface. Users must employ compatible chess GUIs (Arena, Scid vs PC, etc.) for board visualization and move input. Consult your GUI documentation for implementation details.
+As a UCI-compliant engine, Wordfish operates through **standard chess interfaces** without an integrated graphical interface. Users must employ compatible chess GUIs (Arena, Scid vs PC, etc.) for board visualization and move input. Consult your GUI documentation for implementation details.
 
 ## Technical Architecture
 
-Revolution's architecture features:
+Wordfish's architecture features:
 
 - Hybrid evaluation system combining classical heuristics with NNUE networks
 - SMP parallelization with YBWC (Young Brothers Wait Concept)
@@ -38,7 +40,7 @@ The distribution includes:
 - `COPYING.txt` ([GNU GPLv3 license][gpl-link])
 - `AUTHORS` (contributor acknowledgments)
 - `src/` (source code with platform-specific Makefiles)
-- Neural network weights (`revolution.nnue`)
+- Neural network weights (`wordfish.nnue`)
 
 ## Contributing
 
@@ -51,13 +53,13 @@ Contributions must adhere to:
 
 ### Testing Infrastructure
 Improvements require extensive testing:
-- Install the [Revolution Test Worker][worker-link]
-- Participate in active tests on [Revolution Test Suite][testsuite-link]
+- Install the [Wordfish Test Worker][worker-link]
+- Participate in active tests on [Wordfish Test Suite][testsuite-link]
 - Verify ELO gains through SPRT validation
 
 ### Community
 Technical discussions occur primarily through:
-- [Revolution Discord Server][discord-link]
+- [Wordfish Discord Server][discord-link]
 - [GitHub Discussions][discussions-link]
 - [Chess Programming Wiki][chesswiki-link]
 
@@ -78,7 +80,7 @@ Full compilation guides available in [documentation][doc-link].
 
 ## Syzygy Tablebases
 
-Revolution can probe [Syzygy](https://github.com/syzygy1) endgame tablebases when a
+Wordfish can probe [Syzygy](https://github.com/syzygy1) endgame tablebases when a
 directory is supplied via the `SyzygyPath` UCI option. The engine also exposes a
 `SyzygyPremap` boolean option. When set to `true`, `Tablebases::init` pre-maps all
 available WDL and DTZ tables during initialization, reducing probe latency at the
@@ -86,7 +88,7 @@ expense of additional startup time and memory usage.
 
 ## Experience Learning
 
-Revolution includes a simple text-based cache that stores root moves and evaluations from
+Wordfish includes a simple text-based cache that stores root moves and evaluations from
 previous games. Rather than forcing book moves, the cached information biases root move
 ordering during search. The following UCI options control this system:
 
@@ -119,7 +121,7 @@ setoption name Minimum Thinking Time value <milliseconds>
 
 ### Falcon Net
 
-Revolution can switch to an alternative neural network using the
+Wordfish can switch to an alternative neural network using the
 `FalconFile` option. To load the bundled `3.net` file, send:
 
 ```
@@ -128,12 +130,12 @@ setoption name FalconFile value 3.net
 
 ## License
 
-Revolution is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
+Wordfish is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
 It integrates source code from:
 
 - [Stockfish](https://github.com/official-stockfish/Stockfish)
 
-Because Stockfish is GPLv3, any distribution of Revolution must also comply with GPLv3.
+Because Stockfish is GPLv3, any distribution of Wordfish must also comply with GPLv3.
 For a summary of your obligations under GPLv3 see <https://www.gnu.org/licenses/quick-guide-gplv3.html>.
 When redistributing, you must:
 1. Include the original license text (`COPYING.txt`)
@@ -142,7 +144,7 @@ When redistributing, you must:
 
 ## Acknowledgements
 
-Revolution also benefits from:
+Wordfish also benefits from:
 - Neural networks trained on [Lichess open database][lichess-db]
 - Search techniques from [CCC testing community][ccc-link]
 - Positional analysis concepts from [CPW research][cpw-link]

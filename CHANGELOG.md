@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0 dev-060925]
+### Changed
+- Renamed engine to Wordfish 2.0 dev-060925 avx.
+
+
 ## [1.0.1] - 2025-09-01
 ### Added
 - UCI option `Minimum Thinking Time` to enforce a minimum search duration per move.
@@ -11,10 +16,10 @@
 ## [1.0.0-dev 2708225]
 ### Changed
 - Simplified LMR logic to streamline search and improve speed.
-- Updated default engine name to "revolution device v.1.0.0" with build identifier 2708225.
+- Updated default engine name to "wordfish device v.1.0.0" with build identifier 2708225.
 
 ## [1.0] - 2025-08-27
 ### Added
-- Initial public release of Revolution v1.0.
+- Initial public release of Wordfish v1.0.
 - Iterative deepening now starts at depth 2 for faster and deeper analysis.
 - Updated engine name and author information.

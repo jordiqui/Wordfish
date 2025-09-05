@@ -37,7 +37,7 @@
 
 #include "types.h"
 #ifndef ENGINE_NAME
-    #define ENGINE_NAME "revolution dev-1.0.1 050925 avx"
+    #define ENGINE_NAME "wordfish 2.0 dev-060925 avx"
 #endif
 #ifndef ENGINE_BUILD_DATE
     #define ENGINE_BUILD_DATE ""
@@ -118,7 +118,7 @@ class Logger {
 }  // namespace
 
 
-// Returns the full name of the current Revolution version.
+// Returns the full name of the current Wordfish version.
 std::string engine_version_info() { return std::string(ENGINE_NAME); }
 
 // Update author information

@@ -1,7 +1,7 @@
-#ifndef REVOLUTION_SPARSEHASH_DENSE_HASH_SET_H
-#define REVOLUTION_SPARSEHASH_DENSE_HASH_SET_H
+#ifndef WORDFISH_SPARSEHASH_DENSE_HASH_SET_H
+#define WORDFISH_SPARSEHASH_DENSE_HASH_SET_H
 
-// Placeholder dense_hash_set for the Revolution project.
+// Placeholder dense_hash_set for the Wordfish project.
 // Implementation intentionally minimal.
 
-#endif // REVOLUTION_SPARSEHASH_DENSE_HASH_SET_H
+#endif // WORDFISH_SPARSEHASH_DENSE_HASH_SET_H
