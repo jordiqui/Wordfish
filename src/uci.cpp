@@ -14,6 +14,8 @@
 
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  
+  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
 */
 
 #include "uci.h"
@@ -36,8 +38,16 @@
 #include "position.h"
 #include "score.h"
 #include "search.h"
+#include "experience.h"
 #include "types.h"
 #include "ucioption.h"
+
+#ifndef ENGINE_NAME
+    #define ENGINE_NAME "revolution dev-1.0.1 050925 avx"
+#endif
+#ifndef ENGINE_BUILD_DATE
+    #define ENGINE_BUILD_DATE ""
+#endif
 
 namespace Stockfish {
 
@@ -114,12 +124,19 @@ void UCIEngine::loop() {
 
         else if (token == "uci")
         {
-            // Force a stable, explicit UCI name so GUIs show "Wordfish 1.0.1 dev <date>"
-            sync_cout << "id name " << ENGINE_NAME << ' ' << ENGINE_BUILD_DATE << "\n"
-                << "id author Jorge Ruiz Centelles" << "\n"
-                << engine.get_options() << sync_endl;
+            // Force a stable, explicit UCI name so GUIs show "Revolution 1.0"
+            sync_cout_start();
+            std::cout << "id name " << ENGINE_NAME
+                      << "\n"
+                      << "id author Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
+                      << "\n"
+                      << engine.get_options() << std::endl;
+            sync_cout_end();
 
             sync_cout << "uciok" << sync_endl;
+
+            if ((bool) engine.get_options()["Experience Enabled"])
+                experience.load_async(engine.get_options()["Experience File"]);
         }
 
         else if (token == "setoption")
@@ -150,20 +167,21 @@ void UCIEngine::loop() {
             sync_cout << engine.visualize() << sync_endl;
         else if (token == "eval")
             engine.trace_eval();
+        else if (token == "showexp")
+            experience.show(engine.position(),
+                             (int) engine.get_options()["Experience Eval Weight"],
+                             (int) engine.get_options()["Experience Book Max Moves"]);
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
         {
-            std::pair<std::optional<std::string>, std::string> files[3];
+            std::pair<std::optional<std::string>, std::string> files[2];
 
             if (is >> std::skipws >> files[0].second)
                 files[0].first = files[0].second;
 
             if (is >> std::skipws >> files[1].second)
                 files[1].first = files[1].second;
-
-            if (is >> std::skipws >> files[2].second)
-                files[2].first = files[2].second;
 
             engine.save_network(files);
         }
@@ -439,7 +457,7 @@ void UCIEngine::benchmark(std::istream& args) {
     // clang-format off
 
     std::cerr << "==========================="
-              << "\nVersion                    :   << ENGINE_NAME << " << __DATE__ << " " << __TIME__
+              << "\nVersion                    :   << ENGINE_NAME"
               << compiler_info()
               << "Large pages                  : " << (has_large_pages() ? "yes" : "no")
               << "\nUser invocation            : " << BenchmarkCommand << " "

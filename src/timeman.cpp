@@ -60,6 +60,7 @@ void TimeManagement::init(Search::LimitsType& limits,
         return;
 
     TimePoint moveOverhead = TimePoint(options["Move Overhead"]);
+    double    slowMover    = options["Slow Mover"] / 100.0;
 
     // optScale is a percentage of available time to use for the current move.
     // maxScale is a multiplier applied to optimumTime.
@@ -128,6 +129,8 @@ void TimeManagement::init(Search::LimitsType& limits,
         maxScale = 1.3 + 0.11 * (centiMTG / 100.0);
     }
 
+    optScale *= slowMover;
+
     // Limit the maximum possible time for this move
     optimumTime = TimePoint(optScale * timeLeft);
     maximumTime =
@@ -135,6 +138,10 @@ void TimeManagement::init(Search::LimitsType& limits,
 
     if (options["Ponder"])
         optimumTime += optimumTime / 4;
+
+    TimePoint minimumThinkingTime = TimePoint(options["Minimum Thinking Time"]);
+    optimumTime = std::max(optimumTime, minimumThinkingTime);
+    maximumTime = std::max(maximumTime, minimumThinkingTime);
 }
 
 }  // namespace Stockfish

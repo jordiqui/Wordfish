@@ -42,51 +42,95 @@ namespace Stockfish {
 // Compile with e.g. -DUSE_FAST_EVAL_CACHE to activate it.
 namespace {
 #ifdef USE_FAST_EVAL_CACHE
-    // Full-featured cache (direct-mapped, 8192 entries by default).
-    struct EvalCacheEntry {
-        uint64_t key = 0;            // position key
-        int32_t  last_optimism = 0;  // optimism for which `v` was computed
-        Value    v = 0;              // final cached evaluation (for last_optimism)
+// Full-featured cache (direct-mapped, 8192 entries by default).
+struct EvalCacheEntry {
+    uint64_t key           = 0;  // position key
+    int32_t  last_optimism = 0;  // optimism for which `v` was computed
+    Value    v             = 0;  // final cached evaluation (for last_optimism)
 
-        // cached NNUE outputs for small network
-        Value    psqt_small = 0;
-        Value    positional_small = 0;
-        uint8_t  have_small = 0;
+    // cached NNUE outputs for small network
+    Value   psqt_small       = 0;
+    Value   positional_small = 0;
+    uint8_t have_small       = 0;
 
-        // cached NNUE outputs for big network
-        Value    psqt_big = 0;
-        Value    positional_big = 0;
-        uint8_t  have_big = 0;
-    };
+    // cached NNUE outputs for big network
+    Value   psqt_big       = 0;
+    Value   positional_big = 0;
+    uint8_t have_big       = 0;
+};
 
-    constexpr size_t EVAL_CACHE_BITS = 13; // 8192 entries
-    constexpr size_t EVAL_CACHE_SIZE = (1u << EVAL_CACHE_BITS);
-    constexpr uint64_t EVAL_CACHE_MASK = EVAL_CACHE_SIZE - 1;
+constexpr size_t   EVAL_CACHE_BITS = 13;  // 8192 entries
+constexpr size_t   EVAL_CACHE_SIZE = (1u << EVAL_CACHE_BITS);
+constexpr uint64_t EVAL_CACHE_MASK = EVAL_CACHE_SIZE - 1;
 
-    // thread_local so each search thread has independent cache (no locks)
-    thread_local EvalCacheEntry eval_cache[EVAL_CACHE_SIZE];
+// thread_local so each search thread has independent cache (no locks)
+thread_local EvalCacheEntry eval_cache[EVAL_CACHE_SIZE];
 #else
-    // Disabled or minimal cache: single-entry per-thread stub.
-    // This keeps the code paths simple and avoids conditional compilation throughout.
-    struct EvalCacheEntry {
-        uint64_t key = 0;
-        int32_t  last_optimism = 0;
-        Value    v = 0;
-        Value    psqt_small = 0;
-        Value    positional_small = 0;
-        uint8_t  have_small = 0;
-        Value    psqt_big = 0;
-        Value    positional_big = 0;
-        uint8_t  have_big = 0;
-    };
+// Disabled or minimal cache: single-entry per-thread stub.
+// This keeps the code paths simple and avoids conditional compilation throughout.
+struct EvalCacheEntry {
+    uint64_t key              = 0;
+    int32_t  last_optimism    = 0;
+    Value    v                = 0;
+    Value    psqt_small       = 0;
+    Value    positional_small = 0;
+    uint8_t  have_small       = 0;
+    Value    psqt_big         = 0;
+    Value    positional_big   = 0;
+    uint8_t  have_big         = 0;
+};
 
-    [[maybe_unused]] constexpr size_t EVAL_CACHE_BITS = 0;
-    constexpr size_t EVAL_CACHE_SIZE = 1;
-    constexpr uint64_t EVAL_CACHE_MASK = 0;
+[[maybe_unused]] constexpr size_t EVAL_CACHE_BITS = 0;
+constexpr size_t                  EVAL_CACHE_SIZE = 1;
+constexpr uint64_t                EVAL_CACHE_MASK = 0;
 
-    thread_local EvalCacheEntry eval_cache[EVAL_CACHE_SIZE];
+thread_local EvalCacheEntry eval_cache[EVAL_CACHE_SIZE];
 #endif
 }
+
+namespace {
+
+// Basic positional cues used to slightly bias evaluation depending on the
+// phase of the game. The intent is to provide a light-weight and easily
+// switchable mechanism to alter style without replicating any particular
+// engine's approach.
+struct StyleIndicators {
+    int pressure;  // attackers on the opposing king
+    int shield;    // defenders near our own king
+    int center;    // friendly pieces controlling the central squares
+};
+
+// Collect the above indicators from the current position.
+StyleIndicators gather_indicators(const Position& pos) {
+    StyleIndicators ind{};
+    Square          enemyKing = pos.square<KING>(~pos.side_to_move());
+    Square          ownKing   = pos.square<KING>(pos.side_to_move());
+
+    ind.pressure      = popcount(pos.attackers_to(enemyKing));
+    ind.shield        = popcount(pos.attackers_to(ownKing));
+    Bitboard centerBB = square_bb(SQ_D4) | square_bb(SQ_E4) | square_bb(SQ_D5) | square_bb(SQ_E5);
+    ind.center        = popcount(pos.pieces(pos.side_to_move()) & centerBB);
+    return ind;
+}
+
+// Compute an adjustment based on the indicators and the current evaluation.
+Value adaptive_style_bonus(const Position& pos, Value current) {
+    StyleIndicators ind = gather_indicators(pos);
+
+    int atkW = current > 50 ? 3 : 1;
+    int defW = current < -50 ? 3 : 1;
+    int balW = 2;
+
+    int bonus = atkW * ind.pressure + balW * ind.center - defW * ind.shield;
+    return Value(bonus);
+}
+
+}  // namespace
+
+namespace Eval {
+static bool adaptive_style = false;
+void        set_adaptive_style(bool enabled) { adaptive_style = enabled; }
+}  // namespace Eval
 
 // Returns a static, purely materialistic evaluation of the position from
 // the point of view of the side to move. It can be divided by PawnValue to get
@@ -109,45 +153,57 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     assert(!pos.checkers());
 
-    const uint64_t posKey = pos.key();
-    const uint64_t idx = posKey & EVAL_CACHE_MASK; // index by position key only
-    EvalCacheEntry &e = eval_cache[idx];
+    const uint64_t  posKey = pos.key();
+    const uint64_t  idx    = posKey & EVAL_CACHE_MASK;  // index by position key only
+    EvalCacheEntry& e      = eval_cache[idx];
 
     // If the stored entry refers to a different position, invalidate its NNUE flags.
-    if (e.key != posKey) {
-        e.key = posKey;
-        e.have_small = 0;
-        e.have_big = 0;
+    if (e.key != posKey)
+    {
+        e.key           = posKey;
+        e.have_small    = 0;
+        e.have_big      = 0;
         e.last_optimism = 0;
         // `v` can remain stale until we compute and overwrite it.
-    } else {
+    }
+    else
+    {
         // If exact same optimism already computed for this position, return final cached v.
         if (e.last_optimism == optimism)
             return e.v;
     }
 
-    bool smallNet           = use_smallnet(pos);
+    bool  smallNet = use_smallnet(pos);
     Value psqt = 0, positional = 0;
 
-    if (smallNet) {
-        if (e.have_small) {
-            psqt = e.psqt_small;
+    if (smallNet)
+    {
+        if (e.have_small)
+        {
+            psqt       = e.psqt_small;
             positional = e.positional_small;
-        } else {
-            std::tie(psqt, positional) = networks.small.evaluate(pos, accumulators, &caches.small);
-            e.psqt_small = psqt;
-            e.positional_small = positional;
-            e.have_small = 1;
         }
-    } else {
-        if (e.have_big) {
-            psqt = e.psqt_big;
+        else
+        {
+            std::tie(psqt, positional) = networks.small.evaluate(pos, accumulators, &caches.small);
+            e.psqt_small               = psqt;
+            e.positional_small         = positional;
+            e.have_small               = 1;
+        }
+    }
+    else
+    {
+        if (e.have_big)
+        {
+            psqt       = e.psqt_big;
             positional = e.positional_big;
-        } else {
+        }
+        else
+        {
             std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
-            e.psqt_big = psqt;
-            e.positional_big = positional;
-            e.have_big = 1;
+            e.psqt_big                 = psqt;
+            e.positional_big           = positional;
+            e.have_big                 = 1;
         }
     }
 
@@ -157,16 +213,19 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     if (smallNet && (std::abs(nnue) < 236))
     {
         // Try to use cached big-network outputs if present, otherwise compute and store.
-        if (e.have_big) {
-            psqt = e.psqt_big;
+        if (e.have_big)
+        {
+            psqt       = e.psqt_big;
             positional = e.positional_big;
-        } else {
-            std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
-            e.psqt_big = psqt;
-            e.positional_big = positional;
-            e.have_big = 1;
         }
-        nnue = (125 * psqt + 131 * positional) / 128;
+        else
+        {
+            std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
+            e.psqt_big                 = psqt;
+            e.positional_big           = positional;
+            e.have_big                 = 1;
+        }
+        nnue     = (125 * psqt + 131 * positional) / 128;
         smallNet = false;
     }
 
@@ -177,10 +236,10 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     if (nnue != 0)
         nnue -= nnue * nnueComplexity / 18000;
 
-    const int material = 535 * pos.count<PAWN>() + pos.non_pawn_material();
+    const int material       = 535 * pos.count<PAWN>() + pos.non_pawn_material();
     const int numerator_nnue = nnue * (77777 + material);
     const int numerator_opt  = optimism * (7777 + material);
-    int v = (numerator_nnue + numerator_opt) / 77777;
+    int       v              = (numerator_nnue + numerator_opt) / 77777;
 
     // Damp down the evaluation linearly when shuffling
     v -= v * pos.rule50_count() / 212;
@@ -188,9 +247,18 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 
+    // Optional style-based tweak which slightly biases the score depending on
+    // basic positional indicators. This does not aim to implement any specific
+    // style but merely demonstrates how evaluation terms can be combined.
+    if (adaptive_style)
+    {
+        v += adaptive_style_bonus(pos, Value(v));
+        v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
+    }
+
     // Store result and the optimism used for the final `v`.
     e.last_optimism = optimism;
-    e.v = v;
+    e.v             = v;
 
     return v;
 }
@@ -214,28 +282,32 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
     // Try to reuse cached big-network outputs if present to avoid recomputation.
-    const uint64_t posKey = pos.key();
-    const uint64_t idx = posKey & EVAL_CACHE_MASK;
-    EvalCacheEntry &e = eval_cache[idx];
-    Value psqt = 0, positional = 0;
-    if (e.key == posKey && e.have_big) {
-        psqt = e.psqt_big;
+    const uint64_t  posKey = pos.key();
+    const uint64_t  idx    = posKey & EVAL_CACHE_MASK;
+    EvalCacheEntry& e      = eval_cache[idx];
+    Value           psqt = 0, positional = 0;
+    if (e.key == posKey && e.have_big)
+    {
+        psqt       = e.psqt_big;
         positional = e.positional_big;
-    } else {
+    }
+    else
+    {
         std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches->big);
         // store in cache (overwrite entry if different key)
-        if (e.key != posKey) {
-            e.key = posKey;
-            e.have_small = 0;
-            e.have_big = 0;
+        if (e.key != posKey)
+        {
+            e.key           = posKey;
+            e.have_small    = 0;
+            e.have_big      = 0;
             e.last_optimism = 0;
         }
-        e.psqt_big = psqt;
+        e.psqt_big       = psqt;
         e.positional_big = positional;
-        e.have_big = 1;
+        e.have_big       = 1;
     }
-    Value v                 = psqt + positional;
-    v                       = pos.side_to_move() == WHITE ? v : -v;
+    Value v = psqt + positional;
+    v       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
 
     v = evaluate(networks, pos, accumulators, *caches, VALUE_ZERO);

@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-EXE = wordfish.exe
+        EXE = revolution_dev_010925_v1.0.1.exe
 else
-EXE = wordfish
+        EXE = revolution_dev_010925_v1.0.1
 endif
 
 ### Installation dir definitions
@@ -95,6 +95,7 @@ VPATH = syzygy:nnue:nnue/features
 # sse2 = yes/no       --- -msse2             --- Use Intel Streaming SIMD Extensions 2
 # ssse3 = yes/no      --- -mssse3            --- Use Intel Supplemental Streaming SIMD Extensions 3
 # sse41 = yes/no      --- -msse4.1           --- Use Intel Streaming SIMD Extensions 4.1
+# avx = yes/no        --- -mavx              --- Use Intel Advanced Vector Extensions
 # avx2 = yes/no       --- -mavx2             --- Use Intel Advanced Vector Extensions 2
 # avxvnni = yes/no    --- -mavxvnni          --- Use Intel Vector Neural Network Instructions AVX
 # avx512 = yes/no     --- -mavx512bw         --- Use Intel Advanced Vector Extensions 512
@@ -130,7 +131,7 @@ endif
 # the user can override with `make ARCH=x86-64-avx512icl SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
                  x86-64-avx512icl x86-64-vnni512 x86-64-vnni256 x86-64-avx512 x86-64-avxvnni \
-                 x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
+                 x86-64-bmi2 x86-64-avx2 x86-64-avx x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-64-altivec ppc-64-vsx ppc-32 e2k \
                  armv7 armv7-neon armv8 armv8-dotprod apple-silicon general-64 general-32 riscv64 \
                  loongarch64 loongarch64-lsx loongarch64-lasx))
@@ -151,6 +152,7 @@ mmx = no
 sse2 = no
 ssse3 = no
 sse41 = no
+avx = no
 avx2 = no
 avxvnni = no
 avx512 = no
@@ -229,13 +231,22 @@ ifeq ($(findstring -modern,$(ARCH)),-modern)
 	sse41 = yes
 endif
 
+ifeq ($(ARCH),x86-64-avx)
+        popcnt = yes
+        sse = yes
+        sse2 = yes
+        ssse3 = yes
+        sse41 = yes
+        avx = yes
+endif
+
 ifeq ($(findstring -avx2,$(ARCH)),-avx2)
-	popcnt = yes
-	sse = yes
-	sse2 = yes
-	ssse3 = yes
-	sse41 = yes
-	avx2 = yes
+        popcnt = yes
+        sse = yes
+        sse2 = yes
+        ssse3 = yes
+        sse41 = yes
+        avx2 = yes
 endif
 
 ifeq ($(findstring -avxvnni,$(ARCH)),-avxvnni)
@@ -440,7 +451,7 @@ endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
-LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
+LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) -lz
 
 ifeq ($(COMP),)
 	COMP=gcc
@@ -704,11 +715,17 @@ ifeq ($(popcnt),yes)
 endif
 
 ### 3.6 SIMD architectures
+ifeq ($(avx),yes)
+        ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
+                CXXFLAGS += -mavx
+        endif
+endif
+
 ifeq ($(avx2),yes)
-	CXXFLAGS += -DUSE_AVX2
-	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mavx2 -mbmi
-	endif
+        CXXFLAGS += -DUSE_AVX2
+        ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
+                CXXFLAGS += -mavx2 -mbmi
+        endif
 endif
 
 ifeq ($(avxvnni),yes)
@@ -842,12 +859,12 @@ endif
 ### 3.8.4 Engine identity (UCI id name / build date)
 # UCI "id name" string shown in GUIs.
 # Defaults:
-#   - ENGINE_NAME: "Wordfish 1.0.1 dev"
-#   - ENGINE_BUILD_DATE: system date in yymmdd format
+#   - ENGINE_NAME: "revolution dev-1.0.1 050925 avx"
+#   - ENGINE_BUILD_DATE: optional build identifier
 # You can override on the command line:
-#   make ENGINE_NAME="Wordfish 1.0.1 beta" ENGINE_BUILD_DATE=251001
-ENGINE_NAME        ?= Wordfish 1.0.1 dev
-ENGINE_BUILD_DATE  ?= $(shell date +%y%m%d)
+#   make ENGINE_NAME="revolution dev-1.0.1 050925 avx" ENGINE_BUILD_DATE=20250901
+ENGINE_NAME        ?= revolution dev-1.0.1 050925 avx
+ENGINE_BUILD_DATE  ?=
 CXXFLAGS += -DENGINE_NAME='"$(ENGINE_NAME)"' -DENGINE_BUILD_DATE='"$(ENGINE_BUILD_DATE)"'
 
 ### 3.9 Link Time Optimization
@@ -920,9 +937,10 @@ help:
 	echo "x86-64-vnni256          > x86 64-bit with vnni 512bit support, limit operands to 256bit wide" && \
 	echo "x86-64-avx512           > x86 64-bit with avx512 support" && \
 	echo "x86-64-avxvnni          > x86 64-bit with vnni 256bit support" && \
-	echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
-	echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
-	echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
+        echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
+        echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
+        echo "x86-64-avx              > x86 64-bit with avx support" && \
+        echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
 	echo "x86-64-modern           > deprecated, currently x86-64-sse41-popcnt" && \
 	echo "x86-64-ssse3            > x86 64-bit with ssse3 support" && \
 	echo "x86-64-sse3-popcnt      > x86 64-bit with sse3 compile and popcnt support" && \
@@ -955,11 +973,12 @@ help:
 	echo "icx                     > Intel oneAPI DPC++/C++ Compiler" && \
 	echo "ndk                     > Google NDK to cross-compile for Android" && \
 	echo "" && \
-	echo "Simple examples. If you don't know what to do, you likely want to run one of: " && \
-	echo "" && \
-	echo "make -j profile-build ARCH=x86-64-avx2    # typically a fast compile for common systems " && \
-	echo "make -j profile-build ARCH=x86-64-sse41-popcnt  # A more portable compile for 64-bit systems " && \
-	echo "make -j profile-build ARCH=x86-64         # A portable compile for 64-bit systems " && \
+        echo "Simple examples. If you don't know what to do, you likely want to run one of: " && \
+        echo "" && \
+        echo "make -j profile-build ARCH=x86-64-avx2    # typically a fast compile for common systems " && \
+        echo "make -j profile-build ARCH=x86-64-avx     # For systems with AVX but not AVX2" && \
+        echo "make -j profile-build ARCH=x86-64-sse41-popcnt  # A more portable compile for 64-bit systems " && \
+        echo "make -j profile-build ARCH=x86-64         # A portable compile for 64-bit systems " && \
 	echo "" && \
 	echo "Advanced examples, for experienced users: " && \
 	echo "" && \
@@ -1056,12 +1075,13 @@ config-sanity: net
 	echo "pext: '$(pext)'" && \
 	echo "sse: '$(sse)'" && \
 	echo "mmx: '$(mmx)'" && \
-	echo "sse2: '$(sse2)'" && \
-	echo "ssse3: '$(ssse3)'" && \
-	echo "sse41: '$(sse41)'" && \
-	echo "avx2: '$(avx2)'" && \
-	echo "avxvnni: '$(avxvnni)'" && \
-	echo "avx512: '$(avx512)'" && \
+        echo "sse2: '$(sse2)'" && \
+        echo "ssse3: '$(ssse3)'" && \
+        echo "sse41: '$(sse41)'" && \
+        echo "avx: '$(avx)'" && \
+        echo "avx2: '$(avx2)'" && \
+        echo "avxvnni: '$(avxvnni)'" && \
+        echo "avx512: '$(avx512)'" && \
 	echo "vnni256: '$(vnni256)'" && \
 	echo "vnni512: '$(vnni512)'" && \
 	echo "avx512icl: '$(avx512icl)'" && \
@@ -1095,10 +1115,11 @@ config-sanity: net
 	(test "$(sse)" = "yes" || test "$(sse)" = "no") && \
 	(test "$(mmx)" = "yes" || test "$(mmx)" = "no") && \
 	(test "$(sse2)" = "yes" || test "$(sse2)" = "no") && \
-	(test "$(ssse3)" = "yes" || test "$(ssse3)" = "no") && \
-	(test "$(sse41)" = "yes" || test "$(sse41)" = "no") && \
-	(test "$(avx2)" = "yes" || test "$(avx2)" = "no") && \
-	(test "$(avx512)" = "yes" || test "$(avx512)" = "no") && \
+        (test "$(ssse3)" = "yes" || test "$(ssse3)" = "no") && \
+        (test "$(sse41)" = "yes" || test "$(sse41)" = "no") && \
+        (test "$(avx)" = "yes" || test "$(avx)" = "no") && \
+        (test "$(avx2)" = "yes" || test "$(avx2)" = "no") && \
+        (test "$(avx512)" = "yes" || test "$(avx512)" = "no") && \
 	(test "$(vnni256)" = "yes" || test "$(vnni256)" = "no") && \
 	(test "$(vnni512)" = "yes" || test "$(vnni512)" = "no") && \
 	(test "$(avx512icl)" = "yes" || test "$(avx512icl)" = "no") && \

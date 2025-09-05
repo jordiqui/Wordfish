@@ -35,7 +35,6 @@ namespace Eval {
 // in the Makefile/Fishtest.
 #define EvalFileDefaultNameBig "nn-1c0000000000.nnue"
 #define EvalFileDefaultNameSmall "nn-37f18f62d772.nnue"
-#define EvalFileDefaultNameFalcon "nn-51892d3e267f.nnue"
 
 namespace NNUE {
 struct Networks;
@@ -52,6 +51,9 @@ Value evaluate(const NNUE::Networks&          networks,
                Eval::NNUE::AccumulatorStack&  accumulators,
                Eval::NNUE::AccumulatorCaches& caches,
                int                            optimism);
+
+// Toggle for optional style-based evaluation adjustments.
+void set_adaptive_style(bool enabled);
 }  // namespace Eval
 
 }  // namespace Stockfish
