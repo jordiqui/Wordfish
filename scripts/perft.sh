@@ -12,7 +12,4 @@ if [ ! -x "$ENGINE" ]; then
   (cd "$ROOT_DIR/src" && make -j2 build ARCH=x86-64 >/dev/null)
 fi
 
-# tests/perft.sh expects a binary called 'stockfish'
-ln -sf "$ENGINE" "$TEST_DIR/stockfish"
-
-(cd "$TEST_DIR" && ./perft.sh)
+(cd "$TEST_DIR" && ./perft.sh "$ENGINE")
