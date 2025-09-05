@@ -21,7 +21,7 @@
 #include "ucioption.h"
 // --- Engine identity (fallbacks; Makefile can override) ---
 #ifndef ENGINE_NAME
-#define ENGINE_NAME "revolution dev-1.0.1 050925 avx"
+#define ENGINE_NAME "wordfish 2.0 dev-060925 avx"
 #endif
 #ifndef ENGINE_BUILD_DATE
 #define ENGINE_BUILD_DATE ""  // build identifier

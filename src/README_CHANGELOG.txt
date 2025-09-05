@@ -1,4 +1,4 @@
-Revolution 1.0 dev 250827
+Wordfish 2.0 dev 060925
 - Initial fork from Stockfish.
 - Updated engine name and build system.
 - Added experience book system with persistent `.exp` file (legacy `.bin` files are converted automatically) and new UCI options.

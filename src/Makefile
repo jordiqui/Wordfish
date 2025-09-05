@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-        EXE = revolution_dev_010925_v1.0.1.exe
+        EXE = wordfish_dev_060925_v2.0.exe
 else
-        EXE = revolution_dev_010925_v1.0.1
+        EXE = wordfish_dev_060925_v2.0
 endif
 
 ### Installation dir definitions
@@ -859,11 +859,11 @@ endif
 ### 3.8.4 Engine identity (UCI id name / build date)
 # UCI "id name" string shown in GUIs.
 # Defaults:
-#   - ENGINE_NAME: "revolution dev-1.0.1 050925 avx"
+#   - ENGINE_NAME: "wordfish 2.0 dev-060925 avx"
 #   - ENGINE_BUILD_DATE: optional build identifier
 # You can override on the command line:
-#   make ENGINE_NAME="revolution dev-1.0.1 050925 avx" ENGINE_BUILD_DATE=20250901
-ENGINE_NAME        ?= revolution dev-1.0.1 050925 avx
+#   make ENGINE_NAME="wordfish 2.0 dev-060925 avx" ENGINE_BUILD_DATE=20250901
+ENGINE_NAME        ?= wordfish 2.0 dev-060925 avx
 ENGINE_BUILD_DATE  ?=
 CXXFLAGS += -DENGINE_NAME='"$(ENGINE_NAME)"' -DENGINE_BUILD_DATE='"$(ENGINE_BUILD_DATE)"'
 

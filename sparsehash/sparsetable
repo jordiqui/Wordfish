@@ -1,7 +1,7 @@
-#ifndef REVOLUTION_SPARSEHASH_SPARSETABLE_H
-#define REVOLUTION_SPARSEHASH_SPARSETABLE_H
+#ifndef WORDFISH_SPARSEHASH_SPARSETABLE_H
+#define WORDFISH_SPARSEHASH_SPARSETABLE_H
 
-// Placeholder sparsetable for the Revolution project.
+// Placeholder sparsetable for the Wordfish project.
 // Implementation intentionally minimal.
 
-#endif // REVOLUTION_SPARSEHASH_SPARSETABLE_H
+#endif // WORDFISH_SPARSEHASH_SPARSETABLE_H
