@@ -307,7 +307,8 @@ void Search::Worker::iterative_deepening() {
     Value  bestValue     = -VALUE_INFINITE;
     Color  us            = rootPos.side_to_move();
     double timeReduction = 1, totBestMoveChanges = 0;
-    int    delta, iterIdx                        = 0;
+    int      delta, iterIdx                        = 0;
+    uint64_t previousBestMoveChanges               = 0;
 
     // Allocate stack with extra size to allow access from (ss - 7) to (ss + 2):
     // (ss - 7) is needed for update_continuation_histories(ss - 1) which accesses (ss - 6),
@@ -435,7 +436,9 @@ void Search::Worker::iterative_deepening() {
                 // otherwise exit the loop.
                 if (bestValue <= alpha)
                 {
-                    beta  = (3 * alpha + beta) / 4;
+                    beta =
+                      (alpha * 104 + beta * 4 + std::min(bestValue + delta, VALUE_INFINITE) * 9)
+                      / 117;
                     alpha = std::max(bestValue - delta, -VALUE_INFINITE);
 
                     failedHighCnt = 0;
@@ -444,6 +447,15 @@ void Search::Worker::iterative_deepening() {
                 }
                 else if (bestValue >= beta)
                 {
+                    if (bestMoveChanges > previousBestMoveChanges)
+                        alpha = (alpha * 126 + beta * 3
+                                 + std::max(bestValue - delta, -VALUE_INFINITE) * 2)
+                              / 131;
+                    else
+                        alpha = (alpha * 109 + beta * 4
+                                 + std::max(bestValue - delta, -VALUE_INFINITE) * 21)
+                              / 134;
+
                     beta = std::min(bestValue + delta, VALUE_INFINITE);
                     ++failedHighCnt;
                 }
@@ -510,6 +522,7 @@ void Search::Worker::iterative_deepening() {
             skill.pick_best(rootMoves, multiPV);
 
         // Use part of the gained time from a previous stable move for the current move
+        previousBestMoveChanges = bestMoveChanges;
         for (auto&& th : threads)
         {
             totBestMoveChanges += th->worker->bestMoveChanges;
