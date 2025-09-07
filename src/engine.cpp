@@ -195,6 +195,14 @@ Engine::Engine(std::optional<std::string> path) :
                     return std::nullopt;
                 }));
 
+    // MonteCarlo Tree Search section (experimental: thanks to original Stephan
+    // Nicolet work)
+    options.add("MCTS by Shashin", Option(false));
+    options.add("MCTSThreads", Option(0, 0, 512));
+    options.add("MCTS Multi Strategy", Option(20, 0, 100));
+    options.add("MCTS Multi MinVisits", Option(5, 0, 1000));
+    options.add("MCTS Explore", Option(false));
+
     // Optional experimental evaluation tweak that adapts weights based on
     // simple positional cues. Disabled by default so it does not alter
     // standard play unless explicitly requested by the user.

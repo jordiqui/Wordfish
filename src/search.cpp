@@ -235,6 +235,10 @@ void Search::Worker::start_searching() {
         }
         else
         {
+            if ((bool) options["MCTS by Shashin"]) {
+                // Placeholder: Monte Carlo Tree Search integration point.
+                // Current build continues with standard alpha-beta search.
+            }
             threads.start_searching();  // start non-main threads
             iterative_deepening();      // main thread start searching
         }

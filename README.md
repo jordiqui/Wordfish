@@ -106,6 +106,12 @@ ordering during search. The following UCI options control this system:
 
 The file is loaded at engine startup and updated after each game if `Experience Readonly` is disabled.
 
+## Monte Carlo Tree Search (Experimental)
+
+Wordfish exposes several options for experimenting with Monte Carlo Tree Search
+based on Shashin's position classification. For details see
+[docs/mcts.md](docs/mcts.md).
+
 ## UCI Options
 
 ### Minimum Thinking Time
