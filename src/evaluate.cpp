@@ -125,6 +125,44 @@ Value adaptive_style_bonus(const Position& pos, Value current) {
     return Value(bonus);
 }
 
+// Compute a bonus favouring dynamic piece activity and king pressure. The goal
+// is to reward mobility and coordinated attacks so that sacrificial play with
+// strong initiative is penalized less by the static evaluation.
+Value dynamic_activity_bonus(const Position& pos) {
+    auto activity_score = [&](Color side) {
+        Color    us        = side;
+        Color    them      = ~us;
+        Square   enemyKing = pos.square<KING>(them);
+        Bitboard kingRing  = attacks_bb<KING>(enemyKing) | square_bb(enemyKing);
+
+        int mobility = popcount(pos.attacks_by<KNIGHT>(us)) + popcount(pos.attacks_by<BISHOP>(us))
+                     + popcount(pos.attacks_by<ROOK>(us)) + popcount(pos.attacks_by<QUEEN>(us));
+
+        int ringAttacks = popcount(pos.attacks_by<KNIGHT>(us) & kingRing)
+                        + popcount(pos.attacks_by<BISHOP>(us) & kingRing)
+                        + popcount(pos.attacks_by<ROOK>(us) & kingRing)
+                        + popcount(pos.attacks_by<QUEEN>(us) & kingRing)
+                        + popcount(pos.attacks_by<PAWN>(us) & kingRing);
+
+        int directAttackers = popcount(pos.attackers_to(enemyKing) & pos.pieces(us));
+
+        int score = mobility + ringAttacks * 8 + directAttackers * 16;
+
+        int material = pos.non_pawn_material(us) - pos.non_pawn_material(them)
+                     + PawnValue * (pos.count<PAWN>(us) - pos.count<PAWN>(them));
+
+        if (material < 0)
+            score += (-material) * ringAttacks / 64;
+
+        return score;
+    };
+
+    int usScore   = activity_score(pos.side_to_move());
+    int themScore = activity_score(~pos.side_to_move());
+
+    return Value(usScore - themScore);
+}
+
 }  // namespace
 
 namespace Eval {
@@ -243,6 +281,9 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     // Damp down the evaluation linearly when shuffling
     v -= v * pos.rule50_count() / 212;
+
+    // Encourage dynamic play: reward mobility and attacks on the enemy king
+    v += dynamic_activity_bonus(pos);
 
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);

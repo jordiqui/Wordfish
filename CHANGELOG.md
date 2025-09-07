@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.1 avx 070925]
+### Changed
+- Updated engine id name to "Wordfish v. 2.0.1 avx 070925".
+
 ## [2.0 dev-060925]
 ### Changed
 - Renamed engine to Wordfish 2.0 dev-060925 avx.
