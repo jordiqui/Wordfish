@@ -1,8 +1,8 @@
 # Wordfish Chess Engine
 
-**Version 2.0**
+**Version 2.0.1**
 
-This build identifies as `wordfish 2.0 dev-060925 avx`.
+This build identifies as `Wordfish v. 2.0.1 avx 070925`.
 
 <div align="center">
   <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
