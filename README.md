@@ -1,8 +1,8 @@
 # Wordfish Chess Engine
 
-**Version 2.0.1**
+**Version 2.10**
 
-This build identifies as `Wordfish v. 2.0.1 avx 070925`.
+This build identifies as `Wordfish v.2.10 dev-090925 avx`.
 
 <div align="center">
   <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
@@ -31,6 +31,7 @@ Wordfish's architecture features:
 - Advanced pruning techniques (Reverse Futility Pruning, Late Move Pruning)
 - Efficient move ordering with history heuristics and killer moves
 - Aggressive king-safety heuristics extending search on exposed kings
+- Dynamic activity scoring to favor mobility and pressure near the enemy king
 - Optional root experience book storing previously played moves
 
 ## Files
