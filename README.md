@@ -2,7 +2,7 @@
 
 **Version 2.10**
 
-This build identifies as `Wordfish v.2.10 dev-090925 avx`.
+This build identifies as `Wordfish v2.10 dev-090925 avx`.
 
 <div align="center">
   <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 

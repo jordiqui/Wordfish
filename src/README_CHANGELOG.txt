@@ -1,4 +1,4 @@
-Wordfish v.2.10 dev-090925 avx
+Wordfish v2.10 dev-090925 avx
 - Initial fork from Stockfish.
 - Updated engine name and build system.
 - Added experience book system with persistent `.exp` file (legacy `.bin` files are converted automatically) and new UCI options.
