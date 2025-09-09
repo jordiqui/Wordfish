@@ -1,8 +1,8 @@
 # Changelog
 
-## [2.10 dev-090925 avx]
+## [2.0.1 avx 070925]
 ### Changed
-- Updated engine id name to "Wordfish v2.10 dev-090925 avx".
+- Updated engine id name to "Wordfish v. 2.0.1 avx 070925".
 - Strengthened king safety evaluation and extended search on exposed enemy kings.
 
 ## [2.0 dev-060925]
