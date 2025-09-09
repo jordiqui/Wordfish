@@ -1248,6 +1248,20 @@ moves_loop:  // When in check, search starts here
                 extension = -2;
         }
 
+        // Extend search when checking a poorly shielded king, even for
+        // sacrificial attempts. This favors aggressive lines that expose
+        // the opponent king.
+        if (!rootNode && givesCheck)
+        {
+            Square   kingSq   = pos.square<KING>(~us);
+            Bitboard kingRing = attacks_bb<KING>(kingSq);
+            int      cover    = popcount(pos.pieces(~us, PAWN) & kingRing);
+            bool     sacrifice = !pos.see_ge(move, 0);
+
+            if (cover <= 1 || (cover <= 2 && sacrifice))
+                extension = std::max<Depth>(extension, 1);
+        }
+
         // Step 16. Make the move
         do_move(pos, move, st, givesCheck, ss);
 

@@ -1,8 +1,8 @@
 # Wordfish Chess Engine
 
-**Version 2.0**
+**Version 2.10**
 
-This build identifies as `wordfish 2.0 dev-060925 avx`.
+This build identifies as `Wordfish v2.10 dev-090925 avx`.
 
 <div align="center">
   <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
@@ -30,6 +30,7 @@ Wordfish's architecture features:
 - SMP parallelization with YBWC (Young Brothers Wait Concept)
 - Advanced pruning techniques (Reverse Futility Pruning, Late Move Pruning)
 - Efficient move ordering with history heuristics and killer moves
+- Aggressive king-safety heuristics extending search on exposed kings
 - Optional root experience book storing previously played moves
 
 ## Files
