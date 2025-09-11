@@ -43,7 +43,7 @@
 #include "ucioption.h"
 
 #ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish v. 2.0.1 avx 070925"
+    #define ENGINE_NAME "Wordfish v. 2.30 110925"
 #endif
 #ifndef ENGINE_BUILD_DATE
     #define ENGINE_BUILD_DATE ""
@@ -126,11 +126,11 @@ void UCIEngine::loop() {
         {
             // Force a stable, explicit UCI name so GUIs show "Wordfish 1.0"
             sync_cout_start();
-            std::cout << "id name " << ENGINE_NAME
-                      << "\n"
-                      << "id author Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
-                      << "\n"
-                      << engine.get_options() << std::endl;
+            std::cout
+              << "id name " << ENGINE_NAME << "\n"
+              << "id author Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
+              << "\n"
+              << engine.get_options() << std::endl;
             sync_cout_end();
 
             sync_cout << "uciok" << sync_endl;
@@ -168,9 +168,8 @@ void UCIEngine::loop() {
         else if (token == "eval")
             engine.trace_eval();
         else if (token == "showexp")
-            experience.show(engine.position(),
-                             (int) engine.get_options()["Experience Eval Weight"],
-                             (int) engine.get_options()["Experience Book Max Moves"]);
+            experience.show(engine.position(), (int) engine.get_options()["Experience Eval Weight"],
+                            (int) engine.get_options()["Experience Book Max Moves"]);
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")

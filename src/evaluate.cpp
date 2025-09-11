@@ -152,7 +152,12 @@ Value dynamic_activity_bonus(const Position& pos) {
                      + PawnValue * (pos.count<PAWN>(us) - pos.count<PAWN>(them));
 
         if (material < 0)
-            score += (-material) * ringAttacks / 64;
+        {
+            // When behind in material, reward aggressive king attacks so
+            // promising sacrifices are evaluated more optimistically.
+            int sacr = -material;
+            score += sacr * (ringAttacks * 12 + directAttackers * 24) / 64;
+        }
 
         return score;
     };
