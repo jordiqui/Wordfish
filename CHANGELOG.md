@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.30 110925]
+### Changed
+- Updated engine id name to "Wordfish v. 2.30 110925".
+- Increased evaluation weight for successful sacrificial attacks.
+
 ## [2.0.1 avx 070925]
 ### Changed
 - Updated engine id name to "Wordfish v. 2.0.1 avx 070925".
