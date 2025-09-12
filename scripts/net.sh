@@ -82,6 +82,7 @@ fetch_network() {
   return 1
 }
 
-fetch_network EvalFileDefaultNameBig && \
-fetch_network EvalFileDefaultNameSmall && \
-fetch_network FalconFileDefaultName
+fetch_network EvalFileDefaultNameBig || exit 1
+fetch_network EvalFileDefaultNameSmall || exit 1
+fetch_network FalconFileDefaultName || \
+  echo "Falcon network (3.net) not found; continuing without it."
