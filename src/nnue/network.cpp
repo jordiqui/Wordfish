@@ -48,7 +48,13 @@
 #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUEBig, EvalFileDefaultNameBig);
 INCBIN(EmbeddedNNUESmall, EvalFileDefaultNameSmall);
+#  if __has_include(FalconFileDefaultName)
 INCBIN(EmbeddedNNUEFalcon, FalconFileDefaultName);
+#  else
+const unsigned char        gEmbeddedNNUEFalconData[1] = {0x0};
+const unsigned char* const gEmbeddedNNUEFalconEnd     = &gEmbeddedNNUEFalconData[1];
+const unsigned int         gEmbeddedNNUEFalconSize    = 1;
+#  endif
 #else
 const unsigned char        gEmbeddedNNUEBigData[1]   = {0x0};
 const unsigned char* const gEmbeddedNNUEBigEnd       = &gEmbeddedNNUEBigData[1];
