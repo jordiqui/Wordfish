@@ -35,6 +35,7 @@ namespace Eval {
 // in the Makefile/Fishtest.
 #define EvalFileDefaultNameBig "nn-1c0000000000.nnue"
 #define EvalFileDefaultNameSmall "nn-baff1ede1f90.nnue"
+#define FalconFileDefaultName "3.net"
 
 namespace NNUE {
 struct Networks;
