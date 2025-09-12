@@ -25,8 +25,8 @@
 #include "position.h"
 
 #ifndef ENGINE_NAME
-    // override at build time with:  -DENGINE_NAME="\"Wordfish v. 2.30 110925\""
-    #define ENGINE_NAME "Wordfish v. 2.30 110925"
+    // override at build time with:  -DENGINE_NAME="\"Wordfish v. 2.40 120925 avx\""
+    #define ENGINE_NAME "Wordfish v. 2.40 120925 avx"
 #endif
 
 using namespace Stockfish;

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.40 120925 avx]
+### Changed
+- Updated engine id name to "Wordfish v. 2.40 120925 avx".
+- Integrated third neural network `nn-baff1ede1f90.nnue`.
+
 ## [2.30 110925]
 ### Changed
 - Updated engine id name to "Wordfish v. 2.30 110925".
