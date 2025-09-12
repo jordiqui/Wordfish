@@ -53,10 +53,10 @@ struct EvalCacheEntry {
     Value   positional_small = 0;
     uint8_t have_small       = 0;
 
-    // cached NNUE outputs for big network
-    Value   psqt_big       = 0;
-    Value   positional_big = 0;
-    uint8_t have_big       = 0;
+    // cached NNUE outputs for falcon network
+    Value   psqt_falcon       = 0;
+    Value   positional_falcon = 0;
+    uint8_t have_falcon       = 0;
 };
 
 constexpr size_t   EVAL_CACHE_BITS = 13;  // 8192 entries
@@ -75,9 +75,9 @@ struct EvalCacheEntry {
     Value    psqt_small       = 0;
     Value    positional_small = 0;
     uint8_t  have_small       = 0;
-    Value    psqt_big         = 0;
-    Value    positional_big   = 0;
-    uint8_t  have_big         = 0;
+    Value    psqt_falcon         = 0;
+    Value    positional_falcon   = 0;
+    uint8_t  have_falcon         = 0;
 };
 
 [[maybe_unused]] constexpr size_t EVAL_CACHE_BITS = 0;
@@ -203,10 +203,10 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     // If the stored entry refers to a different position, invalidate its NNUE flags.
     if (e.key != posKey)
     {
-        e.key           = posKey;
-        e.have_small    = 0;
-        e.have_big      = 0;
-        e.last_optimism = 0;
+        e.key            = posKey;
+        e.have_small     = 0;
+        e.have_falcon    = 0;
+        e.last_optimism  = 0;
         // `v` can remain stale until we compute and overwrite it.
     }
     else
@@ -236,17 +236,18 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     }
     else
     {
-        if (e.have_big)
+        if (e.have_falcon)
         {
-            psqt       = e.psqt_big;
-            positional = e.positional_big;
+            psqt       = e.psqt_falcon;
+            positional = e.positional_falcon;
         }
         else
         {
-            std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
-            e.psqt_big                 = psqt;
-            e.positional_big           = positional;
-            e.have_big                 = 1;
+            std::tie(psqt, positional) =
+              networks.falcon.evaluate(pos, accumulators, &caches.falcon);
+            e.psqt_falcon       = psqt;
+            e.positional_falcon = positional;
+            e.have_falcon       = 1;
         }
     }
 
@@ -256,17 +257,18 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     if (smallNet && (std::abs(nnue) < 236))
     {
         // Try to use cached big-network outputs if present, otherwise compute and store.
-        if (e.have_big)
+        if (e.have_falcon)
         {
-            psqt       = e.psqt_big;
-            positional = e.positional_big;
+            psqt       = e.psqt_falcon;
+            positional = e.positional_falcon;
         }
         else
         {
-            std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
-            e.psqt_big                 = psqt;
-            e.positional_big           = positional;
-            e.have_big                 = 1;
+            std::tie(psqt, positional) =
+              networks.falcon.evaluate(pos, accumulators, &caches.falcon);
+            e.psqt_falcon       = psqt;
+            e.positional_falcon = positional;
+            e.have_falcon       = 1;
         }
         nnue     = (125 * psqt + 131 * positional) / 128;
         smallNet = false;
@@ -327,30 +329,31 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    // Try to reuse cached big-network outputs if present to avoid recomputation.
+    // Try to reuse cached falcon-network outputs if present to avoid recomputation.
     const uint64_t  posKey = pos.key();
     const uint64_t  idx    = posKey & EVAL_CACHE_MASK;
     EvalCacheEntry& e      = eval_cache[idx];
     Value           psqt = 0, positional = 0;
-    if (e.key == posKey && e.have_big)
+    if (e.key == posKey && e.have_falcon)
     {
-        psqt       = e.psqt_big;
-        positional = e.positional_big;
+        psqt       = e.psqt_falcon;
+        positional = e.positional_falcon;
     }
     else
     {
-        std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches->big);
+        std::tie(psqt, positional) =
+          networks.falcon.evaluate(pos, accumulators, &caches->falcon);
         // store in cache (overwrite entry if different key)
         if (e.key != posKey)
         {
-            e.key           = posKey;
-            e.have_small    = 0;
-            e.have_big      = 0;
-            e.last_optimism = 0;
+            e.key            = posKey;
+            e.have_small     = 0;
+            e.have_falcon    = 0;
+            e.last_optimism  = 0;
         }
-        e.psqt_big       = psqt;
-        e.positional_big = positional;
-        e.have_big       = 1;
+        e.psqt_falcon       = psqt;
+        e.positional_falcon = positional;
+        e.have_falcon       = 1;
     }
     Value v = psqt + positional;
     v       = pos.side_to_move() == WHITE ? v : -v;

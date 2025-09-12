@@ -128,10 +128,10 @@ setoption name Minimum Thinking Time value <milliseconds>
 ### Falcon Net
 
 Wordfish can switch to an alternative neural network using the
-`FalconFile` option. To load the bundled `nn-baff1ede1f90.nnue` file, send:
+`FalconFile` option. To load the bundled `3.net` file, send:
 
 ```
-setoption name FalconFile value nn-baff1ede1f90.nnue
+setoption name FalconFile value 3.net
 ```
 
 ## License
