@@ -1,8 +1,8 @@
 # Wordfish Chess Engine
 
-**Version 2.30**
+**Version 2.40**
 
-This build identifies as `Wordfish v. 2.30 110925`.
+This build identifies as `Wordfish v. 2.40 120925 avx`.
 
 <div align="center">
   <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
@@ -128,10 +128,10 @@ setoption name Minimum Thinking Time value <milliseconds>
 ### Falcon Net
 
 Wordfish can switch to an alternative neural network using the
-`FalconFile` option. To load the bundled `3.net` file, send:
+`FalconFile` option. To load the bundled `nn-baff1ede1f90.nnue` file, send:
 
 ```
-setoption name FalconFile value 3.net
+setoption name FalconFile value nn-baff1ede1f90.nnue
 ```
 
 ## License
