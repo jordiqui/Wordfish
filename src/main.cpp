@@ -33,13 +33,21 @@ using namespace Stockfish;
 
 int main(int argc, char* argv[]) {
 
-    // Clear, consistent banner (many GUIs echo this to their logs).
-    // Send banner to stderr so it doesn't interfere with UCI handshake on stdout.
-    std::cerr << ENGINE_NAME
-              << " by Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
-              << std::endl;
+    // Some GUI front-ends interpret anything written to stderr as an engine
+    // failure.  To avoid spurious error dialogs, only print the banner and
+    // compiler information when command line arguments are supplied (typically
+    // when running from a terminal for testing or benchmarking).
+    if (argc > 1)
+    {
+        // Clear, consistent banner (many GUIs echo this to their logs).
+        // Send banner to stderr so it doesn't interfere with UCI handshake on
+        // stdout when run from a terminal.
+        std::cerr << ENGINE_NAME
+                  << " by Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
+                  << std::endl;
 
-    std::cerr << compiler_info() << std::endl;
+        std::cerr << compiler_info() << std::endl;
+    }
 
     Bitboards::init();
     Position::init();
