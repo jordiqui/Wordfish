@@ -27,6 +27,7 @@
 #include <memory>
 #include <sstream>
 #include <tuple>
+#include <limits>
 
 #include "nnue/network.h"
 #include "nnue/nnue_misc.h"
@@ -165,7 +166,9 @@ Value dynamic_activity_bonus(const Position& pos) {
     int usScore   = activity_score(pos.side_to_move());
     int themScore = activity_score(~pos.side_to_move());
 
-    return Value(usScore - themScore);
+    // Scale the difference so this bonus only nudges the NNUE evaluation
+    // instead of overpowering it and flipping the score's sign.
+    return Value((usScore - themScore) / 128);
 }
 
 }  // namespace
@@ -206,7 +209,7 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
         e.key            = posKey;
         e.have_small     = 0;
         e.have_falcon    = 0;
-        e.last_optimism  = 0;
+        e.last_optimism  = std::numeric_limits<int>::min();
         // `v` can remain stale until we compute and overwrite it.
     }
     else
@@ -349,7 +352,7 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
             e.key            = posKey;
             e.have_small     = 0;
             e.have_falcon    = 0;
-            e.last_optimism  = 0;
+            e.last_optimism  = std::numeric_limits<int>::min();
         }
         e.psqt_falcon       = psqt;
         e.positional_falcon = positional;
