@@ -121,7 +121,8 @@ using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsB
 
 using NetworkBig   = Network<BigNetworkArchitecture, BigFeatureTransformer>;
 using NetworkSmall = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
-using NetworkFalcon = Network<BigNetworkArchitecture, BigFeatureTransformer>;
+// Falcon network now uses the small-network architecture
+using NetworkFalcon = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
 
 
 struct Networks {

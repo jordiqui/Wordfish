@@ -105,7 +105,8 @@ struct AccumulatorCaches {
 
     Cache<TransformedFeatureDimensionsBig>   big;
     Cache<TransformedFeatureDimensionsSmall> small;
-    Cache<TransformedFeatureDimensionsBig>   falcon;
+    // Falcon network uses the small-network dimensions
+    Cache<TransformedFeatureDimensionsSmall> falcon;
 };
 
 
