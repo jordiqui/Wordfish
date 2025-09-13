@@ -107,10 +107,17 @@ StyleIndicators gather_indicators(const Position& pos) {
     Square          enemyKing = pos.square<KING>(~pos.side_to_move());
     Square          ownKing   = pos.square<KING>(pos.side_to_move());
 
-    ind.pressure      = popcount(pos.attackers_to(enemyKing));
-    ind.shield        = popcount(pos.attackers_to(ownKing));
+    Color   us   = pos.side_to_move();
+    Color   them = ~us;
+    Bitboard atkEnemyKing = pos.attackers_to(enemyKing);
+    Bitboard atkOwnKing   = pos.attackers_to(ownKing);
+
+    ind.pressure = popcount(atkEnemyKing & pos.pieces(us));
+    ind.shield   = popcount(atkOwnKing & pos.pieces(us))
+                 - popcount(atkOwnKing & pos.pieces(them));
+
     Bitboard centerBB = square_bb(SQ_D4) | square_bb(SQ_E4) | square_bb(SQ_D5) | square_bb(SQ_E5);
-    ind.center        = popcount(pos.pieces(pos.side_to_move()) & centerBB);
+    ind.center        = popcount(pos.pieces(us) & centerBB);
     return ind;
 }
 
