@@ -27,7 +27,6 @@
 #include <memory>
 #include <sstream>
 #include <tuple>
-#include <limits>
 
 #include "nnue/network.h"
 #include "nnue/nnue_misc.h"
@@ -38,153 +37,6 @@
 
 namespace Stockfish {
 
-// Per-thread evaluation cache (optional)
-// Define USE_FAST_EVAL_CACHE to enable a fast per-thread direct-mapped cache.
-// Compile with e.g. -DUSE_FAST_EVAL_CACHE to activate it.
-namespace {
-#ifdef USE_FAST_EVAL_CACHE
-// Full-featured cache (direct-mapped, 8192 entries by default).
-struct EvalCacheEntry {
-    uint64_t key           = 0;  // position key
-    int32_t  last_optimism = 0;  // optimism for which `v` was computed
-    Value    v             = 0;  // final cached evaluation (for last_optimism)
-
-    // cached NNUE outputs for small network
-    Value   psqt_small       = 0;
-    Value   positional_small = 0;
-    uint8_t have_small       = 0;
-
-    // cached NNUE outputs for falcon network
-    Value   psqt_falcon       = 0;
-    Value   positional_falcon = 0;
-    uint8_t have_falcon       = 0;
-};
-
-constexpr size_t   EVAL_CACHE_BITS = 13;  // 8192 entries
-constexpr size_t   EVAL_CACHE_SIZE = (1u << EVAL_CACHE_BITS);
-constexpr uint64_t EVAL_CACHE_MASK = EVAL_CACHE_SIZE - 1;
-
-// thread_local so each search thread has independent cache (no locks)
-thread_local EvalCacheEntry eval_cache[EVAL_CACHE_SIZE];
-#else
-// Disabled or minimal cache: single-entry per-thread stub.
-// This keeps the code paths simple and avoids conditional compilation throughout.
-struct EvalCacheEntry {
-    uint64_t key              = 0;
-    int32_t  last_optimism    = 0;
-    Value    v                = 0;
-    Value    psqt_small       = 0;
-    Value    positional_small = 0;
-    uint8_t  have_small       = 0;
-    Value    psqt_falcon         = 0;
-    Value    positional_falcon   = 0;
-    uint8_t  have_falcon         = 0;
-};
-
-[[maybe_unused]] constexpr size_t EVAL_CACHE_BITS = 0;
-constexpr size_t                  EVAL_CACHE_SIZE = 1;
-constexpr uint64_t                EVAL_CACHE_MASK = 0;
-
-thread_local EvalCacheEntry eval_cache[EVAL_CACHE_SIZE];
-#endif
-}
-
-namespace {
-
-// Basic positional cues used to slightly bias evaluation depending on the
-// phase of the game. The intent is to provide a light-weight and easily
-// switchable mechanism to alter style without replicating any particular
-// engine's approach.
-struct StyleIndicators {
-    int pressure;  // attackers on the opposing king
-    int shield;    // defenders near our own king
-    int center;    // friendly pieces controlling the central squares
-};
-
-// Collect the above indicators from the current position.
-StyleIndicators gather_indicators(const Position& pos) {
-    StyleIndicators ind{};
-    Square          enemyKing = pos.square<KING>(~pos.side_to_move());
-    Square          ownKing   = pos.square<KING>(pos.side_to_move());
-
-    Color   us   = pos.side_to_move();
-    Color   them = ~us;
-    Bitboard atkEnemyKing = pos.attackers_to(enemyKing);
-    Bitboard atkOwnKing   = pos.attackers_to(ownKing);
-
-    ind.pressure = popcount(atkEnemyKing & pos.pieces(us));
-    ind.shield   = popcount(atkOwnKing & pos.pieces(us))
-                 - popcount(atkOwnKing & pos.pieces(them));
-
-    Bitboard centerBB = square_bb(SQ_D4) | square_bb(SQ_E4) | square_bb(SQ_D5) | square_bb(SQ_E5);
-    ind.center        = popcount(pos.pieces(us) & centerBB);
-    return ind;
-}
-
-// Compute an adjustment based on the indicators and the current evaluation.
-Value adaptive_style_bonus(const Position& pos, Value current) {
-    StyleIndicators ind = gather_indicators(pos);
-
-    int atkW = current > 50 ? 3 : 1;
-    int defW = current < -50 ? 3 : 1;
-    int balW = 2;
-
-    int bonus = atkW * ind.pressure + balW * ind.center - defW * ind.shield;
-    return Value(bonus);
-}
-
-// Compute a bonus favouring dynamic piece activity and king pressure. The goal
-// is to reward mobility and coordinated attacks so that sacrificial play with
-// strong initiative is penalized less by the static evaluation.
-Value dynamic_activity_bonus(const Position& pos) {
-    auto activity_score = [&](Color side) {
-        Color    us        = side;
-        Color    them      = ~us;
-        Square   enemyKing = pos.square<KING>(them);
-        Bitboard kingRing  = attacks_bb<KING>(enemyKing) | square_bb(enemyKing);
-
-        int mobility = popcount(pos.attacks_by<KNIGHT>(us)) + popcount(pos.attacks_by<BISHOP>(us))
-                     + popcount(pos.attacks_by<ROOK>(us)) + popcount(pos.attacks_by<QUEEN>(us));
-
-        int ringAttacks = popcount(pos.attacks_by<KNIGHT>(us) & kingRing)
-                        + popcount(pos.attacks_by<BISHOP>(us) & kingRing)
-                        + popcount(pos.attacks_by<ROOK>(us) & kingRing)
-                        + popcount(pos.attacks_by<QUEEN>(us) & kingRing)
-                        + popcount(pos.attacks_by<PAWN>(us) & kingRing);
-
-        int directAttackers = popcount(pos.attackers_to(enemyKing) & pos.pieces(us));
-
-        int score = mobility + ringAttacks * 8 + directAttackers * 16;
-
-        int material = pos.non_pawn_material(us) - pos.non_pawn_material(them)
-                     + PawnValue * (pos.count<PAWN>(us) - pos.count<PAWN>(them));
-
-        if (material < 0)
-        {
-            // When behind in material, reward aggressive king attacks so
-            // promising sacrifices are evaluated more optimistically.
-            int sacr = -material;
-            score += sacr * (ringAttacks * 12 + directAttackers * 24) / 64;
-        }
-
-        return score;
-    };
-
-    int usScore   = activity_score(pos.side_to_move());
-    int themScore = activity_score(~pos.side_to_move());
-
-    // Scale the difference so this bonus only nudges the NNUE evaluation
-    // instead of overpowering it and flipping the score's sign.
-    return Value((usScore - themScore) / 128);
-}
-
-}  // namespace
-
-namespace Eval {
-static bool adaptive_style = false;
-void        set_adaptive_style(bool enabled) { adaptive_style = enabled; }
-}  // namespace Eval
-
 // Returns a static, purely materialistic evaluation of the position from
 // the point of view of the side to move. It can be divided by PawnValue to get
 // an approximation of the material advantage on the board in terms of pawns.
@@ -194,7 +46,7 @@ int Eval::simple_eval(const Position& pos) {
          + (pos.non_pawn_material(c) - pos.non_pawn_material(~c));
 }
 
-inline bool Eval::use_smallnet(const Position& pos) { return std::abs(simple_eval(pos)) > 962; }
+bool Eval::use_smallnet(const Position& pos) { return std::abs(simple_eval(pos)) > 962; }
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
@@ -206,117 +58,33 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     assert(!pos.checkers());
 
-    const uint64_t  posKey = pos.key();
-    const uint64_t  idx    = posKey & EVAL_CACHE_MASK;  // index by position key only
-    EvalCacheEntry& e      = eval_cache[idx];
-
-    // If the stored entry refers to a different position, invalidate its NNUE flags.
-    if (e.key != posKey)
-    {
-        e.key            = posKey;
-        e.have_small     = 0;
-        e.have_falcon    = 0;
-        e.last_optimism  = std::numeric_limits<int>::min();
-        // `v` can remain stale until we compute and overwrite it.
-    }
-    else
-    {
-        // If exact same optimism already computed for this position, return final cached v.
-        if (e.last_optimism == optimism)
-            return e.v;
-    }
-
-    bool  smallNet = use_smallnet(pos);
-    Value psqt = 0, positional = 0;
-
-    if (smallNet)
-    {
-        if (e.have_small)
-        {
-            psqt       = e.psqt_small;
-            positional = e.positional_small;
-        }
-        else
-        {
-            std::tie(psqt, positional) = networks.small.evaluate(pos, accumulators, &caches.small);
-            e.psqt_small               = psqt;
-            e.positional_small         = positional;
-            e.have_small               = 1;
-        }
-    }
-    else
-    {
-        if (e.have_falcon)
-        {
-            psqt       = e.psqt_falcon;
-            positional = e.positional_falcon;
-        }
-        else
-        {
-            std::tie(psqt, positional) =
-              networks.falcon.evaluate(pos, accumulators, &caches.falcon);
-            e.psqt_falcon       = psqt;
-            e.positional_falcon = positional;
-            e.have_falcon       = 1;
-        }
-    }
+    bool smallNet           = use_smallnet(pos);
+    auto [psqt, positional] = smallNet ? networks.small.evaluate(pos, accumulators, &caches.small)
+                                       : networks.big.evaluate(pos, accumulators, &caches.big);
 
     Value nnue = (125 * psqt + 131 * positional) / 128;
 
     // Re-evaluate the position when higher eval accuracy is worth the time spent
     if (smallNet && (std::abs(nnue) < 236))
     {
-        // Try to use cached big-network outputs if present, otherwise compute and store.
-        if (e.have_falcon)
-        {
-            psqt       = e.psqt_falcon;
-            positional = e.positional_falcon;
-        }
-        else
-        {
-            std::tie(psqt, positional) =
-              networks.falcon.evaluate(pos, accumulators, &caches.falcon);
-            e.psqt_falcon       = psqt;
-            e.positional_falcon = positional;
-            e.have_falcon       = 1;
-        }
-        nnue     = (125 * psqt + 131 * positional) / 128;
-        smallNet = false;
+        std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
+        nnue                       = (125 * psqt + 131 * positional) / 128;
+        smallNet                   = false;
     }
 
     // Blend optimism and eval with nnue complexity
-    const int nnueComplexity = std::abs(psqt - positional);
-    if (optimism != 0)
-        optimism += optimism * nnueComplexity / 468;
-    if (nnue != 0)
-        nnue -= nnue * nnueComplexity / 18000;
+    int nnueComplexity = std::abs(psqt - positional);
+    optimism += optimism * nnueComplexity / 468;
+    nnue -= nnue * nnueComplexity / 18000;
 
-    const int material       = 535 * pos.count<PAWN>() + pos.non_pawn_material();
-    const int numerator_nnue = nnue * (77777 + material);
-    const int numerator_opt  = optimism * (7777 + material);
-    int       v              = (numerator_nnue + numerator_opt) / 77777;
+    int material = 535 * pos.count<PAWN>() + pos.non_pawn_material();
+    int v        = (nnue * (77777 + material) + optimism * (7777 + material)) / 77777;
 
     // Damp down the evaluation linearly when shuffling
     v -= v * pos.rule50_count() / 212;
 
-    // Encourage dynamic play: reward mobility and attacks on the enemy king
-    v += dynamic_activity_bonus(pos);
-
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
-
-    // Optional style-based tweak which slightly biases the score depending on
-    // basic positional indicators. This does not aim to implement any specific
-    // style but merely demonstrates how evaluation terms can be combined.
-    if (adaptive_style)
-    {
-        v += adaptive_style_bonus(pos, Value(v));
-        v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
-    }
-
-    // Store result and the optimism used for the final `v`.
-    e.last_optimism = optimism;
-    e.v             = v;
 
     return v;
 }
@@ -339,34 +107,9 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    // Try to reuse cached falcon-network outputs if present to avoid recomputation.
-    const uint64_t  posKey = pos.key();
-    const uint64_t  idx    = posKey & EVAL_CACHE_MASK;
-    EvalCacheEntry& e      = eval_cache[idx];
-    Value           psqt = 0, positional = 0;
-    if (e.key == posKey && e.have_falcon)
-    {
-        psqt       = e.psqt_falcon;
-        positional = e.positional_falcon;
-    }
-    else
-    {
-        std::tie(psqt, positional) =
-          networks.falcon.evaluate(pos, accumulators, &caches->falcon);
-        // store in cache (overwrite entry if different key)
-        if (e.key != posKey)
-        {
-            e.key            = posKey;
-            e.have_small     = 0;
-            e.have_falcon    = 0;
-            e.last_optimism  = std::numeric_limits<int>::min();
-        }
-        e.psqt_falcon       = psqt;
-        e.positional_falcon = positional;
-        e.have_falcon       = 1;
-    }
-    Value v = psqt + positional;
-    v       = pos.side_to_move() == WHITE ? v : -v;
+    auto [psqt, positional] = networks.big.evaluate(pos, accumulators, &caches->big);
+    Value v                 = psqt + positional;
+    v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
 
     v = evaluate(networks, pos, accumulators, *caches, VALUE_ZERO);
@@ -378,4 +121,9 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
     return ss.str();
 }
 
+namespace Eval {
+void set_adaptive_style(bool) {}
+}  // namespace Eval
+
 }  // namespace Stockfish
+
