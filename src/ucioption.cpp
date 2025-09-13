@@ -140,7 +140,15 @@ Option::Option(const char* v, const char* cur, OnChange f) :
 
 Option::operator int() const {
     assert(type == "check" || type == "spin");
-    return (type == "spin" ? std::stoi(currentValue) : currentValue == "true");
+
+    if (type == "check")
+        return currentValue == "true";
+
+    int iv = 0;
+    const char* begin = currentValue.c_str();
+    const char* end   = begin + currentValue.size();
+    auto res          = std::from_chars(begin, end, iv);
+    return res.ec == std::errc() ? iv : 0;
 }
 
 Option::operator std::string() const {
@@ -222,8 +230,12 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
                 }
 
                 else if (o.type == "spin")
-                    os << " default " << int(stof(o.defaultValue)) << " min " << o.min << " max "
-                       << o.max;
+                {
+                    int dv = 0;
+                    std::from_chars(o.defaultValue.c_str(),
+                                     o.defaultValue.c_str() + o.defaultValue.size(), dv);
+                    os << " default " << dv << " min " << o.min << " max " << o.max;
+                }
 
                 break;
             }
