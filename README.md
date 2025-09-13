@@ -128,13 +128,14 @@ setoption name Minimum Thinking Time value <milliseconds>
 ### Falcon Net
 
 Wordfish can switch to an alternative neural network using the
-`FalconFile` option. If a `3.net` file is present in the engine
-directory it will be embedded automatically; otherwise the engine
-falls back to the standard networks. To load the `3.net` file when
-available, send:
+`FalconFile` option. If a `nn-c01dc0ffeede.nnue` file is present in the
+engine directory it will be embedded automatically; otherwise the engine
+falls back to the standard networks. Run `./scripts/net.sh` to download
+the required NNUE files into the `src/` directory. To load the
+`nn-c01dc0ffeede.nnue` file when available, send:
 
 ```
-setoption name FalconFile value 3.net
+setoption name FalconFile value nn-c01dc0ffeede.nnue
 ```
 
 ## License
