@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# Always operate from the source directory so the networks are placed
+# alongside the engine binary. This allows the script to be invoked from
+# anywhere (repo root, src/, etc.).
+SCRIPT_DIR="$(cd -- "$(dirname "$0")" && pwd)"
+cd "${SCRIPT_DIR}/../src" || exit 1
+
 wget_or_curl=$( (command -v wget > /dev/null 2>&1 && echo "wget -qO-") || \
                 (command -v curl > /dev/null 2>&1 && echo "curl -skL"))
 
