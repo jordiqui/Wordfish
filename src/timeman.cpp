@@ -136,12 +136,29 @@ void TimeManagement::init(Search::LimitsType& limits,
     maximumTime =
       TimePoint(std::min(0.825179 * limits.time[us] - moveOverhead, maxScale * optimumTime)) - 10;
 
+    // In very fast time controls (e.g. bullet), cap thinking time to avoid
+    // losing on time due to overly deep searches. Skip this when using nodes
+    // as time so we don't cap based on the node budget.
+    if (!useNodesTime && limits.time[us] < 60000)
+    {
+        TimePoint bulletOpt = TimePoint(limits.time[us] / 40);
+        TimePoint bulletMax = TimePoint(limits.time[us] / 20);
+        optimumTime         = std::min(optimumTime, bulletOpt);
+        maximumTime         = std::min(maximumTime, bulletMax);
+
+        if (maximumTime < optimumTime)
+            maximumTime = optimumTime;
+    }
+
     if (options["Ponder"])
         optimumTime += optimumTime / 4;
 
     TimePoint minimumThinkingTime = TimePoint(options["Minimum Thinking Time"]);
-    optimumTime = std::max(optimumTime, minimumThinkingTime);
-    maximumTime = std::max(maximumTime, minimumThinkingTime);
+    optimumTime                  = std::max(optimumTime, minimumThinkingTime);
+    maximumTime                  = std::max(maximumTime, minimumThinkingTime);
+
+    if (maximumTime < optimumTime)
+        maximumTime = optimumTime;
 }
 
 }  // namespace Stockfish
