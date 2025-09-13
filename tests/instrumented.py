@@ -220,6 +220,12 @@ class TestInteractive(metaclass=OrderedClassMembers):
         self.stockfish.send_command("uci")
         self.stockfish.equals("uciok")
 
+    def test_uci_go_depth_1_without_position(self):
+        self.stockfish.send_command("uci")
+        self.stockfish.equals("uciok")
+        self.stockfish.send_command("go depth 1")
+        self.stockfish.starts_with("bestmove")
+
     def test_set_threads_option(self):
         self.stockfish.send_command(f"setoption name Threads value {get_threads()}")
 
