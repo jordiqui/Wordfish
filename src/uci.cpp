@@ -243,6 +243,13 @@ void UCIEngine::go(std::istringstream& is) {
 
     Search::LimitsType limits = parse_limits(is);
 
+    // Ensure the experience file has finished loading before starting a search.
+    // Some GUIs like Fritz or CuteChess may issue a "go" command immediately
+    // after "uci", while the experience file is still being loaded in a
+    // background thread. Waiting here avoids potential races that could
+    // terminate the engine unexpectedly.
+    experience.wait_until_loaded();
+
     if (limits.perft)
         perft(limits);
     else
