@@ -35,6 +35,7 @@
 #include <iostream>
 #include <sstream>
 #include <utility>
+#include <charconv>
 
 #include "misc.h"
 
@@ -163,9 +164,18 @@ Option& Option::operator=(const std::string& v) {
     assert(!type.empty());
 
     if ((type != "button" && type != "string" && v.empty())
-        || (type == "check" && v != "true" && v != "false")
-        || (type == "spin" && (std::stof(v) < min || std::stof(v) > max)))
+        || (type == "check" && v != "true" && v != "false"))
         return *this;
+
+    if (type == "spin")
+    {
+        int         iv    = 0;
+        const char* begin = v.c_str();
+        const char* end   = begin + v.size();
+        auto        res   = std::from_chars(begin, end, iv);
+        if (res.ec != std::errc() || res.ptr != end || iv < min || iv > max)
+            return *this;
+    }
 
     if (type == "combo")
     {
