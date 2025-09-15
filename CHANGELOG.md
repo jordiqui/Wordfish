@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.41 dev-150925]
+### Changed
+- Updated engine id name to "Wordfish 2.41 dev-150925".
+
 ## [2.40 120925 avx]
 ### Changed
 - Updated engine id name to "Wordfish v. 2.40 120925 avx".
