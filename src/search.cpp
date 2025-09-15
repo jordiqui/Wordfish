@@ -152,13 +152,29 @@ Search::Worker::Worker(SharedState&                    sharedState,
     tt(sharedState.tt),
     networks(sharedState.networks),
     refreshTable(networks[token]) {
+    const auto& netsForToken = networks[token];
+    bigWeightsHandle         = netsForToken.big.weights_handle();
+    smallWeightsHandle       = netsForToken.small.weights_handle();
+    falconWeightsHandle      = netsForToken.falcon.weights_handle();
     clear();
 }
 
 void Search::Worker::ensure_network_replicated() {
-    // Access once to force lazy initialization.
-    // We do this because we want to avoid initialization during search.
-    (void) (networks[numaAccessToken]);
+    const auto& nets = networks[numaAccessToken];
+
+    auto newBig    = nets.big.weights_handle();
+    auto newSmall  = nets.small.weights_handle();
+    auto newFalcon = nets.falcon.weights_handle();
+
+    if (newBig == bigWeightsHandle && newSmall == smallWeightsHandle
+        && newFalcon == falconWeightsHandle)
+        return;
+
+    bigWeightsHandle    = std::move(newBig);
+    smallWeightsHandle  = std::move(newSmall);
+    falconWeightsHandle = std::move(newFalcon);
+
+    refreshTable.clear(nets);
 }
 
 void Search::Worker::start_searching() {
