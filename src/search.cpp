@@ -1107,6 +1107,8 @@ moves_loop:  // When in check, search starts here
         movedPiece = pos.moved_piece(move);
         givesCheck = pos.gives_check(move);
 
+        const bool negativeSee = capture && !pos.see_ge(move, VALUE_ZERO);
+
         (ss + 1)->quietMoveStreak = (!capture && !givesCheck) ? (ss->quietMoveStreak + 1) : 0;
 
         // Calculate new depth for this move
@@ -1279,6 +1281,8 @@ moves_loop:  // When in check, search starts here
         // These reduction adjustments have no proven non-linear scaling
 
         r += 650;  // Base reduction offset to compensate for other tweaks
+        if (negativeSee)
+            r = std::max<int>(0, r - 1024);
         r -= moveCount * 69;
         r -= std::abs(correctionValue) / 27160;
 
@@ -1317,6 +1321,9 @@ moves_loop:  // When in check, search starts here
             // Apply a simple reduction limited between one ply and the remaining depth
             Depth d = std::max(1, newDepth - r / 1024);
 
+            if (negativeSee)
+                d = std::max(d, newDepth - 1);
+
             ss->reduction = newDepth - d;
             value         = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, d, true);
             ss->reduction = 0;
@@ -1337,9 +1344,12 @@ moves_loop:  // When in check, search starts here
             const int threshold2 = depth <= 4 ? 3500 : 4600;
 
             // Note that if expected reduction is high, we reduce search depth here
+            int depthReduction = (r > threshold1) + (r > threshold2 && newDepth > 2);
+            if (negativeSee)
+                depthReduction = std::min(depthReduction, 1);
+
             value = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha,
-                                   newDepth - (r > threshold1) - (r > threshold2 && newDepth > 2),
-                                   !cutNode);
+                                   newDepth - depthReduction, !cutNode);
         }
 
         // For PV nodes only, do a full PV search on the first move or after a fail high,
