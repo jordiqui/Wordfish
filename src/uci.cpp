@@ -43,7 +43,7 @@
 #include "ucioption.h"
 
 #ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish 2.41 dev-150925"
+    #define ENGINE_NAME "Wordfish 2.42-190825"
 #endif
 #ifndef ENGINE_BUILD_DATE
     #define ENGINE_BUILD_DATE ""
