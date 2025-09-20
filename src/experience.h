@@ -21,11 +21,10 @@
 #ifndef EXPERIENCE_H_INCLUDED
 #define EXPERIENCE_H_INCLUDED
 
-#include <future>
-#include <mutex>
-#include <string>
 #include <unordered_map>
 #include <vector>
+#include <string>
+#include <future>
 
 #include "position.h"
 #include "types.h"
@@ -55,7 +54,6 @@ class Experience {
     std::unordered_map<Key, std::vector<ExperienceEntry>> table;
     bool                                                  binaryFormat     = false;
     bool                                                  brainLearnFormat = true;
-    mutable std::mutex                                    tableMutex;
     std::future<void>                                     loader;
 };
 

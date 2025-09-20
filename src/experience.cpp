@@ -10,7 +10,6 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <zlib.h>
 
@@ -18,10 +17,6 @@
 #include "uci.h"
 
 namespace Stockfish {
-
-namespace {
-thread_local bool inExperienceLoader = false;
-}
 
 Experience experience;
 
@@ -36,16 +31,10 @@ bool Experience::is_ready() const {
 
 void Experience::clear() {
     wait_until_loaded();
-    std::lock_guard<std::mutex> lock(tableMutex);
     table.clear();
 }
 
 void Experience::load(const std::string& file) {
-    struct LoaderThreadScope {
-        LoaderThreadScope() { inExperienceLoader = true; }
-        ~LoaderThreadScope() { inExperienceLoader = false; }
-    } loaderScope;
-
     std::string path       = file;
     bool        convertBin = false;
     bool        compressed = false;
@@ -114,126 +103,125 @@ void Experience::load(const std::string& file) {
     in.clear();
     in.seekg(0, std::ios::beg);
 
+    table.clear();
+    binaryFormat     = isV1 || isV2 || isBL;
+    brainLearnFormat = isBL;
+
     std::size_t totalMoves     = 0;
     std::size_t duplicateMoves = 0;
-    std::size_t totalPositions = 0;
-    double      frag           = 0.0;
 
+    auto insert_entry = [&](uint64_t key, unsigned move, int score, int depth, int count) {
+        totalMoves++;
+        auto& vec = table[key];
+        bool  dup = false;
+        for (auto& e : vec)
+            if (e.move.raw() == move)
+            {
+                dup = true;
+                duplicateMoves++;
+                e.score = score;
+                e.depth = depth;
+                e.count += count;
+                break;
+            }
+        if (!dup)
+            vec.push_back({Move(static_cast<std::uint16_t>(move)), score, depth, count});
+    };
+
+    if (binaryFormat)
     {
-        std::lock_guard<std::mutex> lock(tableMutex);
-
-        table.clear();
-        binaryFormat     = isV1 || isV2 || isBL;
-        brainLearnFormat = isBL;
-
-        auto insert_entry = [&](uint64_t key, unsigned move, int score, int depth, int count) {
-            totalMoves++;
-            auto& vec = table[key];
-            bool  dup = false;
-            for (auto& e : vec)
-                if (e.move.raw() == move)
-                {
-                    dup = true;
-                    duplicateMoves++;
-                    e.score = score;
-                    e.depth = depth;
-                    e.count += count;
-                    break;
-                }
-            if (!dup)
-                vec.push_back({Move(static_cast<std::uint16_t>(move)), score, depth, count});
-        };
-
-        if (binaryFormat)
+        if (isBL)
         {
-            if (isBL)
-            {
-                struct BinBL {
-                    uint64_t key;
-                    int32_t  depth;
-                    int32_t  value;
-                    uint16_t move;
-                    uint16_t pad;
-                    int32_t  perf;
-                };
-                BinBL e;
-                while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
-                    insert_entry(e.key, e.move, e.value, e.depth, static_cast<int>(e.perf));
-            }
-            else
-            {
-                in.seekg(isV2 ? sigV2.size() : sigV1.size(), std::ios::beg);
-
-                struct BinV1 {
-                    uint64_t key;
-                    uint32_t move;
-                    int32_t  value;
-                    int32_t  depth;
-                    uint8_t  pad[4];
-                };
-                struct BinV2 {
-                    uint64_t key;
-                    uint32_t move;
-                    int32_t  value;
-                    int32_t  depth;
-                    uint16_t count;
-                    uint8_t  pad[2];
-                };
-
-                if (isV2)
-                {
-                    BinV2 e;
-                    while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
-                        insert_entry(e.key, e.move, e.value, e.depth, e.count);
-                }
-                else
-                {
-                    BinV1 e;
-                    while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
-                        insert_entry(e.key, e.move, e.value, e.depth, 1);
-                }
-            }
+            struct BinBL {
+                uint64_t key;
+                int32_t  depth;
+                int32_t  value;
+                uint16_t move;
+                uint16_t pad;
+                int32_t  perf;
+            };
+            BinBL e;
+            while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
+                insert_entry(e.key,
+                              e.move,
+                              e.value,
+                              e.depth,
+                              static_cast<int>(e.perf));
         }
         else
         {
-            std::string line;
-            while (std::getline(in, line))
+            in.seekg(isV2 ? sigV2.size() : sigV1.size(), std::ios::beg);
+
+            struct BinV1 {
+                uint64_t key;
+                uint32_t move;
+                int32_t  value;
+                int32_t  depth;
+                uint8_t  pad[4];
+            };
+            struct BinV2 {
+                uint64_t key;
+                uint32_t move;
+                int32_t  value;
+                int32_t  depth;
+                uint16_t count;
+                uint8_t  pad[2];
+            };
+
+            if (isV2)
             {
-                if (line.empty() || line[0] == '#')
-                    continue;
-
-                std::istringstream iss(line);
-                std::string        keyStr, moveStr;
-                int                score, depth, count;
-
-                if (!(iss >> keyStr >> moveStr >> score >> depth >> count))
-                    continue;
-
-                auto parse = [](const std::string& s, uint64_t& out) {
-                    std::istringstream ss(s);
-                    if (s.find_first_not_of("0123456789") == std::string::npos)
-                        ss >> out;
-                    else
-                        ss >> std::hex >> out;
-                    return !ss.fail();
-                };
-
-                uint64_t key64, move64;
-                if (!parse(keyStr, key64) || !parse(moveStr, move64))
-                    continue;
-                insert_entry(key64, static_cast<unsigned>(move64), score, depth, count);
+                BinV2 e;
+                while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
+                    insert_entry(e.key, e.move, e.value, e.depth, e.count);
+            }
+            else
+            {
+                BinV1 e;
+                while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
+                    insert_entry(e.key, e.move, e.value, e.depth, 1);
             }
         }
-
-        totalPositions = table.size();
-        frag           = totalPositions ? 100.0 * duplicateMoves / totalPositions : 0.0;
-        binaryFormat   = true;
     }
+    else
+    {
+        std::string line;
+        while (std::getline(in, line))
+        {
+            if (line.empty() || line[0] == '#')
+                continue;
+
+            std::istringstream iss(line);
+            std::string        keyStr, moveStr;
+            int                score, depth, count;
+
+            if (!(iss >> keyStr >> moveStr >> score >> depth >> count))
+                continue;
+
+            auto parse = [](const std::string& s, uint64_t& out) {
+                std::istringstream ss(s);
+                if (s.find_first_not_of("0123456789") == std::string::npos)
+                    ss >> out;
+                else
+                    ss >> std::hex >> out;
+                return !ss.fail();
+            };
+
+            uint64_t key64, move64;
+            if (!parse(keyStr, key64) || !parse(moveStr, move64))
+                continue;
+            insert_entry(key64, static_cast<unsigned>(move64), score, depth, count);
+        }
+    }
+
+    std::size_t totalPositions = table.size();
+    double      frag           = totalPositions ? 100.0 * duplicateMoves / totalPositions : 0.0;
 
     sync_cout << "info string " << display << " -> Total moves: " << totalMoves
               << ". Total positions: " << totalPositions << ". Duplicate moves: " << duplicateMoves
               << ". Fragmentation: " << std::fixed << std::setprecision(2) << frag << "%)"
               << sync_endl;
+
+    binaryFormat = true;
 
     if (convertBin)
         save(path);
@@ -244,8 +232,7 @@ void Experience::load_async(const std::string& file) {
 }
 
 void Experience::save(const std::string& file) const {
-    if (!inExperienceLoader)
-        wait_until_loaded();
+    wait_until_loaded();
     std::string path       = file;
     bool        compressed = false;
 
@@ -270,60 +257,50 @@ void Experience::save(const std::string& file) const {
     }
 
     std::string buffer;
-    std::size_t totalMoves      = 0;
-    std::size_t totalPositions  = 0;
-    bool        brainLearnMode  = false;
+    std::size_t totalMoves = 0;
 
+    if (brainLearnFormat)
     {
-        std::lock_guard<std::mutex> lock(tableMutex);
-
-        brainLearnMode = brainLearnFormat;
-
-        if (brainLearnMode)
-        {
-            struct BinBL {
-                uint64_t key;
-                int32_t  depth;
-                int32_t  value;
-                uint16_t move;
-                uint16_t pad;
-                int32_t  perf;
-            };
-            for (const auto& [key, vec] : table)
-                for (const auto& e : vec)
-                {
-                    BinBL be{key, e.depth, e.score, static_cast<uint16_t>(e.move.raw()), 0, e.count};
-                    buffer.append(reinterpret_cast<const char*>(&be), sizeof(be));
-                    totalMoves++;
-                }
-        }
-        else
-        {
-            const std::string sig = "SugaR Experience version 2";
-            buffer.append(sig);
-            struct BinV2 {
-                uint64_t key;
-                uint32_t move;
-                int32_t  value;
-                int32_t  depth;
-                uint16_t count;
-                uint8_t  pad[2];
-            };
-            for (const auto& [key, vec] : table)
-                for (const auto& e : vec)
-                {
-                    BinV2 be{key,
-                             static_cast<uint32_t>(e.move.raw()),
-                             e.score,
-                             e.depth,
-                             static_cast<uint16_t>(std::min(e.count, 0xFFFF)),
-                             {0, 0}};
-                    buffer.append(reinterpret_cast<const char*>(&be), sizeof(be));
-                    totalMoves++;
-                }
-        }
-
-        totalPositions = table.size();
+        struct BinBL {
+            uint64_t key;
+            int32_t  depth;
+            int32_t  value;
+            uint16_t move;
+            uint16_t pad;
+            int32_t  perf;
+        };
+        for (const auto& [key, vec] : table)
+            for (const auto& e : vec)
+            {
+                BinBL be{key, e.depth, e.score, static_cast<uint16_t>(e.move.raw()), 0, e.count};
+                buffer.append(reinterpret_cast<const char*>(&be), sizeof(be));
+                totalMoves++;
+            }
+    }
+    else
+    {
+        const std::string sig = "SugaR Experience version 2";
+        buffer.append(sig);
+        struct BinV2 {
+            uint64_t key;
+            uint32_t move;
+            int32_t  value;
+            int32_t  depth;
+            uint16_t count;
+            uint8_t  pad[2];
+        };
+        for (const auto& [key, vec] : table)
+            for (const auto& e : vec)
+            {
+                BinV2 be{key,
+                         static_cast<uint32_t>(e.move.raw()),
+                         e.score,
+                         e.depth,
+                         static_cast<uint16_t>(std::min(e.count, 0xFFFF)),
+                         {0, 0}};
+                buffer.append(reinterpret_cast<const char*>(&be), sizeof(be));
+                totalMoves++;
+            }
     }
 
     bool ok = false;
@@ -353,20 +330,19 @@ void Experience::save(const std::string& file) const {
         return;
     }
 
+    std::size_t totalPositions = table.size();
+
     sync_cout << "info string " << path << " <- Total moves: " << totalMoves
               << ". Total positions: " << totalPositions << sync_endl;
 }
 Move Experience::probe(Position& pos, int width, int evalImportance, int minDepth, int maxMoves) {
     if (!is_ready())
         return Move::none();
-    std::vector<ExperienceEntry> vec;
-    {
-        std::lock_guard<std::mutex> lock(tableMutex);
-        auto                         it = table.find(pos.key());
-        if (it == table.end())
-            return Move::none();
-        vec = it->second;
-    }
+    auto it = table.find(pos.key());
+    if (it == table.end())
+        return Move::none();
+
+    auto vec = it->second;
     if (vec.empty())
         return Move::none();
 
@@ -391,7 +367,6 @@ Move Experience::probe(Position& pos, int width, int evalImportance, int minDept
 void Experience::update(Position& pos, Move move, int score, int depth) {
     if (!is_ready())
         return;
-    std::lock_guard<std::mutex> lock(tableMutex);
     auto& vec = table[pos.key()];
     for (auto& e : vec)
         if (e.move == move)
@@ -411,21 +386,13 @@ void Experience::update(Position& pos, Move move, int score, int depth) {
 void Experience::show(const Position& pos, int evalImportance, int maxMoves) const {
     if (!is_ready())
         return;
-    std::vector<ExperienceEntry> vec;
-    bool                         found = true;
-    {
-        std::lock_guard<std::mutex> lock(tableMutex);
-        auto                         it = table.find(pos.key());
-        if (it == table.end())
-            found = false;
-        else
-            vec = it->second;
-    }
-    if (!found)
+    auto it = table.find(pos.key());
+    if (it == table.end())
     {
         sync_cout << "info string No experience available" << sync_endl;
         return;
     }
+    auto vec = it->second;
     std::sort(vec.begin(), vec.end(), [&](const ExperienceEntry& a, const ExperienceEntry& b) {
         return (a.score + evalImportance * a.depth) > (b.score + evalImportance * b.depth);
     });
