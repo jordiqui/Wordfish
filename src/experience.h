@@ -25,6 +25,7 @@
 #include <vector>
 #include <string>
 #include <future>
+#include <mutex>
 
 #include "position.h"
 #include "types.h"
@@ -55,6 +56,7 @@ class Experience {
     bool                                                  binaryFormat     = false;
     bool                                                  brainLearnFormat = true;
     std::future<void>                                     loader;
+    mutable std::mutex                                    tableMutex;
 };
 
 extern Experience experience;
