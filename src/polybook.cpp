@@ -309,7 +309,10 @@ PolyBook::PolyBook() {
 
 PolyBook::~PolyBook() {
     if (polyhash != NULL)
-        delete[] polyhash;
+    {
+        free(polyhash);
+        polyhash = nullptr;
+    }
 }
 
 void PolyBook::init(const OptionsMap& options) {
