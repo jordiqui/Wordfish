@@ -142,11 +142,10 @@ void Experience::load(const std::string& file) {
             };
             BinBL e;
             while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
-                insert_entry(e.key,
-                              e.move,
-                              e.value,
-                              e.depth,
-                              static_cast<int>(e.perf));
+            {
+                const int perfCount = std::max(static_cast<int>(e.perf), 0);
+                insert_entry(e.key, e.move, e.value, e.depth, perfCount);
+            }
         }
         else
         {
