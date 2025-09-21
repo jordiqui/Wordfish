@@ -362,6 +362,8 @@ class Worker {
     Eval::NNUE::NetworkSmall::WeightsPtr  smallWeightsHandle;
     Eval::NNUE::NetworkFalcon::WeightsPtr falconWeightsHandle;
 
+    bool experienceAvailable = false;
+
     friend class Stockfish::ThreadPool;
     friend class SearchManager;
 };

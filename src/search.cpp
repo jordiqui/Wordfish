@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <initializer_list>
+#include <iterator>
 #include <iostream>
 #include <list>
 #include <ratio>
@@ -68,13 +69,60 @@ namespace {
 constexpr int SEARCHEDLIST_CAPACITY = 32;
 using SearchedList                  = ValueList<Move, SEARCHEDLIST_CAPACITY>;
 
+int king_file_exposure_scale(const Position& pos, Color us) {
+    const Square kingSq  = pos.square<KING>(us);
+    const int    forward = us == WHITE ? 8 : -8;
+
+    bool friendlyShield = false;
+    bool enemyPressure  = false;
+
+    for (int idx = int(kingSq) + forward; idx >= 0 && idx < 64; idx += forward)
+    {
+        const Square sq = Square(idx);
+        const Piece  pc = pos.piece_on(sq);
+
+        if (pc == NO_PIECE)
+            continue;
+
+        if (color_of(pc) == us)
+        {
+            if (type_of(pc) == PAWN)
+                friendlyShield = true;
+            break;
+        }
+
+        if (type_of(pc) == ROOK || type_of(pc) == QUEEN)
+            enemyPressure = true;
+        break;
+    }
+
+    const Bitboard enemyRooksQueens = pos.pieces(~us, ROOK, QUEEN);
+
+    const auto check_pressure = [&](Square target) {
+        if (!is_ok(target))
+            return false;
+        return bool(pos.attackers_to(target, pos.pieces()) & enemyRooksQueens);
+    };
+
+    enemyPressure = enemyPressure || check_pressure(Square(int(kingSq) + forward))
+                    || check_pressure(Square(int(kingSq) + 2 * forward));
+
+    if (enemyPressure)
+        return friendlyShield ? 112 : 96;
+
+    return friendlyShield ? 140 : 128;
+}
+
 // (*Scalers):
 // The values with Scaler asterisks have proven non-linear scaling.
 // They are optimized to time controls of 180 + 1.8 and longer,
 // so changing them or adding conditions that are similar requires
 // tests at these types of time controls.
 
-int correction_value(const Worker& w, const Position& pos, const Stack* const ss) {
+int correction_value(const Worker& w,
+                     const Position& pos,
+                     const Stack* const ss,
+                     Depth            depth) {
     const Color us    = pos.side_to_move();
     const auto  m     = (ss - 1)->currentMove;
     const auto  pcv   = w.pawnCorrectionHistory[pawn_correction_history_index(pos)][us];
@@ -85,7 +133,22 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
       m.is_ok() ? (*(ss - 2)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
                  : 0;
 
-    return 8867 * pcv + 8136 * micv + 10757 * (wnpcv + bnpcv) + 7232 * cntcv;
+    const int depthLeft     = std::max(int(depth), 0);
+    const int depthScale    = 128 - std::min(48, depthLeft * 4);
+    const int experienceAim = w.experienceAvailable ? 96 : 128;
+    const int blendedScale  = (depthScale * 3 + experienceAim) / 4;
+    const int exposureScale = king_file_exposure_scale(pos, us);
+
+    const int staticScale = std::clamp(blendedScale * exposureScale / 128, 72, 160);
+    const int continuationScale =
+      std::clamp(staticScale + 16, std::max(96, staticScale), 168);
+
+    const int64_t staticContribution =
+      8867LL * pcv + 8136LL * micv + 10757LL * (wnpcv + bnpcv);
+    const int64_t continuationContribution = 7232LL * cntcv;
+
+    return int((staticContribution * staticScale + continuationContribution * continuationScale)
+               / 128);
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -106,16 +169,20 @@ void update_correction_history(const Position& pos,
 
     static constexpr int nonPawnWeight = 165;
 
-    workerThread.pawnCorrectionHistory[pawn_correction_history_index(pos)][us] << bonus;
-    workerThread.minorPieceCorrectionHistory[minor_piece_index(pos)][us] << bonus * 153 / 128;
+    const int exposureScale = king_file_exposure_scale(pos, us);
+    const int scaledBonus = (bonus * exposureScale + (bonus >= 0 ? 64 : -64)) / 128;
+
+    workerThread.pawnCorrectionHistory[pawn_correction_history_index(pos)][us] << scaledBonus;
+    workerThread.minorPieceCorrectionHistory[minor_piece_index(pos)][us]
+      << scaledBonus * 153 / 128;
     workerThread.nonPawnCorrectionHistory[non_pawn_index<WHITE>(pos)][WHITE][us]
-      << bonus * nonPawnWeight / 128;
+      << scaledBonus * nonPawnWeight / 128;
     workerThread.nonPawnCorrectionHistory[non_pawn_index<BLACK>(pos)][BLACK][us]
-      << bonus * nonPawnWeight / 128;
+      << scaledBonus * nonPawnWeight / 128;
 
     if (m.is_ok())
         (*(ss - 2)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
-          << bonus * 153 / 128;
+          << scaledBonus * 153 / 128;
 }
 
 // Add a small random component to draw evaluations to avoid 3-fold blindness
@@ -192,8 +259,10 @@ void Search::Worker::start_searching() {
                             main_manager()->originalTimeAdjust);
     tt.new_search();
 
-    Move preferredMove = Move::none();
-    Move bookMove      = Move::none();
+    Move preferredMove   = Move::none();
+    Move bookMove        = Move::none();
+    bool experienceBook  = false;
+    bool experiencePrior = false;
 
     if (rootMoves.empty())
     {
@@ -208,18 +277,28 @@ void Search::Worker::start_searching() {
             if ((bool) options["Experience Enabled"])
             {
                 if ((bool) options["Experience Prior"])
+                {
                     preferredMove =
                       experience.probe(rootPos, (int) options["Experience Width"],
                                        (int) options["Experience Eval Weight"],
                                        (int) options["Experience Min Depth"],
                                        (int) options["Experience Max Moves"]);
+                    experiencePrior = preferredMove != Move::none();
+                }
 
                 if ((bool) options["Experience Book"])
-                    bookMove = experience.probe(rootPos,
-                                               (int) options["Experience Book Max Moves"],
-                                               (int) options["Experience Eval Weight"],
-                                               (int) options["Experience Book Min Depth"],
-                                               (int) options["Experience Book Max Moves"]);
+                {
+                    Move candidate = experience.probe(rootPos,
+                                                     (int) options["Experience Book Max Moves"],
+                                                     (int) options["Experience Eval Weight"],
+                                                     (int) options["Experience Book Min Depth"],
+                                                     (int) options["Experience Book Max Moves"]);
+                    if (candidate != Move::none())
+                    {
+                        bookMove       = candidate;
+                        experienceBook = true;
+                    }
+                }
             }
 
             if ((bool) options["Book1"]
@@ -233,6 +312,20 @@ void Search::Worker::start_searching() {
                 bookMove = polybook[1].probe(rootPos, (bool) options["Book2 BestBookMove"],
                                              (int) options["Book2 Width"]);
         }
+
+        const bool experienceGuidance = experiencePrior || experienceBook;
+
+        experienceAvailable = experienceGuidance;
+        for (size_t idx = 1; idx < threads.size(); ++idx)
+        {
+            auto threadIt  = std::next(threads.begin(), idx);
+            auto workerPtr = (*threadIt)->worker.get();
+            threads.run_on_thread(idx, [workerPtr, experienceGuidance]() {
+                workerPtr->experienceAvailable = experienceGuidance;
+            });
+        }
+        for (size_t idx = 1; idx < threads.size(); ++idx)
+            threads.wait_on_thread(idx);
 
         if (preferredMove != Move::none()
             && std::find(rootMoves.begin(), rootMoves.end(), preferredMove) != rootMoves.end())
@@ -379,6 +472,9 @@ void Search::Worker::iterative_deepening() {
     while (++rootDepth < MAX_PLY && !threads.stop
            && !(limits.depth && mainThread && rootDepth > limits.depth))
     {
+        if ((iterIdx++ & 3) == 0)
+            ensure_network_replicated();
+
         // Age out PV variability metric
         if (mainThread)
             totBestMoveChanges /= 2;
@@ -666,6 +762,8 @@ void Search::Worker::clear() {
         reductions[i] = int(2782 / 128.0 * std::log(i));
 
     refreshTable.clear(networks[numaAccessToken]);
+
+    experienceAvailable = false;
 }
 
 
@@ -871,7 +969,7 @@ Value Search::Worker::search(
 
     // Step 6. Static evaluation of the position
     Value      unadjustedStaticEval = VALUE_NONE;
-    const auto correctionValue      = correction_value(*this, pos, ss);
+    const auto correctionValue      = correction_value(*this, pos, ss, depth);
     if (ss->inCheck)
     {
         // Skip early pruning when in check
@@ -1637,7 +1735,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         bestValue = futilityBase = -VALUE_INFINITE;
     else
     {
-        const auto correctionValue = correction_value(*this, pos, ss);
+        const auto correctionValue = correction_value(*this, pos, ss, depth);
 
         if (ss->ttHit)
         {
