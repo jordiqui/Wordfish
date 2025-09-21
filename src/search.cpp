@@ -135,7 +135,7 @@ int correction_value(const Worker& w,
 
     const int depthLeft     = std::max(int(depth), 0);
     const int depthScale    = 128 - std::min(48, depthLeft * 4);
-    const int experienceAim = w.experienceAvailable ? 96 : 128;
+    const int experienceAim = w.experience_guidance_available() ? 96 : 128;
     const int blendedScale  = (depthScale * 3 + experienceAim) / 4;
     const int exposureScale = king_file_exposure_scale(pos, us);
 
@@ -243,6 +243,8 @@ void Search::Worker::ensure_network_replicated() {
 
     refreshTable.clear(nets);
 }
+
+bool Search::Worker::experience_guidance_available() const { return experienceAvailable; }
 
 void Search::Worker::start_searching() {
 
@@ -1735,7 +1737,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         bestValue = futilityBase = -VALUE_INFINITE;
     else
     {
-        const auto correctionValue = correction_value(*this, pos, ss, depth);
+        const auto correctionValue = correction_value(*this, pos, ss, Depth(0));
 
         if (ss->ttHit)
         {
