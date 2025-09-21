@@ -41,13 +41,7 @@
 #include "experience.h"
 #include "types.h"
 #include "ucioption.h"
-
-#ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish 2.42-190825"
-#endif
-#ifndef ENGINE_BUILD_DATE
-    #define ENGINE_BUILD_DATE ""
-#endif
+#include "version.h"
 
 namespace Stockfish {
 
@@ -127,7 +121,7 @@ void UCIEngine::loop() {
             // Force a stable, explicit UCI name so GUIs show "Wordfish 1.0"
             sync_cout_start();
             std::cout
-              << "id name " << ENGINE_NAME << "\n"
+              << "id name " << Version::string() << "\n"
               << "id author Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
               << "\n"
               << engine.get_options() << std::endl;
@@ -463,7 +457,7 @@ void UCIEngine::benchmark(std::istream& args) {
     // clang-format off
 
     std::cerr << "==========================="
-              << "\nVersion                    :   << ENGINE_NAME"
+              << "\nVersion                    : " << Version::string()
               << compiler_info()
               << "Large pages                  : " << (has_large_pages() ? "yes" : "no")
               << "\nUser invocation            : " << BenchmarkCommand << " "

@@ -36,12 +36,7 @@
 #include <string_view>
 
 #include "types.h"
-#ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish 2.42-190825"
-#endif
-#ifndef ENGINE_BUILD_DATE
-    #define ENGINE_BUILD_DATE ""
-#endif
+#include "version.h"
 
 namespace Stockfish {
 
@@ -119,7 +114,7 @@ class Logger {
 
 
 // Returns the full name of the current Wordfish version.
-std::string engine_version_info() { return std::string(ENGINE_NAME); }
+std::string engine_version_info() { return Version::string(); }
 
 // Update author information
 std::string engine_info(bool to_uci) {

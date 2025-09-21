@@ -23,11 +23,7 @@
 #include "tune.h"
 #include "bitboard.h"
 #include "position.h"
-
-#ifndef ENGINE_NAME
-    // override at build time with:  -DENGINE_NAME="\"Wordfish 2.42-190825\""
-    #define ENGINE_NAME "Wordfish 2.42-190825"
-#endif
+#include "version.h"
 
 using namespace Stockfish;
 
@@ -42,7 +38,7 @@ int main(int argc, char* argv[]) {
         // Clear, consistent banner (many GUIs echo this to their logs).
         // Send banner to stderr so it doesn't interfere with UCI handshake on
         // stdout when run from a terminal.
-        std::cerr << ENGINE_NAME
+        std::cerr << Stockfish::Version::string()
                   << " by Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
                   << std::endl;
 

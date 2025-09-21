@@ -19,14 +19,6 @@
 */
 
 #include "ucioption.h"
-// --- Engine identity (fallbacks; Makefile can override) ---
-#ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish 2.42-190825"
-#endif
-#ifndef ENGINE_BUILD_DATE
-    #define ENGINE_BUILD_DATE ""  // build identifier
-#endif
-
 
 #include <algorithm>
 #include <cassert>
@@ -38,6 +30,7 @@
 #include <charconv>
 
 #include "misc.h"
+#include "version.h"
 
 namespace Stockfish {
 
