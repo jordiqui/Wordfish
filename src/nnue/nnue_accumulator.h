@@ -22,7 +22,6 @@
 #define NNUE_ACCUMULATOR_H_INCLUDED
 
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -87,12 +86,9 @@ struct AccumulatorCaches {
 
         template<typename Network>
         void clear(const Network& network) {
-            auto weights = network.weights_handle();
-            assert(weights);
-
             for (auto& entries1D : entries)
                 for (auto& entry : entries1D)
-                    entry.clear(weights->featureTransformer->biases);
+                    entry.clear(network.featureTransformer->biases);
         }
 
         std::array<Entry, COLOR_NB>& operator[](Square sq) { return entries[sq]; }
@@ -104,13 +100,10 @@ struct AccumulatorCaches {
     void clear(const Networks& networks) {
         big.clear(networks.big);
         small.clear(networks.small);
-        falcon.clear(networks.falcon);
     }
 
     Cache<TransformedFeatureDimensionsBig>   big;
     Cache<TransformedFeatureDimensionsSmall> small;
-    // Falcon network uses the small-network dimensions
-    Cache<TransformedFeatureDimensionsSmall> falcon;
 };
 
 

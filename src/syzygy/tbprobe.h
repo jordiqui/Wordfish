@@ -63,8 +63,7 @@ enum ProbeState {
 extern int MaxCardinality;
 
 
-void     init(const std::string& paths, bool premap = false);
-void     release();
+void     init(const std::string& paths);
 WDLScore probe_wdl(Position& pos, ProbeState* result);
 int      probe_dtz(Position& pos, ProbeState* result);
 bool     root_probe(Position& pos, Search::RootMoves& rootMoves, bool rule50, bool rankDTZ);

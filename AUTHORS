@@ -1,7 +1,3 @@
-# Wordfish authors
-Jorge Ruiz Centelles (JRCentelles)
-ChatGPT (OpenAI)
-
 # Founders of the Stockfish project and Fishtest infrastructure
 Tord Romstad (romstad)
 Marco Costalba (mcostalba)
@@ -36,6 +32,7 @@ Antoine Champion (antoinechampion)
 Aram Tumanian (atumanian)
 Arjun Temurnikar
 Aron Petkovski (fury)
+Arseniy Surkov (codedeliveryservice)
 Artem Solopiy (EntityFX)
 Auguste Pop
 Balazs Szilagyi
@@ -137,6 +134,7 @@ Justin Blanchard (UncombedCoconut)
 Kelly Wilson
 Ken Takusagawa
 Kenneth Lee (kennethlee33)
+kevlu8
 Kian E (KJE-98)
 kinderchocolate
 Kiran Panditrao (Krgp)
@@ -268,3 +266,6 @@ zz4032
 # an amazing and essential framework for Stockfish development!
 #
 # https://github.com/official-stockfish/fishtest/blob/master/AUTHORS
+
+# Wordfish distribution maintainers
+Jorge Ruiz Centelles (jordiqui)
