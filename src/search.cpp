@@ -867,6 +867,11 @@ Value Search::Worker::search(
     // Need further processing of the saved data
     ss->ttHit    = ttHit;
     ttData.move  = rootNode ? rootMoves[pvIdx].pv[0] : ttHit ? ttData.move : Move::none();
+    if (ttData.move)
+    {
+        if (!pos.pseudo_legal(ttData.move) || !pos.legal(ttData.move))
+            ttData.move = Move::none();
+    }
     ttData.value = ttHit ? value_from_tt(ttData.value, ss->ply, pos.rule50_count()) : VALUE_NONE;
     ss->ttPv     = excludedMove ? ss->ttPv : PvNode || (ttHit && ttData.is_pv);
     ttCapture    = ttData.move && pos.capture_stage(ttData.move);
@@ -1728,6 +1733,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // Need further processing of the saved data
     ss->ttHit    = ttHit;
     ttData.move  = ttHit ? ttData.move : Move::none();
+    if (ttData.move)
+    {
+        if (!pos.pseudo_legal(ttData.move) || !pos.legal(ttData.move))
+            ttData.move = Move::none();
+    }
     ttData.value = ttHit ? value_from_tt(ttData.value, ss->ply, pos.rule50_count()) : VALUE_NONE;
     pvHit        = ttHit && ttData.is_pv;
 
