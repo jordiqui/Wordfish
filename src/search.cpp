@@ -787,6 +787,7 @@ Value Search::Worker::search(
 
     // Limit the depth if extensions made it too large
     depth = std::min(depth, MAX_PLY - 1);
+    const Depth originalDepth = depth;
 
     // Check if we have an upcoming move that draws by repetition
     if (!rootNode && alpha < VALUE_DRAW && pos.upcoming_repetition(ss->ply))
@@ -886,7 +887,7 @@ Value Search::Worker::search(
             // Bonus for a quiet ttMove that fails high
             if (!ttCapture)
                 update_quiet_histories(pos, ss, *this, ttData.move,
-                                       std::min(127 * depth - 74, 1063));
+                                       std::min(127 * originalDepth - 74, 1063));
 
             // Extra penalty for early quiet moves of the previous ply
             if (prevSq != SQ_NONE && (ss - 1)->moveCount <= 3 && !priorCapture)
@@ -952,7 +953,7 @@ Value Search::Worker::search(
                 if (b == BOUND_EXACT || (b == BOUND_LOWER ? value >= beta : value <= alpha))
                 {
                     ttWriter.write(posKey, value_to_tt(value, ss->ply), ss->ttPv, b,
-                                   std::min(MAX_PLY - 1, depth + 6), Move::none(), VALUE_NONE,
+                                   std::min(MAX_PLY - 1, originalDepth + 6), Move::none(), VALUE_NONE,
                                    tt.generation());
 
                     return value;
@@ -1573,6 +1574,8 @@ moves_loop:  // When in check, search starts here
         }
     }
 
+    depth = originalDepth;
+
     // Step 21. Check for mate and stalemate
     // All legal moves have been searched and if there are no legal moves, it
     // must be a mate or a stalemate. If we are in a singular extension search then
@@ -1582,7 +1585,7 @@ moves_loop:  // When in check, search starts here
 
     // Adjust best value for fail high cases
     if (bestValue >= beta && !is_decisive(bestValue) && !is_decisive(alpha))
-        bestValue = (bestValue * depth + beta) / (depth + 1);
+        bestValue = (bestValue * originalDepth + beta) / (originalDepth + 1);
 
     if (!moveCount)
         bestValue = excludedMove ? alpha : ss->inCheck ? mated_in(ss->ply) : VALUE_DRAW;
@@ -1591,7 +1594,8 @@ moves_loop:  // When in check, search starts here
     // we update the stats of searched moves.
     else if (bestMove)
     {
-        update_all_stats(pos, ss, *this, bestMove, prevSq, quietsSearched, capturesSearched, depth,
+        update_all_stats(pos, ss, *this, bestMove, prevSq, quietsSearched, capturesSearched,
+                         originalDepth,
                          ttData.move, moveCount);
         if (!PvNode)
             ttMoveHistory << (bestMove == ttData.move ? 811 : -848);
@@ -1602,14 +1606,14 @@ moves_loop:  // When in check, search starts here
     {
         int bonusScale = -215;
         bonusScale += std::min(-(ss - 1)->statScore / 103, 337);
-        bonusScale += std::min(64 * depth, 552);
+        bonusScale += std::min(64 * originalDepth, 552);
         bonusScale += 177 * ((ss - 1)->moveCount > 8);
         bonusScale += 141 * (!ss->inCheck && bestValue <= ss->staticEval - 94);
         bonusScale += 141 * (!(ss - 1)->inCheck && bestValue <= -(ss - 1)->staticEval - 76);
 
         bonusScale = std::max(bonusScale, 0);
 
-        const int scaledBonus = std::min(155 * depth - 88, 1416) * bonusScale;
+        const int scaledBonus = std::min(155 * originalDepth - 88, 1416) * bonusScale;
 
         update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq,
                                       scaledBonus * 397 / 32768);
@@ -1644,15 +1648,16 @@ moves_loop:  // When in check, search starts here
                        bestValue >= beta    ? BOUND_LOWER
                        : PvNode && bestMove ? BOUND_EXACT
                                             : BOUND_UPPER,
-                       moveCount != 0 ? depth : std::min(MAX_PLY - 1, depth + 6), bestMove,
-                       unadjustedStaticEval, tt.generation());
+                       moveCount != 0 ? originalDepth
+                                      : std::min(MAX_PLY - 1, originalDepth + 6),
+                       bestMove, unadjustedStaticEval, tt.generation());
 
     // Adjust correction history
     if (!ss->inCheck && !(bestMove && pos.capture(bestMove))
         && ((bestValue < ss->staticEval && bestValue < beta)  // negative correction & no fail high
             || (bestValue > ss->staticEval && bestMove)))     // positive correction & no fail low
     {
-        auto bonus = std::clamp(int(bestValue - ss->staticEval) * depth / 8,
+        auto bonus = std::clamp(int(bestValue - ss->staticEval) * originalDepth / 8,
                                 -CORRECTION_HISTORY_LIMIT / 4, CORRECTION_HISTORY_LIMIT / 4);
         update_correction_history(pos, ss, *this, bonus);
     }
