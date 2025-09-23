@@ -18,7 +18,6 @@
 
 #include "network.h"
 
-#include <cassert>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -49,13 +48,6 @@
 #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUEBig, EvalFileDefaultNameBig);
 INCBIN(EmbeddedNNUESmall, EvalFileDefaultNameSmall);
-#  if __has_include(FalconFileDefaultName)
-INCBIN(EmbeddedNNUEFalcon, FalconFileDefaultName);
-#  else
-const unsigned char        gEmbeddedNNUEFalconData[1] = {0x0};
-const unsigned char* const gEmbeddedNNUEFalconEnd     = &gEmbeddedNNUEFalconData[1];
-const unsigned int         gEmbeddedNNUEFalconSize    = 1;
-#  endif
 #else
 const unsigned char        gEmbeddedNNUEBigData[1]   = {0x0};
 const unsigned char* const gEmbeddedNNUEBigEnd       = &gEmbeddedNNUEBigData[1];
@@ -63,9 +55,6 @@ const unsigned int         gEmbeddedNNUEBigSize      = 1;
 const unsigned char        gEmbeddedNNUESmallData[1] = {0x0};
 const unsigned char* const gEmbeddedNNUESmallEnd     = &gEmbeddedNNUESmallData[1];
 const unsigned int         gEmbeddedNNUESmallSize    = 1;
-const unsigned char        gEmbeddedNNUEFalconData[1] = {0x0};
-const unsigned char* const gEmbeddedNNUEFalconEnd     = &gEmbeddedNNUEFalconData[1];
-const unsigned int         gEmbeddedNNUEFalconSize    = 1;
 #endif
 
 namespace {
@@ -87,11 +76,8 @@ using namespace Stockfish::Eval::NNUE;
 EmbeddedNNUE get_embedded(EmbeddedNNUEType type) {
     if (type == EmbeddedNNUEType::BIG)
         return EmbeddedNNUE(gEmbeddedNNUEBigData, gEmbeddedNNUEBigEnd, gEmbeddedNNUEBigSize);
-    else if (type == EmbeddedNNUEType::SMALL)
-        return EmbeddedNNUE(gEmbeddedNNUESmallData, gEmbeddedNNUESmallEnd, gEmbeddedNNUESmallSize);
     else
-        return EmbeddedNNUE(
-          gEmbeddedNNUEFalconData, gEmbeddedNNUEFalconEnd, gEmbeddedNNUEFalconSize);
+        return EmbeddedNNUE(gEmbeddedNNUESmallData, gEmbeddedNNUESmallEnd, gEmbeddedNNUESmallSize);
 }
 
 }
@@ -124,26 +110,38 @@ bool write_parameters(std::ostream& stream, T& reference) {
 }  // namespace Detail
 
 template<typename Arch, typename Transformer>
-Network<Arch, Transformer>::Weights::Weights() :
-    featureTransformer(make_unique_large_page<Transformer>()),
-    network(make_unique_aligned<Arch[]>(LayerStacks)) {}
-
-template<typename Arch, typename Transformer>
 Network<Arch, Transformer>::Network(const Network<Arch, Transformer>& other) :
-    weights(std::atomic_load(&other.weights)),
     evalFile(other.evalFile),
-    embeddedType(other.embeddedType) {}
+    embeddedType(other.embeddedType) {
+
+    if (other.featureTransformer)
+        featureTransformer = make_unique_large_page<Transformer>(*other.featureTransformer);
+
+    network = make_unique_aligned<Arch[]>(LayerStacks);
+
+    if (!other.network)
+        return;
+
+    for (std::size_t i = 0; i < LayerStacks; ++i)
+        network[i] = other.network[i];
+}
 
 template<typename Arch, typename Transformer>
 Network<Arch, Transformer>&
 Network<Arch, Transformer>::operator=(const Network<Arch, Transformer>& other) {
-    if (this == &other)
-        return *this;
-
     evalFile     = other.evalFile;
     embeddedType = other.embeddedType;
 
-    std::atomic_store(&weights, std::atomic_load(&other.weights));
+    if (other.featureTransformer)
+        featureTransformer = make_unique_large_page<Transformer>(*other.featureTransformer);
+
+    network = make_unique_aligned<Arch[]>(LayerStacks);
+
+    if (!other.network)
+        return *this;
+
+    for (std::size_t i = 0; i < LayerStacks; ++i)
+        network[i] = other.network[i];
 
     return *this;
 }
@@ -200,28 +198,12 @@ bool Network<Arch, Transformer>::save(const std::optional<std::string>& filename
     }
 
     std::ofstream stream(actualFilename, std::ios_base::binary);
-    auto          storage = weights_handle();
-
-    if (!storage)
-    {
-        msg = "Failed to export a net";
-        sync_cout << msg << sync_endl;
-        return false;
-    }
-
-    bool saved = save(stream, evalFile.current, evalFile.netDescription, *storage);
+    bool          saved = save(stream, evalFile.current, evalFile.netDescription);
 
     msg = saved ? "Network saved successfully to " + actualFilename : "Failed to export a net";
 
     sync_cout << msg << sync_endl;
     return saved;
-}
-
-
-template<typename Arch, typename Transformer>
-typename Network<Arch, Transformer>::WeightsPtr
-Network<Arch, Transformer>::weights_handle() const {
-    return std::atomic_load(&weights);
 }
 
 
@@ -238,17 +220,10 @@ Network<Arch, Transformer>::evaluate(const Position&                         pos
 
     ASSERT_ALIGNED(transformedFeatures, alignment);
 
-    auto storage = weights_handle();
-    if (!storage)
-    {
-        assert(storage && "NNUE weights not initialized");
-        return {Value(0), Value(0)};
-    }
-
     const int  bucket = (pos.count<ALL_PIECES>() - 1) / 4;
-    const auto psqt = storage->featureTransformer->transform(pos, accumulatorStack, cache,
-                                                             transformedFeatures, bucket);
-    const auto positional = storage->network[bucket].propagate(transformedFeatures);
+    const auto psqt =
+      featureTransformer->transform(pos, accumulatorStack, cache, transformedFeatures, bucket);
+    const auto positional = network[bucket].propagate(transformedFeatures);
     return {static_cast<Value>(psqt / OutputScale), static_cast<Value>(positional / OutputScale)};
 }
 
@@ -284,16 +259,12 @@ void Network<Arch, Transformer>::verify(std::string                             
 
     if (f)
     {
-        auto storage = weights_handle();
-        if (!storage)
-            return;
-
-        size_t size = sizeof(*storage->featureTransformer) + sizeof(Arch) * LayerStacks;
+        size_t size = sizeof(*featureTransformer) + sizeof(Arch) * LayerStacks;
         f("NNUE evaluation using " + evalfilePath + " (" + std::to_string(size / (1024 * 1024))
-          + "MiB, (" + std::to_string(storage->featureTransformer->InputDimensions) + ", "
-          + std::to_string(storage->network[0].TransformedFeatureDimensions) + ", "
-          + std::to_string(storage->network[0].FC_0_OUTPUTS) + ", "
-          + std::to_string(storage->network[0].FC_1_OUTPUTS) + ", 1))");
+          + "MiB, (" + std::to_string(featureTransformer->InputDimensions) + ", "
+          + std::to_string(network[0].TransformedFeatureDimensions) + ", "
+          + std::to_string(network[0].FC_0_OUTPUTS) + ", " + std::to_string(network[0].FC_1_OUTPUTS)
+          + ", 1))");
     }
 }
 
@@ -313,17 +284,11 @@ Network<Arch, Transformer>::trace_evaluate(const Position&                      
 
     NnueEvalTrace t{};
     t.correctBucket = (pos.count<ALL_PIECES>() - 1) / 4;
-    auto storage    = weights_handle();
-    if (!storage)
-    {
-        assert(storage && "NNUE weights not initialized");
-        return t;
-    }
     for (IndexType bucket = 0; bucket < LayerStacks; ++bucket)
     {
-        const auto materialist = storage->featureTransformer->transform(pos, accumulatorStack, cache,
-                                                                        transformedFeatures, bucket);
-        const auto positional = storage->network[bucket].propagate(transformedFeatures);
+        const auto materialist =
+          featureTransformer->transform(pos, accumulatorStack, cache, transformedFeatures, bucket);
+        const auto positional = network[bucket].propagate(transformedFeatures);
 
         t.psqt[bucket]       = static_cast<Value>(materialist / OutputScale);
         t.positional[bucket] = static_cast<Value>(positional / OutputScale);
@@ -375,36 +340,29 @@ void Network<Arch, Transformer>::load_internal() {
 
 
 template<typename Arch, typename Transformer>
-typename Network<Arch, Transformer>::WeightsPtr
-Network<Arch, Transformer>::allocate_weights() const {
-    return std::make_shared<Weights>();
+void Network<Arch, Transformer>::initialize() {
+    featureTransformer = make_unique_large_page<Transformer>();
+    network            = make_unique_aligned<Arch[]>(LayerStacks);
 }
 
 
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::save(std::ostream&      stream,
                                       const std::string& name,
-                                      const std::string& netDescription,
-                                      const Weights&     storage) const {
+                                      const std::string& netDescription) const {
     if (name.empty() || name == "None")
         return false;
 
-    return write_parameters(stream, netDescription, storage);
+    return write_parameters(stream, netDescription);
 }
 
 
 template<typename Arch, typename Transformer>
 std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream) {
+    initialize();
     std::string description;
 
-    auto newWeights = allocate_weights();
-
-    if (!read_parameters(stream, description, *newWeights))
-        return std::nullopt;
-
-    std::atomic_store(&weights, std::move(newWeights));
-
-    return std::make_optional(description);
+    return read_parameters(stream, description) ? std::make_optional(description) : std::nullopt;
 }
 
 
@@ -441,18 +399,17 @@ bool Network<Arch, Transformer>::write_header(std::ostream&      stream,
 
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
-                                                 std::string&  netDescription,
-                                                 Weights&      storage) const {
+                                                 std::string&  netDescription) const {
     std::uint32_t hashValue;
     if (!read_header(stream, &hashValue, &netDescription))
         return false;
     if (hashValue != Network::hash)
         return false;
-    if (!Detail::read_parameters(stream, *storage.featureTransformer))
+    if (!Detail::read_parameters(stream, *featureTransformer))
         return false;
     for (std::size_t i = 0; i < LayerStacks; ++i)
     {
-        if (!Detail::read_parameters(stream, storage.network[i]))
+        if (!Detail::read_parameters(stream, network[i]))
             return false;
     }
     return stream && stream.peek() == std::ios::traits_type::eof();
@@ -461,15 +418,14 @@ bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
 
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::write_parameters(std::ostream&      stream,
-                                                  const std::string& netDescription,
-                                                  const Weights&     storage) const {
+                                                  const std::string& netDescription) const {
     if (!write_header(stream, Network::hash, netDescription))
         return false;
-    if (!Detail::write_parameters(stream, *storage.featureTransformer))
+    if (!Detail::write_parameters(stream, *featureTransformer))
         return false;
     for (std::size_t i = 0; i < LayerStacks; ++i)
     {
-        if (!Detail::write_parameters(stream, storage.network[i]))
+        if (!Detail::write_parameters(stream, network[i]))
             return false;
     }
     return bool(stream);
