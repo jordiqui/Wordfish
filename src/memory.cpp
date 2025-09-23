@@ -75,9 +75,8 @@ void* std_aligned_alloc(size_t alignment, size_t size) {
     return aligned_alloc(alignment, size);
 #elif defined(POSIXALIGNEDALLOC)
     void* mem = nullptr;
-    int err = posix_memalign(&mem, alignment, size);
-    if (err != 0)
-        return nullptr;
+    posix_memalign(&mem, alignment, size);
+    return mem;
 #elif defined(_WIN32) && !defined(_M_ARM) && !defined(_M_ARM64)
     return _mm_malloc(size, alignment);
 #elif defined(_WIN32)
@@ -121,37 +120,21 @@ static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize
 
     // Dynamically link OpenProcessToken, LookupPrivilegeValue and AdjustTokenPrivileges
 
-    struct Advapi32Guard {
-        HMODULE hModule{};
-        bool    loaded{};
+    HMODULE hAdvapi32 = GetModuleHandle(TEXT("advapi32.dll"));
 
-        Advapi32Guard() {
-            hModule = GetModuleHandle(TEXT("advapi32.dll"));
-            if (!hModule) {
-                hModule = LoadLibrary(TEXT("advapi32.dll"));
-                loaded  = (hModule != nullptr);
-            }
-        }
-
-        ~Advapi32Guard() {
-            if (loaded && hModule)
-                FreeLibrary(hModule);
-        }
-    } advapi32;
-
-    if (!advapi32.hModule)
-        return nullptr;
+    if (!hAdvapi32)
+        hAdvapi32 = LoadLibrary(TEXT("advapi32.dll"));
 
     auto OpenProcessToken_f =
-      OpenProcessToken_t((void (*)()) GetProcAddress(advapi32.hModule, "OpenProcessToken"));
+      OpenProcessToken_t((void (*)()) GetProcAddress(hAdvapi32, "OpenProcessToken"));
     if (!OpenProcessToken_f)
         return nullptr;
     auto LookupPrivilegeValueA_f =
-      LookupPrivilegeValueA_t((void (*)()) GetProcAddress(advapi32.hModule, "LookupPrivilegeValueA"));
+      LookupPrivilegeValueA_t((void (*)()) GetProcAddress(hAdvapi32, "LookupPrivilegeValueA"));
     if (!LookupPrivilegeValueA_f)
         return nullptr;
     auto AdjustTokenPrivileges_f =
-      AdjustTokenPrivileges_t((void (*)()) GetProcAddress(advapi32.hModule, "AdjustTokenPrivileges"));
+      AdjustTokenPrivileges_t((void (*)()) GetProcAddress(hAdvapi32, "AdjustTokenPrivileges"));
     if (!AdjustTokenPrivileges_f)
         return nullptr;
 
