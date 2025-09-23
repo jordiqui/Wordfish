@@ -278,7 +278,6 @@ class Worker {
     bool is_mainthread() const { return threadIdx == 0; }
 
     void ensure_network_replicated();
-    bool experience_guidance_available() const;
 
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;
@@ -359,11 +358,6 @@ class Worker {
     // Used by NNUE
     Eval::NNUE::AccumulatorStack  accumulatorStack;
     Eval::NNUE::AccumulatorCaches refreshTable;
-    Eval::NNUE::NetworkBig::WeightsPtr    bigWeightsHandle;
-    Eval::NNUE::NetworkSmall::WeightsPtr  smallWeightsHandle;
-    Eval::NNUE::NetworkFalcon::WeightsPtr falconWeightsHandle;
-
-    bool experienceAvailable = false;
 
     friend class Stockfish::ThreadPool;
     friend class SearchManager;
