@@ -30,6 +30,7 @@
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <sys/stat.h>
 #include <type_traits>
@@ -56,9 +57,17 @@
     #include <windows.h>
 #endif
 
+#if defined(_MSC_VER)
+    #include <xmmintrin.h>  // For _mm_prefetch
+#endif
+
 using namespace Stockfish::Tablebases;
 
 int Stockfish::Tablebases::MaxCardinality;
+
+namespace {
+std::atomic<int> tbReferenceCount{0};
+}
 
 namespace Stockfish {
 
@@ -356,12 +365,14 @@ struct TBTable {
     void*            baseAddress;
     uint8_t*         map;
     uint64_t         mapping;
+    std::mutex       mapMutex;
     Key              key;
     Key              key2;
     int              pieceCount;
     bool             hasPawns;
     bool             hasUniquePieces;
     uint8_t          pawnCount[2];     // [Lead color / other color]
+    std::string      code;              // Piece placement code
     PairsData        items[Sides][4];  // [wtm / btm][FILE_A..FILE_D or 0]
 
     PairsData* get(int stm, int f) { return &items[stm % Sides][hasPawns ? f : 0]; }
@@ -379,13 +390,14 @@ struct TBTable {
 };
 
 template<>
-TBTable<WDL>::TBTable(const std::string& code) :
+TBTable<WDL>::TBTable(const std::string& codeStr) :
     TBTable() {
 
+    this->code = codeStr;
     StateInfo st;
     Position  pos;
 
-    key        = pos.set(code, WHITE, &st).material_key();
+    key        = pos.set(codeStr, WHITE, &st).material_key();
     pieceCount = pos.count<ALL_PIECES>();
     hasPawns   = pos.pieces(PAWN);
 
@@ -403,7 +415,7 @@ TBTable<WDL>::TBTable(const std::string& code) :
     pawnCount[0] = pos.count<PAWN>(c ? WHITE : BLACK);
     pawnCount[1] = pos.count<PAWN>(c ? BLACK : WHITE);
 
-    key2 = pos.set(code, BLACK, &st).material_key();
+    key2 = pos.set(codeStr, BLACK, &st).material_key();
 }
 
 template<>
@@ -411,6 +423,7 @@ TBTable<DTZ>::TBTable(const TBTable<WDL>& wdl) :
     TBTable() {
 
     // Use the corresponding WDL table to avoid recalculating all from scratch
+    code            = wdl.code;
     key             = wdl.key;
     key2            = wdl.key2;
     pieceCount      = wdl.pieceCount;
@@ -498,6 +511,7 @@ class TBTables {
     }
 
     void add(const std::vector<PieceType>& pieces);
+    void premap();
 };
 
 TBTables TBTables;
@@ -599,6 +613,16 @@ int decompress_pairs(PairsData* d, uint64_t idx) {
 
     // Finally, we find the start address of our block of canonical Huffman symbols
     uint32_t* ptr = (uint32_t*) (d->data + (uint64_t(block) * d->sizeofBlock));
+
+#ifndef NO_PREFETCH
+    #if defined(_MSC_VER)
+    _mm_prefetch(reinterpret_cast<const char*>(ptr), _MM_HINT_T0);
+    _mm_prefetch(reinterpret_cast<const char*>(ptr) + d->sizeofBlock, _MM_HINT_T0);
+    #else
+    __builtin_prefetch(ptr);
+    __builtin_prefetch(reinterpret_cast<const char*>(ptr) + d->sizeofBlock);
+    #endif
+#endif
 
     // Read the first 64 bits in our block, this is a (truncated) sequence of
     // unknown number of symbols of unknown length but we know the first one
@@ -1212,15 +1236,12 @@ void set(T& e, uint8_t* data) {
 // safe and can be called concurrently.
 template<TBType Type>
 void* mapped(TBTable<Type>& e, const Position& pos) {
-
-    static std::mutex mutex;
-
     // Use 'acquire' to avoid a thread reading 'ready' == true while
     // another is still working. (compiler reordering may cause this).
     if (e.ready.load(std::memory_order_acquire))
         return e.baseAddress;  // Could be nullptr if file does not exist
 
-    std::scoped_lock<std::mutex> lk(mutex);
+    std::scoped_lock lock(e.mapMutex);
 
     if (e.ready.load(std::memory_order_relaxed))  // Recheck under lock
         return e.baseAddress;
@@ -1243,6 +1264,24 @@ void* mapped(TBTable<Type>& e, const Position& pos) {
 
     e.ready.store(true, std::memory_order_release);
     return e.baseAddress;
+}
+
+void TBTables::premap() {
+    for (auto& tb : wdlTable)
+    {
+        StateInfo st;
+        Position  pos;
+        pos.set(tb.code, WHITE, &st);
+        mapped<WDL>(tb, pos);
+    }
+
+    for (auto& tb : dtzTable)
+    {
+        StateInfo st;
+        Position  pos;
+        pos.set(tb.code, WHITE, &st);
+        mapped<DTZ>(tb, pos);
+    }
 }
 
 template<TBType Type, typename Ret = typename TBTable<Type>::Ret>
@@ -1335,17 +1374,35 @@ WDLScore search(Position& pos, ProbeState* result) {
 }  // namespace
 
 
+// Explicitly release tablebase resources. When the last user releases
+// its reference the global tables are cleared and mapped files unmapped.
+void Tablebases::release() {
+    if (tbReferenceCount.load(std::memory_order_acquire) > 0
+        && tbReferenceCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+    {
+        TBTables.clear();
+        MaxCardinality = 0;
+        TBFile::Paths.clear();
+    }
+}
+
 // Called at startup and after every change to
 // "SyzygyPath" UCI option to (re)create the various tables. It is not thread
 // safe, nor it needs to be.
-void Tablebases::init(const std::string& paths) {
+void Tablebases::init(const std::string& paths, bool premap) {
+
+    if (paths.empty())
+    {
+        release();
+        return;
+    }
+
+    if (tbReferenceCount.fetch_add(1, std::memory_order_acq_rel) > 0 && paths == TBFile::Paths)
+        return;
 
     TBTables.clear();
     MaxCardinality = 0;
     TBFile::Paths  = paths;
-
-    if (paths.empty())
-        return;
 
     // MapB1H1H7[] encodes a square below a1-h8 diagonal to 0..27
     int code = 0;
@@ -1485,6 +1542,9 @@ void Tablebases::init(const std::string& paths) {
     }
 
     TBTables.info();
+
+    if (premap)
+        TBTables.premap();
 }
 
 // Probe the WDL table for a particular position.

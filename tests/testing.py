@@ -1,4 +1,5 @@
 import subprocess
+import unittest
 from typing import List
 import os
 import collections
@@ -398,3 +399,141 @@ class Stockfish:
             return self.process.wait()
 
         return 0
+
+
+class TestNNUEThreadSafety(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.binary = cls._find_binary()
+        if cls.binary is None:
+            raise unittest.SkipTest("Stockfish binary not available")
+
+        cls.default_eval_file = cls._probe_option_default("EvalFile")
+
+    @staticmethod
+    def _find_binary():
+        candidates = []
+
+        env_path = os.environ.get("STOCKFISH_BINARY")
+        if env_path:
+            candidates.append(pathlib.Path(env_path))
+
+        candidates.extend(
+            [
+                PATH.parent / "stockfish",
+                PATH.parent / "build" / "stockfish",
+                PATH.parent / "src" / "stockfish",
+            ]
+        )
+
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return str(candidate)
+
+        return None
+
+    @classmethod
+    def _probe_option_default(cls, name: str):
+        runner = Stockfish([], cls.binary, args=["uci"], cli=True)
+
+        if not runner.process or runner.process.stdout is None:
+            return None
+
+        target = f"option name {name} "
+        for line in runner.process.stdout.splitlines():
+            if target in line and " default " in line:
+                return line.split("default", 1)[1].strip()
+
+        return None
+
+    def setUp(self):
+        self.engine = Stockfish([], self.binary)
+        self.engine.send_command("uci")
+        self.engine.expect("uciok")
+        self.engine.clear_output()
+
+        self.engine.setoption("Experience Enabled", "false")
+        self.engine.send_command("isready")
+        self.engine.expect("readyok")
+        self.engine.clear_output()
+
+    def tearDown(self):
+        if getattr(self, "engine", None):
+            try:
+                self.engine.quit()
+            finally:
+                self.engine.close()
+
+    def _run_search(self, threads: int, moves=None, depth: int = 3):
+        moves = moves or []
+
+        self.engine.setoption("Threads", str(threads))
+        self.engine.send_command("isready")
+        self.engine.expect("readyok")
+        self.engine.clear_output()
+
+        self.engine.send_command("ucinewgame")
+        position_cmd = "position startpos"
+        if moves:
+            position_cmd += " moves " + " ".join(moves)
+        self.engine.send_command(position_cmd)
+
+        self.engine.send_command(f"go depth {depth}")
+
+        result = {}
+
+        def parser(line: str):
+            tokens = line.split()
+            if len(tokens) >= 2 and tokens[0] == "info" and "score" in tokens:
+                try:
+                    score_index = tokens.index("score")
+                    score_type = tokens[score_index + 1]
+                    score_value = tokens[score_index + 2]
+                    if score_type in {"cp", "mate"}:
+                        result["score"] = (score_type, int(score_value))
+                except (ValueError, IndexError):
+                    pass
+
+            if tokens and tokens[0] == "bestmove":
+                result["bestmove"] = tokens[1] if len(tokens) > 1 else None
+                return True
+
+            return False
+
+        self.engine.check_output(parser)
+        self.engine.clear_output()
+
+        self.assertIn("bestmove", result)
+        return result["bestmove"], result.get("score")
+
+    def test_consistent_scores_across_threads(self):
+        moves = ["e2e4", "e7e5", "g1f3", "b8c6"]
+
+        single_thread = self._run_search(1, moves=moves, depth=4)
+        multi_thread = self._run_search(4, moves=moves, depth=4)
+
+        self.assertEqual(single_thread[0], multi_thread[0])
+
+        if single_thread[1] and multi_thread[1]:
+            self.assertEqual(single_thread[1][0], multi_thread[1][0])
+            self.assertLessEqual(abs(single_thread[1][1] - multi_thread[1][1]), 20)
+
+    def test_network_reload_preserves_evaluation(self):
+        if not self.default_eval_file:
+            self.skipTest("Default EvalFile option not available")
+
+        baseline = self._run_search(2, moves=["d2d4", "d7d5"], depth=3)
+
+        self.engine.setoption("EvalFile", self.default_eval_file)
+        self.engine.send_command("isready")
+        self.engine.expect("readyok")
+        self.engine.clear_output()
+
+        after_reload = self._run_search(2, moves=["d2d4", "d7d5"], depth=3)
+
+        self.assertIsNotNone(after_reload[0])
+
+        if baseline[1] and after_reload[1]:
+            self.assertEqual(baseline[1][0], after_reload[1][0])
+            self.assertLessEqual(abs(baseline[1][1] - after_reload[1][1]), 20)

@@ -60,6 +60,7 @@ void TimeManagement::init(Search::LimitsType& limits,
         return;
 
     TimePoint moveOverhead = TimePoint(options["Move Overhead"]);
+    double    slowMover    = options["Slow Mover"] / 100.0;
 
     // optScale is a percentage of available time to use for the current move.
     // maxScale is a multiplier applied to optimumTime.
@@ -128,13 +129,41 @@ void TimeManagement::init(Search::LimitsType& limits,
         maxScale = 1.3 + 0.11 * (centiMTG / 100.0);
     }
 
+    optScale *= slowMover;
+
     // Limit the maximum possible time for this move
     optimumTime = TimePoint(optScale * timeLeft);
     maximumTime =
       TimePoint(std::min(0.825179 * limits.time[us] - moveOverhead, maxScale * optimumTime)) - 10;
 
+    // In very fast time controls (e.g. bullet), cap thinking time to avoid
+    // losing on time due to overly deep searches.
+    if (limits.time[us] < 60000)
+    {
+        optimumTime = std::min(optimumTime, TimePoint(limits.time[us] / 40));
+        maximumTime = std::min(maximumTime, TimePoint(limits.time[us] / 20));
+    }
+
     if (options["Ponder"])
         optimumTime += optimumTime / 4;
+
+    TimePoint minimumThinkingTime = TimePoint(options["Minimum Thinking Time"]);
+    optimumTime                  = std::max(optimumTime, minimumThinkingTime);
+    maximumTime                  = std::max(maximumTime, minimumThinkingTime);
+
+    // In very fast time controls (e.g. bullet), cap thinking time to avoid
+    // losing on time due to overly deep searches. Skip this when using nodes
+    // as time so we don't cap based on the node budget.
+    if (!useNodesTime && limits.time[us] < 60000)
+    {
+        TimePoint bulletOpt = TimePoint(limits.time[us] / 40);
+        TimePoint bulletMax = TimePoint(limits.time[us] / 20);
+        optimumTime         = std::min(optimumTime, bulletOpt);
+        maximumTime         = std::min(maximumTime, bulletMax);
+    }
+
+    if (maximumTime < optimumTime)
+        maximumTime = optimumTime;
 }
 
 }  // namespace Stockfish

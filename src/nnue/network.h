@@ -19,9 +19,11 @@
 #ifndef NETWORK_H_INCLUDED
 #define NETWORK_H_INCLUDED
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -45,6 +47,7 @@ namespace Stockfish::Eval::NNUE {
 enum class EmbeddedNNUEType {
     BIG,
     SMALL,
+    FALCON,
 };
 
 using NetworkOutput = std::tuple<Value, Value>;
@@ -54,7 +57,15 @@ class Network {
     static constexpr IndexType FTDimensions = Arch::TransformedFeatureDimensions;
 
    public:
+    struct Weights {
+        Weights();
+        LargePagePtr<Transformer> featureTransformer;
+        AlignedPtr<Arch[]>        network;
+    };
+    using WeightsPtr = std::shared_ptr<Weights>;
+
     Network(EvalFile file, EmbeddedNNUEType type) :
+        weights(std::make_shared<Weights>()),
         evalFile(file),
         embeddedType(type) {}
 
@@ -66,6 +77,8 @@ class Network {
 
     void load(const std::string& rootDirectory, std::string evalfilePath);
     bool save(const std::optional<std::string>& filename) const;
+
+    WeightsPtr weights_handle() const;
 
     NetworkOutput evaluate(const Position&                         pos,
                            AccumulatorStack&                       accumulatorStack,
@@ -81,22 +94,19 @@ class Network {
     void load_user_net(const std::string&, const std::string&);
     void load_internal();
 
-    void initialize();
+    WeightsPtr allocate_weights() const;
 
-    bool                       save(std::ostream&, const std::string&, const std::string&) const;
+    bool save(std::ostream&, const std::string&, const std::string&, const Weights&) const;
     std::optional<std::string> load(std::istream&);
 
     bool read_header(std::istream&, std::uint32_t*, std::string*) const;
     bool write_header(std::ostream&, std::uint32_t, const std::string&) const;
 
-    bool read_parameters(std::istream&, std::string&) const;
-    bool write_parameters(std::ostream&, const std::string&) const;
+    bool read_parameters(std::istream&, std::string&, Weights&) const;
+    bool write_parameters(std::ostream&, const std::string&, const Weights&) const;
 
     // Input feature converter
-    LargePagePtr<Transformer> featureTransformer;
-
-    // Evaluation function
-    AlignedPtr<Arch[]> network;
+    WeightsPtr weights;
 
     EvalFile         evalFile;
     EmbeddedNNUEType embeddedType;
@@ -120,15 +130,19 @@ using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsB
 
 using NetworkBig   = Network<BigNetworkArchitecture, BigFeatureTransformer>;
 using NetworkSmall = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
+// Falcon network now uses the small-network architecture
+using NetworkFalcon = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
 
 
 struct Networks {
-    Networks(NetworkBig&& nB, NetworkSmall&& nS) :
+    Networks(NetworkBig&& nB, NetworkSmall&& nS, NetworkFalcon&& nF) :
         big(std::move(nB)),
-        small(std::move(nS)) {}
+        small(std::move(nS)),
+        falcon(std::move(nF)) {}
 
-    NetworkBig   big;
-    NetworkSmall small;
+    NetworkBig    big;
+    NetworkSmall  small;
+    NetworkFalcon falcon;
 };
 
 

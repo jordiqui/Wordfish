@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# Always operate from the source directory so the networks are placed
+# alongside the engine binary. This allows the script to be invoked from
+# anywhere (repo root, src/, etc.).
+SCRIPT_DIR="$(cd -- "$(dirname "$0")" && pwd)"
+cd "${SCRIPT_DIR}/../src" || exit 1
+
 wget_or_curl=$( (command -v wget > /dev/null 2>&1 && echo "wget -qO-") || \
                 (command -v curl > /dev/null 2>&1 && echo "curl -skL"))
 
@@ -12,15 +18,23 @@ if [ -z "$sha256sum" ]; then
 fi
 
 get_nnue_filename() {
-  grep "$1" evaluate.h | grep "#define" | sed "s/.*\(nn-[a-z0-9]\{12\}.nnue\).*/\1/"
+  # Extract the quoted filename from evaluate.h for the given macro name.
+  # This works for both standard Stockfish nets (nn-xxxxxxxxxxxx.nnue)
+  # and any other custom filenames such as "nn-c01dc0ffeede.nnue".
+  grep "$1" evaluate.h | grep "#define" | sed 's/.*"\([^"]*\)".*/\1/'
 }
 
 validate_network() {
   # If no sha256sum command is available, assume the file is always valid.
   if [ -n "$sha256sum" ] && [ -f "$1" ]; then
-    if [ "$1" != "nn-$($sha256sum "$1" | cut -c 1-12).nnue" ]; then
-      rm -f "$1"
-      return 1
+    # Only enforce the Stockfish naming scheme (nn-<hash>.nnue) when
+    # the filename matches that pattern. Custom nets like "nn-c01dc0ffeede.nnue" are
+    # accepted without validation.
+    if echo "$1" | grep -Eq '^nn-[a-z0-9]{12}\.nnue$'; then
+      if [ "$1" != "nn-$($sha256sum "$1" | cut -c 1-12).nnue" ]; then
+        rm -f "$1"
+        return 1
+      fi
     fi
   fi
 }
@@ -61,6 +75,8 @@ fetch_network() {
       fi
     else
       echo "Failed to download from $url"
+      # Ensure no leftover partial file prevents trying other URLs.
+      rm -f "$_filename"
     fi
     if [ -f "$_filename" ]; then
       return
@@ -72,5 +88,8 @@ fetch_network() {
   return 1
 }
 
-fetch_network EvalFileDefaultNameBig && \
-fetch_network EvalFileDefaultNameSmall
+falcon_name=$(get_nnue_filename FalconFileDefaultName)
+fetch_network EvalFileDefaultNameBig || exit 1
+fetch_network EvalFileDefaultNameSmall || exit 1
+fetch_network FalconFileDefaultName || \
+  echo "Falcon network (${falcon_name}) not found; continuing without it."

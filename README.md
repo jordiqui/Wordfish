@@ -1,107 +1,193 @@
+# Wordfish Chess Engine
+
+**Versión v.2.60 230925**
+
+Este build se identifica como `Wordfish v.2.60 230925`.
+
 <div align="center">
+  <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
+  <h3>Wordfish</h3>
+  
+  A free and open-source UCI chess engine combining classical algorithms with neural network innovations.
+  <br>
+  <strong><a href="#">Explore Wordfish Documentation »</a>
 
-  <h1>Wordfish v2.60 230925</h1>
-
-  <p>Wordfish es un motor de ajedrez UCI libre y de código abierto derivado de Stockfish.</p>
-
-  <p><strong>Autor:</strong> Jorge Ruiz Centelles<br/>
-     <strong>Créditos:</strong> OpenAI Codex ChatGPT · Desarrolladores de Stockfish</p>
-
+  <em>Author: This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.</em>
+  
 </div>
 
 ## Overview
 
-Wordfish mantiene la solidez y eficiencia del proyecto Stockfish, incorporando las
-últimas mejoras del repositorio oficial e integrándolas con un ciclo de pruebas
-propio. El objetivo es ofrecer un binario listo para usar con un branding claro de
-Wordfish y con metadatos coherentes para los GUI como Fritz 20 o CuteChess.
+**Wordfish** is a free, open-source UCI chess engine derived from **Stockfish**. Jorge Ruiz Centelles, with credit to ChatGPT, modifies and extends the code to explore new concepts. The engine implements cutting-edge search algorithms combined with neural network evaluation. Derived from fundamental chess programming principles, Wordfish analyzes positions through parallelized alpha-beta search enhanced with null-move pruning and late move reductions.
 
-* Motor UCI de alto rendimiento compatible con los principales GUI.
-* Integración continua de parches upstream de Stockfish.
-* Distribución oficial con nombre y créditos de Wordfish.
+As a UCI-compliant engine, Wordfish operates through **standard chess interfaces** without an integrated graphical interface. Users must employ compatible chess GUIs (Arena, Scid vs PC, etc.) for board visualization and move input. Consult your GUI documentation for implementation details.
 
-## Quick links
+## Technical Architecture
 
-* [Repositorio Wordfish](https://github.com/WordfishChess/Wordfish)
-* [Sistema de pruebas Fishtest](https://tests.stockfishchess.org/tests)
-* [Foro de discusión de Wordfish](https://github.com/WordfishChess/Wordfish/discussions)
+Wordfish's architecture features:
+
+- Hybrid evaluation system combining classical heuristics with NNUE networks
+- SMP parallelization with YBWC (Young Brothers Wait Concept)
+- Advanced pruning techniques (Reverse Futility Pruning, Late Move Pruning)
+- Efficient move ordering with history heuristics and killer moves
+- Optional root experience book storing previously played moves
 
 ## Files
 
-La distribución de Wordfish incluye los siguientes componentes principales:
+The distribution includes:
 
-* `README.md`: este documento de bienvenida.
-* `Copying.txt`: la licencia **GNU General Public License v3**.
-* `AUTHORS`: lista detallada de autores y colaboradores.
-* `src/`: código fuente completo del motor y el Makefile para compilar en sistemas
-  tipo Unix.
-* `nnue/`: redes neuronales NNUE necesarias para la evaluación.
-
-## Building Wordfish
-
-Wordfish se compila con el mismo flujo de trabajo que Stockfish. En sistemas
-Unix-like bastan los siguientes pasos:
-
-```bash
-cd src
-make -j profile-build
-```
-
-Consulta la wiki de Stockfish para detalles adicionales sobre compilación cruzada,
-soporte de diferentes arquitecturas y parámetros del protocolo UCI.
+- `README.md` (this documentation)
+- `COPYING.txt` ([GNU GPLv3 license][gpl-link])
+- `AUTHORS` (contributor acknowledgments)
+- `src/` (source code with platform-specific Makefiles)
+- Neural network weights (`wordfish.nnue`)
 
 ## Contributing
 
-Las contribuciones son bienvenidas. Puedes colaborar de varias formas:
+### Development Guidelines
+Contributions must adhere to:
+- Clean, documented C++17 implementations
+- Benchmark validation through perft testing
+- Elo measurement via [OpenBench][openbench-link]
+- Compatibility with UCI protocol standard
 
-1. **Donando hardware**: ejecuta el [worker de Fishtest](https://github.com/official-stockfish/fishtest/wiki/Running-the-worker)
-   para ayudar a probar nuevas ideas de Wordfish y Stockfish.
-2. **Desarrollando código**: revisa la [guía de contribución](CONTRIBUTING.md) y abre
-   propuestas que mantengan la compatibilidad con Stockfish.
-3. **Reportando incidencias**: utiliza los issues o discusiones del repositorio
-   Wordfish para comunicar errores o sugerencias.
+### Testing Infrastructure
+Improvements require extensive testing:
+- Install the [Wordfish Test Worker][worker-link]
+- Participate in active tests on [Wordfish Test Suite][testsuite-link]
+- Verify ELO gains through SPRT validation
 
-## Credits
+### Community
+Technical discussions occur primarily through:
+- [Wordfish Discord Server][discord-link]
+- [GitHub Discussions][discussions-link]
+- [Chess Programming Wiki][chesswiki-link]
 
-* Autor principal: **Jorge Ruiz Centelles**.
-* Asistencia creativa y de desarrollo: **OpenAI Codex ChatGPT**.
-* Base de código y mejoras históricas: **Desarrolladores de Stockfish** (ver
-  `AUTHORS`).
-* Redes neuronales entrenadas a partir de datos de la comunidad, incluyendo
-  los conjuntos publicados por [Leela Chess Zero](https://lczero.org/).
+## Compilation
+
+Compile from source using included Makefiles:
+```bash
+cd src
+make -j ARCH=x86-64-modern
+```
+
+Supported architectures:
+- `x86-64`: Modern x86 processors
+- `armv8`: ARMv8+ architectures
+- `ppc64`: PowerPC systems
+
+Full compilation guides available in [documentation][doc-link].
+
+## Syzygy Tablebases
+
+Wordfish can probe [Syzygy](https://github.com/syzygy1) endgame tablebases when a
+directory is supplied via the `SyzygyPath` UCI option. The engine also exposes a
+`SyzygyPremap` boolean option. When set to `true`, `Tablebases::init` pre-maps all
+available WDL and DTZ tables during initialization, reducing probe latency at the
+expense of additional startup time and memory usage.
+
+## Experience Learning
+
+Wordfish includes a simple text-based cache that stores root moves and evaluations from
+previous games. Rather than forcing book moves, the cached information biases root move
+ordering during search. The following UCI options control this system:
+
+- `Experience Enabled`: enables or disables the experience feature (default `true`).
+- `Experience File`: name of the file where the experience data is stored (default `experience.exp`; legacy `.bin` files are converted automatically to this format).
+- `Experience Readonly`: if `true`, no changes are written to the file.
+- `Experience Prior`: uses stored experience to bias root move ordering.
+- `Experience Width`: number of principal moves to consider (1–20).
+- `Experience Eval Weight`: weighting of evaluation when ordering moves (0–10).
+- `Experience Min Depth`: minimum depth required to store a move (4–64).
+- `Experience Max Moves`: maximum number of moves saved per position (1–100).
+- `Experience Book`: if `true`, use the experience file as an opening book.
+- `Experience Book Max Moves`: limit of moves considered when using the experience book (1–100, default 100).
+- `Experience Book Min Depth`: minimum depth required for a move to be used from the experience book (1–255, default 4).
+
+The file is loaded at engine startup and updated after each game if `Experience Readonly` is disabled.
+
+## Monte Carlo Tree Search (Experimental)
+
+Wordfish exposes several options for experimenting with Monte Carlo Tree Search
+based on Shashin's position classification. For details see
+[docs/mcts.md](docs/mcts.md).
+
+## UCI Options
+
+### Minimum Thinking Time
+
+The `Minimum Thinking Time` option ensures the engine spends at least a
+specified number of milliseconds searching for a move, even if it finds
+a good one instantly. This avoids extremely fast, low-quality replies.
+Set it with:
+
+```
+setoption name Minimum Thinking Time value <milliseconds>
+```
+
+### Falcon Net
+
+Wordfish can switch to an alternative neural network using the
+`FalconFile` option. If a `nn-c01dc0ffeede.nnue` file is present in the
+engine directory it will be embedded automatically; otherwise the engine
+falls back to the standard networks. To load the `nn-c01dc0ffeede.nnue`
+file when available, send:
+
+```
+setoption name FalconFile value nn-c01dc0ffeede.nnue
+```
+
+## Roadmap de optimización
+
+La rama `codex/update-entry-points-and-utilities` sirve de base estable para
+explorar nuevas ideas de búsqueda y evaluación. Para seguir progresando en la
+optimización del motor se propone:
+
+1. **Medir el efecto de `experience_guidance_available()` en la corrección de la
+   evaluación**: lanzar matches 60+0.6 contra la rama maestra para comparar el
+   rendimiento con y sin la nueva compuerta de experiencia.
+2. **Ajustar la mezcla entre `correction_value` y la profundidad residual**:
+   repetir los experimentos con `Depth(0)` aplicado en qsearch, afinando los
+   factores de escala para blitz, rápido y LTC.
+3. **Reentrenar la tabla de experiencia**: depurar las claves que producen
+   regresiones cuando la guía se activa, incorporando métricas de frecuencia y
+   usando SPSA para calibrar los pesos de actualización.
+4. **Actualizar la red NNUE**: preparar un pipeline reproducible que evalúe redes
+   entrenadas con posiciones etiquetadas por Wordfish, midiendo el impacto en
+   pruebas de regresión y matches de referencia.
+5. **Fortalecer el control de calidad**: automatizar perfts, matches de humo a
+   10+0.1 y benchmarks en CI para detectar desviaciones de rendimiento antes de
+   publicar nuevos binarios.
 
 ## License
 
-Wordfish se distribuye bajo los términos de la [GNU GPLv3](Copying.txt). Puedes
-redistribuir y modificar el motor siempre que publiques el código fuente completo
-correspondiente al binario que difundas y conserves esta licencia.
+Wordfish is distributed under the **[GNU General Public License v3][gpl-link]** (GPLv3).
+It integrates source code from:
 
-## Evaluation roadmap
+- [Stockfish](https://github.com/official-stockfish/Stockfish)
 
-Los últimos ensayos LTC en Fishtest sirven como guía para priorizar el trabajo
-experimental de Wordfish. Algunas tareas destacadas son:
+Because Stockfish is GPLv3, any distribution of Wordfish must also comply with GPLv3.
+For a summary of your obligations under GPLv3 see <https://www.gnu.org/licenses/quick-guide-gplv3.html>.
+When redistributing, you must:
+1. Include the original license text (`COPYING.txt`)
+2. Provide complete corresponding source code
+3. Disclose all modifications under GPLv3
 
-1. **Replantear el ajuste de historia de capturas**: el experimento
-   [evasion_order5](https://tests.stockfishchess.org/tests/view/68cd8b0d16c378179ee6689b)
-   cerró con LLR = -2.95 tras 29 112 partidas LTC, señal de que la fórmula de
-   ponderación actual degrada el juego.
-2. **Optimizar la heurística de cambios de valor en el orden de movimientos**: los
-   ensayos [moveorder3](https://tests.stockfishchess.org/tests/view/68ca76d702c43c969fe7ef85)
-   y [moveorder3^](https://tests.stockfishchess.org/tests/view/68c2512359efc3c96b611b6e)
-   mostraron LLR = -2.95 y -2.94 respectivamente, lo que sugiere revisar los
-   parámetros mínimos/máximos y la función de escala aplicada.
-3. **Investigar la prueba _next-tt-move_**: el test
-   [next-tt-move](https://tests.stockfishchess.org/tests/view/68cb021d02c43c969fe7f028)
-   fue rechazado con LLR = -2.94 tras 88 062 partidas; conviene estudiar logs y
-   partidas para decidir si merece un nuevo intento con parámetros distintos.
-4. **Seguir de cerca la serie _preQsExt_**: varias ejecuciones (por ejemplo
-   [preQsExtD5](https://tests.stockfishchess.org/tests/view/68ccc07716c378179ee667cd))
-   siguen activas o cercanas al corte (LLR ≈ 1.18 con 56 634 partidas); podrían
-   beneficiarse de tests adicionales o combinaciones con otras extensiones.
-5. **Apoyar los ajustes de búsqueda en curso**: proyectos como
-   [tune_search4](https://tests.stockfishchess.org/tests/view/68c941f202c43c969fe7ee64)
-   continúan acumulando datos (812 partidas de 200 000 planificadas); es recomendable
-   aportar hardware y validar la estabilidad para acelerar la convergencia.
+## Acknowledgements
 
-Mantener un seguimiento activo de estas tareas permitirá que Wordfish adopte las
-mejoras que superen las pruebas y descarte con rapidez las ideas regresivas.
+Wordfish also benefits from:
+- Neural networks trained on [Lichess open database][lichess-db]
+- Search techniques from [CCC testing community][ccc-link]
+- Positional analysis concepts from [CPW research][cpw-link]
+
+[gpl-link]: https://www.gnu.org/licenses/gpl-3.0.html
+[doc-link]: #
+[discord-link]: #
+[openbench-link]: #
+[worker-link]: #
+[testsuite-link]: #
+[discussions-link]: #
+[chesswiki-link]: https://www.chessprogramming.org
+[lichess-db]: https://database.lichess.org
+[ccc-link]: https://www.chess.com/computer-chess-championship
+[cpw-link]: https://www.chessprogramming.org
