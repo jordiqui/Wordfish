@@ -226,6 +226,30 @@ Search::Worker::Worker(SharedState&                    sharedState,
     clear();
 }
 
+TTLookupResult
+Search::Worker::probe_tt(Position& pos, Stack* ss, Key posKey, Move overrideMove) {
+
+    auto [ttHit, ttData, ttWriter] = tt.probe(posKey);
+
+    ss->ttHit = ttHit;
+
+    Move ttMove = overrideMove ? overrideMove : ttHit ? ttData.move : Move::none();
+
+    if (ttMove && (!ttMove.is_ok() || !pos.pseudo_legal(ttMove)))
+        ttMove = Move::none();
+
+    const Value ttValue = ttHit ? value_from_tt(ttData.value, ss->ply, pos.rule50_count())
+                                : VALUE_NONE;
+
+    ttData.move  = ttMove;
+    ttData.value = ttValue;
+
+    const bool pvHit    = ttHit && ttData.is_pv;
+    const bool isCapture = ttMove && pos.capture_stage(ttMove);
+
+    return TTLookupResult{ttHit, ttData, ttWriter, ttMove, ttValue, pvHit, isCapture};
+}
+
 void Search::Worker::ensure_network_replicated() {
     const auto& nets = networks[numaAccessToken];
 
@@ -862,14 +886,14 @@ Value Search::Worker::search(
 
     // Step 4. Transposition table lookup
     excludedMove                   = ss->excludedMove;
-    posKey                         = pos.key();
-    auto [ttHit, ttData, ttWriter] = tt.probe(posKey);
-    // Need further processing of the saved data
-    ss->ttHit    = ttHit;
-    ttData.move  = rootNode ? rootMoves[pvIdx].pv[0] : ttHit ? ttData.move : Move::none();
-    ttData.value = ttHit ? value_from_tt(ttData.value, ss->ply, pos.rule50_count()) : VALUE_NONE;
-    ss->ttPv     = excludedMove ? ss->ttPv : PvNode || (ttHit && ttData.is_pv);
-    ttCapture    = ttData.move && pos.capture_stage(ttData.move);
+    posKey = pos.key();
+    TTLookupResult ttResult =
+      probe_tt(pos, ss, posKey, rootNode ? rootMoves[pvIdx].pv[0] : Move::none());
+    const bool ttHit = ttResult.hit;
+    auto& ttData   = ttResult.data;
+    auto& ttWriter = ttResult.writer;
+    ss->ttPv       = excludedMove ? ss->ttPv : PvNode || ttResult.pvHit;
+    ttCapture      = ttResult.isCapture;
 
     // At this point, if excluded, skip straight to step 6, static eval. However,
     // to save indentation, we list the condition in all code between here and there.
@@ -1717,13 +1741,12 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
     // Step 3. Transposition table lookup
-    posKey                         = pos.key();
-    auto [ttHit, ttData, ttWriter] = tt.probe(posKey);
-    // Need further processing of the saved data
-    ss->ttHit    = ttHit;
-    ttData.move  = ttHit ? ttData.move : Move::none();
-    ttData.value = ttHit ? value_from_tt(ttData.value, ss->ply, pos.rule50_count()) : VALUE_NONE;
-    pvHit        = ttHit && ttData.is_pv;
+    posKey = pos.key();
+    TTLookupResult ttResult = probe_tt(pos, ss, posKey);
+    const bool     ttHit    = ttResult.hit;
+    auto&          ttData   = ttResult.data;
+    auto&          ttWriter = ttResult.writer;
+    pvHit = ttResult.pvHit;
 
     // At non-PV nodes we check for an early TT cutoff
     if (!PvNode && ttData.depth >= DEPTH_QS

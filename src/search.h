@@ -40,6 +40,7 @@
 #include "score.h"
 #include "syzygy/tbprobe.h"
 #include "timeman.h"
+#include "tt.h"
 #include "types.h"
 
 namespace Stockfish {
@@ -56,6 +57,16 @@ class ThreadPool;
 class OptionsMap;
 
 namespace Search {
+
+struct TTLookupResult {
+    bool     hit;
+    TTData   data;
+    TTWriter writer;
+    Move     move;
+    Value    value;
+    bool     pvHit;
+    bool     isCapture;
+};
 
 // Stack struct keeps track of the information we need to remember from nodes
 // shallower and deeper in the tree during the search. Each search thread has
@@ -312,6 +323,11 @@ class Worker {
     // Quiescence search function, which is called by the main search
     template<NodeType nodeType>
     Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta);
+
+    TTLookupResult probe_tt(Position& pos,
+                            Stack*     ss,
+                            Key        posKey,
+                            Move       overrideMove = Move::none());
 
     Depth reduction(bool i, Depth d, int mn, int delta) const;
 
