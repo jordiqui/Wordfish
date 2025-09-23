@@ -268,7 +268,7 @@ void double_inc_update(const FeatureTransformer<TransformedFeatureDimensions>& f
     assert(!middle_state.acc<TransformedFeatureDimensions>().computed[Perspective]);
     assert(!target_state.acc<TransformedFeatureDimensions>().computed[Perspective]);
 
-    FeatureSet::IndexList removed, added;
+    FeatureSet::IndexList removed{}, added{};
     FeatureSet::append_changed_indices<Perspective>(ksq, middle_state.dirtyPiece, removed, added);
     // you can't capture a piece that was just involved in castling since the rook ends up
     // in a square that the king passed
@@ -277,12 +277,6 @@ void double_inc_update(const FeatureTransformer<TransformedFeatureDimensions>& f
 
     assert(added.size() == 1);
     assert(removed.size() == 2 || removed.size() == 3);
-
-    // Workaround compiler warning for uninitialized variables, replicated on
-    // profile builds on windows with gcc 14.2.0.
-    // TODO remove once unneeded
-    sf_assume(added.size() == 1);
-    sf_assume(removed.size() == 2 || removed.size() == 3);
 
     auto updateContext =
       make_accumulator_update_context<Perspective>(featureTransformer, computed, target_state);
@@ -293,6 +287,7 @@ void double_inc_update(const FeatureTransformer<TransformedFeatureDimensions>& f
     }
     else
     {
+        assert(removed.size() == 3);
         updateContext.template apply<Add, Sub, Sub, Sub>(added[0], removed[0], removed[1],
                                                          removed[2]);
     }
@@ -316,7 +311,7 @@ void update_accumulator_incremental(
     // updates with more added/removed features than MaxActiveDimensions.
     // In this case, the maximum size of both feature addition and removal
     // is 2, since we are incrementally updating one move at a time.
-    FeatureSet::IndexList removed, added;
+    FeatureSet::IndexList removed{}, added{};
     if constexpr (Forward)
         FeatureSet::append_changed_indices<Perspective>(ksq, target_state.dirtyPiece, removed,
                                                         added);
@@ -327,12 +322,6 @@ void update_accumulator_incremental(
     assert(removed.size() == 1 || removed.size() == 2);
     assert((Forward && added.size() <= removed.size())
            || (!Forward && added.size() >= removed.size()));
-
-    // Workaround compiler warning for uninitialized variables, replicated on
-    // profile builds on windows with gcc 14.2.0.
-    // TODO remove once unneeded
-    sf_assume(added.size() == 1 || added.size() == 2);
-    sf_assume(removed.size() == 1 || removed.size() == 2);
 
     auto updateContext =
       make_accumulator_update_context<Perspective>(featureTransformer, computed, target_state);
@@ -372,7 +361,7 @@ void update_accumulator_refresh_cache(const FeatureTransformer<Dimensions>& feat
 
     const Square          ksq   = pos.square<KING>(Perspective);
     auto&                 entry = cache[ksq][Perspective];
-    FeatureSet::IndexList removed, added;
+    FeatureSet::IndexList removed{}, added{};
 
     for (Color c : {WHITE, BLACK})
     {

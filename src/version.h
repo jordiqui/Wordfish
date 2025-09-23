@@ -3,24 +3,18 @@
 #include <string>
 #include <string_view>
 
-#ifndef ENGINE_FAMILY
-#    define ENGINE_FAMILY "Wordfish"
+#ifndef ENGINE_NAME
+    #define ENGINE_NAME "Wordfish v.2.60 230925"
 #endif
 
-#ifndef ENGINE_BUILD_EXTRA
-#    define ENGINE_BUILD_EXTRA ""
-#endif
-
-#ifndef ENGINE_AUTHORS
-#    define ENGINE_AUTHORS \
-        "Jorge Ruiz Centelles; credits: OpenAI Codex ChatGPT and the Stockfish developers (see AUTHORS file)"
+#ifndef ENGINE_BUILD_DATE
+    #define ENGINE_BUILD_DATE ""
 #endif
 
 namespace Stockfish::Version {
 
-inline constexpr std::string_view Name      = ENGINE_FAMILY;
-inline constexpr std::string_view BuildTag  = ENGINE_BUILD_EXTRA;
-inline constexpr std::string_view Authors   = ENGINE_AUTHORS;
+inline constexpr std::string_view Name      = ENGINE_NAME;
+inline constexpr std::string_view BuildTag = ENGINE_BUILD_DATE;
 
 inline std::string string() {
     if (BuildTag.empty())

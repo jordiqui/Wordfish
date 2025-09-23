@@ -14,6 +14,8 @@
 
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  
+  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
 */
 
 #include "uci.h"
@@ -36,8 +38,10 @@
 #include "position.h"
 #include "score.h"
 #include "search.h"
+#include "experience.h"
 #include "types.h"
 #include "ucioption.h"
+#include "version.h"
 
 namespace Stockfish {
 
@@ -114,10 +118,19 @@ void UCIEngine::loop() {
 
         else if (token == "uci")
         {
-            sync_cout << "id name " << engine_info(true) << "\n"
-                      << engine.get_options() << sync_endl;
+            // Force a stable, explicit UCI name so GUIs show "Wordfish 1.0"
+            sync_cout_start();
+            std::cout
+              << "id name " << Version::string() << "\n"
+              << "id author Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
+              << "\n"
+              << engine.get_options() << std::endl;
+            sync_cout_end();
 
             sync_cout << "uciok" << sync_endl;
+
+            if ((bool) engine.get_options()["Experience Enabled"])
+                experience.load_async(engine.get_options()["Experience File"]);
         }
 
         else if (token == "setoption")
@@ -148,6 +161,9 @@ void UCIEngine::loop() {
             sync_cout << engine.visualize() << sync_endl;
         else if (token == "eval")
             engine.trace_eval();
+        else if (token == "showexp")
+            experience.show(engine.position(), (int) engine.get_options()["Experience Eval Weight"],
+                            (int) engine.get_options()["Experience Book Max Moves"]);
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
@@ -220,6 +236,13 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
 void UCIEngine::go(std::istringstream& is) {
 
     Search::LimitsType limits = parse_limits(is);
+
+    // Ensure the experience file has finished loading before starting a search.
+    // Some GUIs like Fritz or CuteChess may issue a "go" command immediately
+    // after "uci", while the experience file is still being loaded in a
+    // background thread. Waiting here avoids potential races that could
+    // terminate the engine unexpectedly.
+    experience.wait_until_loaded();
 
     if (limits.perft)
         perft(limits);
@@ -434,11 +457,9 @@ void UCIEngine::benchmark(std::istream& args) {
     // clang-format off
 
     std::cerr << "==========================="
-              << "\nVersion                    : "
-              << engine_version_info()
-              // "\nCompiled by                : "
+              << "\nVersion                    : " << Version::string()
               << compiler_info()
-              << "Large pages                : " << (has_large_pages() ? "yes" : "no")
+              << "Large pages                  : " << (has_large_pages() ? "yes" : "no")
               << "\nUser invocation            : " << BenchmarkCommand << " "
               << setup.originalInvocation << "\nFilled invocation          : " << BenchmarkCommand
               << " " << setup.filledInvocation

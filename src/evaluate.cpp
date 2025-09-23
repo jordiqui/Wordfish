@@ -121,4 +121,9 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
     return ss.str();
 }
 
+namespace Eval {
+void set_adaptive_style(bool) {}
+}  // namespace Eval
+
 }  // namespace Stockfish
+
