@@ -28,8 +28,6 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <iomanip>
-#include <random>
 
 #include "evaluate.h"
 #include "misc.h"
@@ -37,9 +35,7 @@
 #include "nnue/nnue_common.h"
 #include "numa.h"
 #include "perft.h"
-#include "polybook.h"
 #include "position.h"
-#include "experience.h"
 #include "search.h"
 #include "syzygy/tbprobe.h"
 #include "types.h"
@@ -63,8 +59,7 @@ Engine::Engine(std::optional<std::string> path) :
       numaContext,
       NN::Networks(
         NN::NetworkBig({EvalFileDefaultNameBig, "None", ""}, NN::EmbeddedNNUEType::BIG),
-        NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL),
-        NN::NetworkFalcon({FalconFileDefaultName, "None", ""}, NN::EmbeddedNNUEType::FALCON))) {
+        NN::NetworkSmall({EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL))) {
     pos.set(StartFEN, false, &states->back());
 
 
@@ -109,11 +104,7 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Move Overhead", Option(10, 0, 5000));
 
-    options.add("Slow Mover", Option(100, 10, 1000));
-
     options.add("nodestime", Option(0, 0, 10000));
-
-    options.add("Minimum Thinking Time", Option(20, 0, 5000));
 
     options.add("UCI_Chess960", Option(false));
 
@@ -126,91 +117,16 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("UCI_ShowWDL", Option(false));
 
     options.add(  //
-      "SyzygyPath", Option("", [this](const Option& o) {
-          Tablebases::init(o, bool(options["SyzygyPremap"]));
+      "SyzygyPath", Option("", [](const Option& o) {
+          Tablebases::init(o);
           return std::nullopt;
       }));
 
-    options.add("SyzygyPremap", Option(false, [this](const Option& o) {
-                    Tablebases::init(options["SyzygyPath"], bool(o));
-                    return std::nullopt;
-                }));
     options.add("SyzygyProbeDepth", Option(1, 1, 100));
 
     options.add("Syzygy50MoveRule", Option(true));
 
     options.add("SyzygyProbeLimit", Option(7, 0, 7));
-
-    options.add("Book1", Option(false));
-
-    options.add("Book1 File", Option("", [](const Option& o) {
-                    polybook[0].init(o);
-                    return std::nullopt;
-                }));
-
-    options.add("Book1 BestBookMove", Option(false));
-
-    options.add("Book1 Depth", Option(255, 1, 350));
-
-    options.add("Book1 Width", Option(1, 1, 10));
-
-    options.add("Book2", Option(false));
-
-    options.add("Book2 File", Option("", [](const Option& o) {
-                    polybook[1].init(o);
-                    return std::nullopt;
-                }));
-
-    options.add("Book2 BestBookMove", Option(false));
-
-    options.add("Book2 Depth", Option(255, 1, 350));
-
-    options.add("Book2 Width", Option(1, 1, 10));
-
-    options.add("Experience Enabled", Option(true, [this](const Option& o) {
-                    if (bool(o))
-                        experience.load_async(options["Experience File"]);
-                    else
-                        experience.clear();
-                    return std::nullopt;
-                }));
-
-    options.add("Experience File", Option("experience.exp", [this](const Option& o) {
-                    if ((bool) options["Experience Enabled"])
-                        experience.load_async(o);
-                    concurrentExperienceFile.clear();
-                    return std::nullopt;
-                }));
-
-    options.add("Experience Readonly", Option(false));
-    options.add("Experience Prior", Option(true));
-    options.add("Experience Width", Option(1, 1, 20));
-    options.add("Experience Eval Weight", Option(5, 0, 10));
-    options.add("Experience Min Depth", Option(27, 4, 64));
-    options.add("Experience Max Moves", Option(16, 1, 100));
-    options.add("Experience Book", Option(false));
-    options.add("Experience Book Max Moves", Option(100, 1, 100));
-    options.add("Experience Book Min Depth", Option(4, 1, 255));
-    options.add("Experience Concurrent", Option(false, [this](const Option&) {
-                    concurrentExperienceFile.clear();
-                    return std::nullopt;
-                }));
-
-    // MonteCarlo Tree Search section (experimental: thanks to original Stephan
-    // Nicolet work)
-    options.add("MCTS by Shashin", Option(false));
-    options.add("MCTSThreads", Option(0, 0, 512));
-    options.add("MCTS Multi Strategy", Option(20, 0, 100));
-    options.add("MCTS Multi MinVisits", Option(5, 0, 1000));
-    options.add("MCTS Explore", Option(false));
-
-    // Optional experimental evaluation tweak that adapts weights based on
-    // simple positional cues. Disabled by default so it does not alter
-    // standard play unless explicitly requested by the user.
-    options.add("Adaptive Style", Option(false, [](const Option& o) {
-                    Eval::set_adaptive_style(bool(o));
-                    return std::nullopt;
-                }));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
@@ -221,12 +137,6 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "EvalFileSmall", Option(EvalFileDefaultNameSmall, [this](const Option& o) {
           load_small_network(o);
-          return std::nullopt;
-      }));
-
-    options.add(  //
-      "FalconFile", Option(FalconFileDefaultName, [this](const Option& o) {
-          load_falcon_network(o);
           return std::nullopt;
       }));
 
@@ -242,11 +152,6 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
-
-    TimePoint minTime = TimePoint(options["Minimum Thinking Time"]);
-    if (limits.movetime && limits.movetime < minTime)
-        limits.movetime = minTime;
-
     verify_networks();
 
     threads.start_thinking(options, pos, states, limits);
@@ -259,32 +164,8 @@ void Engine::search_clear() {
     tt.clear(threads);
     threads.clear();
 
-    // Release our reference to the tablebases. Other engine instances
-    // keep their mappings alive until they also release.
-    Tablebases::release();
-
-    if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
-    {
-        std::string file = options["Experience File"];
-        if ((bool) options["Experience Concurrent"])
-        {
-            if (concurrentExperienceFile.empty())
-            {
-                std::random_device rd;
-                uint64_t           r = (uint64_t(rd()) << 32) ^ rd();
-                std::ostringstream oss;
-                oss << std::hex << std::setfill('0') << std::setw(16) << r;
-                std::string suffix = oss.str();
-                auto        p      = file.find_last_of('.');
-                if (p != std::string::npos)
-                    concurrentExperienceFile = file.substr(0, p) + "-" + suffix + file.substr(p);
-                else
-                    concurrentExperienceFile = file + "-" + suffix;
-            }
-            file = concurrentExperienceFile;
-        }
-        experience.save(file);
-    }
+    // @TODO wont work with multiple instances
+    Tablebases::init(options["SyzygyPath"]);  // Free mapped files
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -373,14 +254,12 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
-    networks->falcon.verify(options["FalconFile"], onVerifyNetworks);
 }
 
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
-        networks_.falcon.load(binaryDirectory, options["FalconFile"]);
     });
     threads.clear();
     threads.ensure_network_replicated();
@@ -396,15 +275,6 @@ void Engine::load_big_network(const std::string& file) {
 void Engine::load_small_network(const std::string& file) {
     networks.modify_and_replicate(
       [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
-    threads.clear();
-    threads.ensure_network_replicated();
-}
-
-void Engine::load_falcon_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) {
-          networks_.falcon.load(binaryDirectory, file);
-      });
     threads.clear();
     threads.ensure_network_replicated();
 }
@@ -499,6 +369,4 @@ std::string Engine::thread_allocation_information_as_string() const {
 
     return ss.str();
 }
-
-const Position& Engine::position() const { return pos; }
 }
