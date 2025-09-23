@@ -102,11 +102,7 @@ void Thread::run_custom_job(std::function<void()> f) {
     cv.notify_one();
 }
 
-void Thread::ensure_network_replicated() {
-    assert(worker != nullptr);
-    run_custom_job([this]() { worker->ensure_network_replicated(); });
-    wait_for_search_finished();
-}
+void Thread::ensure_network_replicated() { worker->ensure_network_replicated(); }
 
 // Thread gets parked here, blocked on the condition variable
 // when the thread has no work to do.
