@@ -235,7 +235,8 @@ Search::Worker::probe_tt(Position& pos, Stack* ss, Key posKey, Move overrideMove
 
     Move ttMove = overrideMove ? overrideMove : ttHit ? ttData.move : Move::none();
 
-    if (ttMove && (!ttMove.is_ok() || !pos.pseudo_legal(ttMove)))
+    if (ttMove
+        && (!ttMove.is_ok() || !pos.pseudo_legal(ttMove) || !pos.legal(ttMove)))
         ttMove = Move::none();
 
     const Value ttValue = ttHit ? value_from_tt(ttData.value, ss->ply, pos.rule50_count())
