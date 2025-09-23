@@ -8,12 +8,12 @@
 #endif
 
 #ifndef ENGINE_BUILD_EXTRA
-#    define ENGINE_BUILD_EXTRA "based on Stockfish dev-20250913"
+#    define ENGINE_BUILD_EXTRA ""
 #endif
 
 #ifndef ENGINE_AUTHORS
 #    define ENGINE_AUTHORS \
-        "Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
+        "Jorge Ruiz Centelles; credits: OpenAI Codex ChatGPT and the Stockfish developers (see AUTHORS file)"
 #endif
 
 namespace Stockfish::Version {

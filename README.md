@@ -1,167 +1,107 @@
 <div align="center">
 
-  [![Stockfish][stockfish128-logo]][website-link]
+  <h1>Wordfish v2.60 230925</h1>
 
-  <h3>Wordfish</h3>
+  <p>Wordfish es un motor de ajedrez UCI libre y de código abierto derivado de Stockfish.</p>
 
-  A free and strong UCI chess engine aligned with the official Stockfish project.
-  <br>
-  <strong>[Explore Stockfish docs »][wiki-link]</strong>
-  <br>
-  <br>
-  [Report bug][issue-link]
-  ·
-  [Open a discussion][discussions-link]
-  ·
-  [Discord][discord-link]
-  ·
-  [Blog][website-blog-link]
-
-  [![Build][build-badge]][build-link]
-  [![License][license-badge]][license-link]
-  <br>
-  [![Release][release-badge]][release-link]
-  [![Commits][commits-badge]][commits-link]
-  <br>
-  [![Website][website-badge]][website-link]
-  [![Fishtest][fishtest-badge]][fishtest-link]
-  [![Discord][discord-badge]][discord-link]
+  <p><strong>Autor:</strong> Jorge Ruiz Centelles<br/>
+     <strong>Créditos:</strong> OpenAI Codex ChatGPT · Desarrolladores de Stockfish</p>
 
 </div>
 
 ## Overview
 
-[Stockfish][website-link] is a **free and strong UCI chess engine** derived from
-Glaurung 2.1 that analyzes chess positions and computes the optimal moves.
+Wordfish mantiene la solidez y eficiencia del proyecto Stockfish, incorporando las
+últimas mejoras del repositorio oficial e integrándolas con un ciclo de pruebas
+propio. El objetivo es ofrecer un binario listo para usar con un branding claro de
+Wordfish y con metadatos coherentes para los GUI como Fritz 20 o CuteChess.
 
-> **Wordfish alignment note**: The Wordfish project now tracks the latest
-> Stockfish sources and integrates upstream patches as soon as they are
-> published.  Our differences are intentionally minimal and limited to version
-> metadata so that downstream testing and packaging stay compatible with the
-> official build instructions.
+* Motor UCI de alto rendimiento compatible con los principales GUI.
+* Integración continua de parches upstream de Stockfish.
+* Distribución oficial con nombre y créditos de Wordfish.
 
-Stockfish **does not include a graphical user interface** (GUI) that is required
-to display a chessboard and to make it easy to input moves. These GUIs are
-developed independently from Stockfish and are available online. **Read the
-documentation for your GUI** of choice for information about how to use
-Stockfish with it.
+## Quick links
 
-See also the Stockfish [documentation][wiki-usage-link] for further usage help.
+* [Repositorio Wordfish](https://github.com/WordfishChess/Wordfish)
+* [Sistema de pruebas Fishtest](https://tests.stockfishchess.org/tests)
+* [Foro de discusión de Wordfish](https://github.com/WordfishChess/Wordfish/discussions)
 
 ## Files
 
-This distribution of Stockfish consists of the following files:
+La distribución de Wordfish incluye los siguientes componentes principales:
 
-  * [README.md][readme-link], the file you are currently reading.
+* `README.md`: este documento de bienvenida.
+* `Copying.txt`: la licencia **GNU General Public License v3**.
+* `AUTHORS`: lista detallada de autores y colaboradores.
+* `src/`: código fuente completo del motor y el Makefile para compilar en sistemas
+  tipo Unix.
+* `nnue/`: redes neuronales NNUE necesarias para la evaluación.
 
-  * [Copying.txt][license-link], a text file containing the GNU General Public
-    License version 3.
+## Building Wordfish
 
-  * [AUTHORS][authors-link], a text file with the list of authors for the project.
+Wordfish se compila con el mismo flujo de trabajo que Stockfish. En sistemas
+Unix-like bastan los siguientes pasos:
 
-  * [src][src-link], a subdirectory containing the full source code, including a
-    Makefile that can be used to compile Stockfish on Unix-like systems.
-
-  * a file with the .nnue extension, storing the neural network for the NNUE
-    evaluation. Binary distributions will have this file embedded.
-
-## Contributing
-
-__See [Contributing Guide](CONTRIBUTING.md).__
-
-### Donating hardware
-
-Improving Stockfish requires a massive amount of testing. You can donate your
-hardware resources by installing the [Fishtest Worker][worker-link] and viewing
-the current tests on [Fishtest][fishtest-link].
-
-### Improving the code
-
-In the [chessprogramming wiki][programming-link], many techniques used in
-Stockfish are explained with a lot of background information.
-The [section on Stockfish][programmingsf-link] describes many features
-and techniques used by Stockfish. However, it is generic rather than
-focused on Stockfish's precise implementation.
-
-The engine testing is done on [Fishtest][fishtest-link].
-If you want to help improve Stockfish, please read this [guideline][guideline-link]
-first, where the basics of Stockfish development are explained.
-
-Discussions about Stockfish take place these days mainly in the Stockfish
-[Discord server][discord-link]. This is also the best place to ask questions
-about the codebase and how to improve it.
-
-## Compiling Stockfish
-
-Stockfish has support for 32 or 64-bit CPUs, certain hardware instructions,
-big-endian machines such as Power PC, and other platforms.
-
-On Unix-like systems, it should be easy to compile Stockfish directly from the
-source code with the included Makefile in the folder `src`. In general, it is
-recommended to run `make help` to see a list of make targets with corresponding
-descriptions. An example suitable for most Intel and AMD chips:
-
-```
+```bash
 cd src
 make -j profile-build
 ```
 
-Detailed compilation instructions for all platforms can be found in our
-[documentation][wiki-compile-link]. Our wiki also has information about
-the [UCI commands][wiki-uci-link] supported by Stockfish.
+Consulta la wiki de Stockfish para detalles adicionales sobre compilación cruzada,
+soporte de diferentes arquitecturas y parámetros del protocolo UCI.
 
-## Terms of use
+## Contributing
 
-Stockfish is free and distributed under the
-[**GNU General Public License version 3**][license-link] (GPL v3). Essentially,
-this means you are free to do almost exactly what you want with the program,
-including distributing it among your friends, making it available for download
-from your website, selling it (either by itself or as part of some bigger
-software package), or using it as the starting point for a software project of
-your own.
+Las contribuciones son bienvenidas. Puedes colaborar de varias formas:
 
-The only real limitation is that whenever you distribute Stockfish in some way,
-you MUST always include the license and the full source code (or a pointer to
-where the source code can be found) to generate the exact binary you are
-distributing. If you make any changes to the source code, these changes must
-also be made available under GPL v3.
+1. **Donando hardware**: ejecuta el [worker de Fishtest](https://github.com/official-stockfish/fishtest/wiki/Running-the-worker)
+   para ayudar a probar nuevas ideas de Wordfish y Stockfish.
+2. **Desarrollando código**: revisa la [guía de contribución](CONTRIBUTING.md) y abre
+   propuestas que mantengan la compatibilidad con Stockfish.
+3. **Reportando incidencias**: utiliza los issues o discusiones del repositorio
+   Wordfish para comunicar errores o sugerencias.
 
-## Acknowledgements
+## Credits
 
-Stockfish uses neural networks trained on [data provided by the Leela Chess Zero
-project][lc0-data-link], which is made available under the [Open Database License][odbl-link] (ODbL).
+* Autor principal: **Jorge Ruiz Centelles**.
+* Asistencia creativa y de desarrollo: **OpenAI Codex ChatGPT**.
+* Base de código y mejoras históricas: **Desarrolladores de Stockfish** (ver
+  `AUTHORS`).
+* Redes neuronales entrenadas a partir de datos de la comunidad, incluyendo
+  los conjuntos publicados por [Leela Chess Zero](https://lczero.org/).
 
+## License
 
-[authors-link]:       https://github.com/official-stockfish/Stockfish/blob/master/AUTHORS
-[build-link]:         https://github.com/official-stockfish/Stockfish/actions/workflows/stockfish.yml
-[commits-link]:       https://github.com/official-stockfish/Stockfish/commits/master
-[discord-link]:       https://discord.gg/GWDRS3kU6R
-[issue-link]:         https://github.com/official-stockfish/Stockfish/issues/new?assignees=&labels=&template=BUG-REPORT.yml
-[discussions-link]:   https://github.com/official-stockfish/Stockfish/discussions/new
-[fishtest-link]:      https://tests.stockfishchess.org/tests
-[guideline-link]:     https://github.com/official-stockfish/fishtest/wiki/Creating-my-first-test
-[license-link]:       https://github.com/official-stockfish/Stockfish/blob/master/Copying.txt
-[programming-link]:   https://www.chessprogramming.org/Main_Page
-[programmingsf-link]: https://www.chessprogramming.org/Stockfish
-[readme-link]:        https://github.com/official-stockfish/Stockfish/blob/master/README.md
-[release-link]:       https://github.com/official-stockfish/Stockfish/releases/latest
-[src-link]:           https://github.com/official-stockfish/Stockfish/tree/master/src
-[stockfish128-logo]:  https://stockfishchess.org/images/logo/icon_128x128.png
-[uci-link]:           https://backscattering.de/chess/uci/
-[website-link]:       https://stockfishchess.org
-[website-blog-link]:  https://stockfishchess.org/blog/
-[wiki-link]:          https://github.com/official-stockfish/Stockfish/wiki
-[wiki-compile-link]:  https://github.com/official-stockfish/Stockfish/wiki/Compiling-from-source
-[wiki-uci-link]:      https://github.com/official-stockfish/Stockfish/wiki/UCI-&-Commands
-[wiki-usage-link]:    https://github.com/official-stockfish/Stockfish/wiki/Download-and-usage
-[worker-link]:        https://github.com/official-stockfish/fishtest/wiki/Running-the-worker
-[lc0-data-link]:      https://storage.lczero.org/files/training_data
-[odbl-link]:          https://opendatacommons.org/licenses/odbl/odbl-10.txt
+Wordfish se distribuye bajo los términos de la [GNU GPLv3](Copying.txt). Puedes
+redistribuir y modificar el motor siempre que publiques el código fuente completo
+correspondiente al binario que difundas y conserves esta licencia.
 
-[build-badge]:        https://img.shields.io/github/actions/workflow/status/official-stockfish/Stockfish/stockfish.yml?branch=master&style=for-the-badge&label=stockfish&logo=github
-[commits-badge]:      https://img.shields.io/github/commits-since/official-stockfish/Stockfish/latest?style=for-the-badge
-[discord-badge]:      https://img.shields.io/discord/435943710472011776?style=for-the-badge&label=discord&logo=Discord
-[fishtest-badge]:     https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=Fishtest&up_color=success&up_message=Online&url=https%3A%2F%2Ftests.stockfishchess.org%2Ftests%2Ffinished
-[license-badge]:      https://img.shields.io/github/license/official-stockfish/Stockfish?style=for-the-badge&label=license&color=success
-[release-badge]:      https://img.shields.io/github/v/release/official-stockfish/Stockfish?style=for-the-badge&label=official%20release
-[website-badge]:      https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=website&up_color=success&up_message=Online&url=https%3A%2F%2Fstockfishchess.org
+## Evaluation roadmap
+
+Los últimos ensayos LTC en Fishtest sirven como guía para priorizar el trabajo
+experimental de Wordfish. Algunas tareas destacadas son:
+
+1. **Replantear el ajuste de historia de capturas**: el experimento
+   [evasion_order5](https://tests.stockfishchess.org/tests/view/68cd8b0d16c378179ee6689b)
+   cerró con LLR = -2.95 tras 29 112 partidas LTC, señal de que la fórmula de
+   ponderación actual degrada el juego.
+2. **Optimizar la heurística de cambios de valor en el orden de movimientos**: los
+   ensayos [moveorder3](https://tests.stockfishchess.org/tests/view/68ca76d702c43c969fe7ef85)
+   y [moveorder3^](https://tests.stockfishchess.org/tests/view/68c2512359efc3c96b611b6e)
+   mostraron LLR = -2.95 y -2.94 respectivamente, lo que sugiere revisar los
+   parámetros mínimos/máximos y la función de escala aplicada.
+3. **Investigar la prueba _next-tt-move_**: el test
+   [next-tt-move](https://tests.stockfishchess.org/tests/view/68cb021d02c43c969fe7f028)
+   fue rechazado con LLR = -2.94 tras 88 062 partidas; conviene estudiar logs y
+   partidas para decidir si merece un nuevo intento con parámetros distintos.
+4. **Seguir de cerca la serie _preQsExt_**: varias ejecuciones (por ejemplo
+   [preQsExtD5](https://tests.stockfishchess.org/tests/view/68ccc07716c378179ee667cd))
+   siguen activas o cercanas al corte (LLR ≈ 1.18 con 56 634 partidas); podrían
+   beneficiarse de tests adicionales o combinaciones con otras extensiones.
+5. **Apoyar los ajustes de búsqueda en curso**: proyectos como
+   [tune_search4](https://tests.stockfishchess.org/tests/view/68c941f202c43c969fe7ee64)
+   continúan acumulando datos (812 partidas de 200 000 planificadas); es recomendable
+   aportar hardware y validar la estabilidad para acelerar la convergencia.
+
+Mantener un seguimiento activo de estas tareas permitirá que Wordfish adopte las
+mejoras que superen las pruebas y descarte con rapidez las ideas regresivas.

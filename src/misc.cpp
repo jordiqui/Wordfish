@@ -40,8 +40,8 @@ namespace Stockfish {
 
 namespace {
 
-// Version number or dev.
-constexpr std::string_view version = "dev";
+// Version number for the current Wordfish release.
+constexpr std::string_view version = "v2.60 230925";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
