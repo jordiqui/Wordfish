@@ -133,7 +133,14 @@ template<typename Arch, typename Transformer>
 Network<Arch, Transformer>::Network(const Network<Arch, Transformer>& other) :
     weights(std::atomic_load(&other.weights)),
     evalFile(other.evalFile),
-    embeddedType(other.embeddedType) {}
+    embeddedType(other.embeddedType) {
+    versionCounter.store(other.versionCounter.load(std::memory_order_relaxed),
+                         std::memory_order_relaxed);
+    available.store(other.available.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    lastLoadedTime.store(other.lastLoadedTime.load(std::memory_order_relaxed),
+                         std::memory_order_relaxed);
+    lastLoadedFrom = other.lastLoadedFrom;
+}
 
 template<typename Arch, typename Transformer>
 Network<Arch, Transformer>&
@@ -143,6 +150,13 @@ Network<Arch, Transformer>::operator=(const Network<Arch, Transformer>& other) {
 
     evalFile     = other.evalFile;
     embeddedType = other.embeddedType;
+
+    versionCounter.store(other.versionCounter.load(std::memory_order_relaxed),
+                         std::memory_order_relaxed);
+    available.store(other.available.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    lastLoadedTime.store(other.lastLoadedTime.load(std::memory_order_relaxed),
+                         std::memory_order_relaxed);
+    lastLoadedFrom = other.lastLoadedFrom;
 
     std::atomic_store(&weights, std::atomic_load(&other.weights));
 
