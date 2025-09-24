@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "../types.h"
@@ -77,7 +78,7 @@ struct AccumulatorCaches {
 
             // To initialize a refresh entry, we set all its bitboards empty,
             // so we put the biases in the accumulation, without any weights on top
-            void clear(const BiasType* biases) {
+            void reset(const BiasType* biases) {
 
                 std::memcpy(accumulation, biases, sizeof(accumulation));
                 std::memset((uint8_t*) this + offsetof(Entry, psqtAccumulation), 0,
@@ -85,14 +86,12 @@ struct AccumulatorCaches {
             }
         };
 
-        template<typename Network>
-        void clear(const Network& network) {
-            auto weights = network.weights_handle();
-            assert(weights);
+        void reset_from_biases(const BiasType* biases) {
+            assert(biases);
 
             for (auto& entries1D : entries)
                 for (auto& entry : entries1D)
-                    entry.clear(weights->featureTransformer->biases);
+                    entry.reset(biases);
         }
 
         std::array<Entry, COLOR_NB>& operator[](Square sq) { return entries[sq]; }
@@ -100,39 +99,79 @@ struct AccumulatorCaches {
         std::array<std::array<Entry, COLOR_NB>, SQUARE_NB> entries;
     };
 
+    struct CacheBinding {
+        template<typename Network, IndexType Size>
+        void prime(const Network& network, Cache<Size>& cache) {
+            auto handle = network.weights_handle();
+            assert(handle);
+            auto alias = std::shared_ptr<void>(handle, static_cast<void*>(handle.get()));
+            cache.reset_from_biases(handle->featureTransformer->biases);
+            weights = alias;
+            version = network.version();
+        }
+
+        template<typename Network, IndexType Size>
+        bool ensure(const Network& network, Cache<Size>& cache) {
+            return ensure_internal(network, cache, false);
+        }
+
+        void invalidate() {
+            version = 0;
+            weights.reset();
+        }
+
+        template<typename Network, IndexType Size>
+        bool ensure_internal(const Network& network, Cache<Size>& cache, bool force) {
+            auto handle = network.weights_handle();
+            if (!handle)
+                return false;
+
+            auto alias = std::shared_ptr<void>(handle, static_cast<void*>(handle.get()));
+            auto locked = weights.lock();
+            bool refresh = force || !locked || locked.get() != alias.get()
+                           || version != network.version();
+
+            if (refresh)
+            {
+                cache.reset_from_biases(handle->featureTransformer->biases);
+                weights = alias;
+                version = network.version();
+            }
+
+            return true;
+        }
+
+        std::weak_ptr<void> weights;
+        std::uint64_t       version = 0;
+    };
+
     template<typename Networks>
     void clear(const Networks& networks) {
-        bigCache.cache.clear(networks.big);
-        bigCache.version = networks.big.version();
+        if (auto weights = networks.big.weights_handle())
+        {
+            bigCache.binding.prime(networks.big, bigCache.cache);
+        }
+        else
+            bigCache.binding.invalidate();
 
         sharedSmall.reset();
-        sharedSmall.cache.clear(networks.small);
-        sharedSmall.owner        = SharedSmallCache::Owner::Small;
-        sharedSmall.smallVersion = networks.small.version();
-        sharedSmall.falconVersion = networks.falcon.version();
+
+        if (auto weights = networks.small.weights_handle())
+        {
+            sharedSmall.bindingSmall.prime(networks.small, sharedSmall.cache);
+            sharedSmall.owner = SharedSmallCache::Owner::Small;
+        }
     }
 
     template<typename Network>
     Cache<TransformedFeatureDimensionsBig>& cache_for_big(const Network& network) {
-        auto version = network.version();
-        if (bigCache.version != version)
-        {
-            bigCache.cache.clear(network);
-            bigCache.version = version;
-        }
+        bigCache.binding.ensure(network, bigCache.cache);
         return bigCache.cache;
     }
 
     template<typename Network>
     Cache<TransformedFeatureDimensionsSmall>& cache_for_small(const Network& network) {
-        auto version = network.version();
-        if (sharedSmall.owner != SharedSmallCache::Owner::Small
-            || sharedSmall.smallVersion != version)
-        {
-            sharedSmall.cache.clear(network);
-            sharedSmall.owner        = SharedSmallCache::Owner::Small;
-            sharedSmall.smallVersion = version;
-        }
+        sharedSmall.ensure_owner(network, SharedSmallCache::Owner::Small);
         return sharedSmall.cache;
     }
 
@@ -140,38 +179,33 @@ struct AccumulatorCaches {
     Cache<TransformedFeatureDimensionsSmall>& cache_for_falcon(const Network& network) {
         if (!network.is_available())
         {
-            sharedSmall.owner = SharedSmallCache::Owner::None;
+            if (sharedSmall.owner == SharedSmallCache::Owner::Falcon)
+                sharedSmall.owner = SharedSmallCache::Owner::None;
+            sharedSmall.bindingFalcon.invalidate();
             return sharedSmall.cache;
         }
 
-        auto version = network.version();
-        if (sharedSmall.owner != SharedSmallCache::Owner::Falcon
-            || sharedSmall.falconVersion != version)
-        {
-            sharedSmall.cache.clear(network);
-            sharedSmall.owner         = SharedSmallCache::Owner::Falcon;
-            sharedSmall.falconVersion = version;
-        }
+        sharedSmall.ensure_owner(network, SharedSmallCache::Owner::Falcon);
         return sharedSmall.cache;
     }
 
-    void invalidate_big() { bigCache.version = 0; }
+    void invalidate_big() { bigCache.binding.invalidate(); }
 
     void invalidate_small() {
-        sharedSmall.smallVersion = 0;
         if (sharedSmall.owner == SharedSmallCache::Owner::Small)
             sharedSmall.owner = SharedSmallCache::Owner::None;
+        sharedSmall.bindingSmall.invalidate();
     }
 
     void invalidate_falcon() {
-        sharedSmall.falconVersion = 0;
         if (sharedSmall.owner == SharedSmallCache::Owner::Falcon)
             sharedSmall.owner = SharedSmallCache::Owner::None;
+        sharedSmall.bindingFalcon.invalidate();
     }
 
     struct BigCacheState {
         Cache<TransformedFeatureDimensionsBig> cache;
-        std::uint64_t                         version = 0;
+        CacheBinding                           binding;
     };
 
     struct SharedSmallCache {
@@ -179,14 +213,33 @@ struct AccumulatorCaches {
 
         void reset() {
             owner         = Owner::None;
-            smallVersion  = 0;
-            falconVersion = 0;
+            bindingSmall.invalidate();
+            bindingFalcon.invalidate();
+        }
+
+        template<typename Network>
+        void ensure_owner(const Network& network, Owner desiredOwner) {
+            CacheBinding& binding = desiredOwner == Owner::Small ? bindingSmall : bindingFalcon;
+
+            if (!binding.ensure(network, cache))
+            {
+                if ((desiredOwner == Owner::Falcon && owner == Owner::Falcon)
+                    || desiredOwner == Owner::Small)
+                    owner = Owner::None;
+                return;
+            }
+
+            if (owner != desiredOwner)
+            {
+                owner = desiredOwner;
+                (desiredOwner == Owner::Small ? bindingFalcon : bindingSmall).invalidate();
+            }
         }
 
         Cache<TransformedFeatureDimensionsSmall> cache;
-        std::uint64_t                            smallVersion  = 0;
-        std::uint64_t                            falconVersion = 0;
-        Owner                                    owner         = Owner::None;
+        CacheBinding                             bindingSmall;
+        CacheBinding                             bindingFalcon;
+        Owner                                    owner = Owner::None;
     };
 
     BigCacheState    bigCache;

@@ -26,6 +26,7 @@
 #include <memory>
 #include <optional>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #define INCBIN_SILENCE_BITCODE_WARNING
@@ -133,13 +134,13 @@ template<typename Arch, typename Transformer>
 Network<Arch, Transformer>::Network(const Network<Arch, Transformer>& other) :
     weights(std::atomic_load(&other.weights)),
     evalFile(other.evalFile),
-    embeddedType(other.embeddedType) {
+    embeddedType(other.embeddedType),
+    lastLoadedFromPtr(std::atomic_load(&other.lastLoadedFromPtr)) {
     versionCounter.store(other.versionCounter.load(std::memory_order_relaxed),
                          std::memory_order_relaxed);
     available.store(other.available.load(std::memory_order_relaxed), std::memory_order_relaxed);
     lastLoadedTime.store(other.lastLoadedTime.load(std::memory_order_relaxed),
                          std::memory_order_relaxed);
-    lastLoadedFrom = other.lastLoadedFrom;
 }
 
 template<typename Arch, typename Transformer>
@@ -156,7 +157,7 @@ Network<Arch, Transformer>::operator=(const Network<Arch, Transformer>& other) {
     available.store(other.available.load(std::memory_order_relaxed), std::memory_order_relaxed);
     lastLoadedTime.store(other.lastLoadedTime.load(std::memory_order_relaxed),
                          std::memory_order_relaxed);
-    lastLoadedFrom = other.lastLoadedFrom;
+    std::atomic_store(&lastLoadedFromPtr, std::atomic_load(&other.lastLoadedFromPtr));
 
     std::atomic_store(&weights, std::atomic_load(&other.weights));
 
@@ -219,8 +220,7 @@ bool Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
         if (loadedNewWeights && currentWeights && currentWeights != previousWeights)
         {
             versionCounter.fetch_add(1, std::memory_order_relaxed);
-            lastLoadedFrom = resolvedPath.empty() ? evalfilePath : resolvedPath;
-            lastLoadedTime.store(std::time(nullptr), std::memory_order_relaxed);
+            record_load(resolvedPath, evalfilePath);
         }
 
         return true;
@@ -232,6 +232,7 @@ bool Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
         std::atomic_store(&weights, WeightsPtr{});
 
     evalFile.current.clear();
+    clear_loaded_metadata();
 
     return false;
 }
@@ -299,8 +300,50 @@ std::time_t Network<Arch, Transformer>::loaded_time() const {
 }
 
 template<typename Arch, typename Transformer>
-const std::string& Network<Arch, Transformer>::loaded_from() const {
-    return lastLoadedFrom;
+std::string Network<Arch, Transformer>::loaded_from() const {
+    auto path = std::atomic_load(&lastLoadedFromPtr);
+    return path ? *path : std::string();
+}
+
+template<typename Arch, typename Transformer>
+typename Network<Arch, Transformer>::StateSnapshot
+Network<Arch, Transformer>::snapshot() const {
+    StateSnapshot state{};
+    state.weights   = weights_handle();
+    state.version   = versionCounter.load(std::memory_order_relaxed);
+    state.available = available.load(std::memory_order_relaxed) && bool(state.weights);
+    state.loadedAt  = lastLoadedTime.load(std::memory_order_relaxed);
+
+    if (auto path = std::atomic_load(&lastLoadedFromPtr))
+        state.loadedFrom = *path;
+
+    state.currentFile = evalFile.current;
+    state.description = evalFile.netDescription;
+
+    return state;
+}
+
+template<typename Arch, typename Transformer>
+void Network<Arch, Transformer>::set_loaded_from(std::string value) {
+    std::shared_ptr<const std::string> newPtr;
+    if (!value.empty())
+        newPtr = std::make_shared<std::string>(std::move(value));
+
+    std::atomic_store(&lastLoadedFromPtr, std::move(newPtr));
+}
+
+template<typename Arch, typename Transformer>
+void Network<Arch, Transformer>::record_load(const std::string& resolvedPath,
+                                             const std::string& evalfilePath) {
+    const std::string origin = resolvedPath.empty() ? evalfilePath : resolvedPath;
+    set_loaded_from(origin);
+    lastLoadedTime.store(std::time(nullptr), std::memory_order_relaxed);
+}
+
+template<typename Arch, typename Transformer>
+void Network<Arch, Transformer>::clear_loaded_metadata() {
+    set_loaded_from(std::string{});
+    lastLoadedTime.store(0, std::memory_order_relaxed);
 }
 
 
@@ -339,7 +382,7 @@ void Network<Arch, Transformer>::verify(std::string                             
         evalfilePath = evalFile.defaultName;
 
     bool required = embeddedType != EmbeddedNNUEType::FALCON;
-    auto storage  = weights_handle();
+    auto state    = snapshot();
 
     auto abort_with_message = [&]() {
         if (f)
@@ -363,22 +406,22 @@ void Network<Arch, Transformer>::verify(std::string                             
         exit(EXIT_FAILURE);
     };
 
-    if ((!storage || evalFile.current != evalfilePath) && required)
+    if ((!state.weights || state.currentFile != evalfilePath) && required)
         abort_with_message();
 
     if (!f)
         return;
 
-    if (!storage || evalFile.current != evalfilePath)
+    if (!state.weights || state.currentFile != evalfilePath)
     {
         f("Falcon network inactive (requested '" + evalfilePath
           + "'); falling back to EvalFileSmall outputs.");
         return;
     }
 
-    size_t size = sizeof(*storage->featureTransformer) + sizeof(Arch) * LayerStacks;
+    size_t size = sizeof(*state.weights->featureTransformer) + sizeof(Arch) * LayerStacks;
 
-    std::time_t loadedAt = loaded_time();
+    std::time_t loadedAt = state.loadedAt;
     char        buffer[64]{};
     if (loadedAt != 0)
     {
@@ -391,13 +434,13 @@ void Network<Arch, Transformer>::verify(std::string                             
         std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%SZ", &tm);
     }
 
-    std::string origin = loaded_from().empty() ? "(unknown)" : loaded_from();
+    std::string origin = state.loadedFrom.empty() ? "(unknown)" : state.loadedFrom;
 
     f("NNUE evaluation using " + evalfilePath + " (" + std::to_string(size / (1024 * 1024))
-      + "MiB, (" + std::to_string(storage->featureTransformer->InputDimensions) + ", "
-      + std::to_string(storage->network[0].TransformedFeatureDimensions) + ", "
-      + std::to_string(storage->network[0].FC_0_OUTPUTS) + ", "
-      + std::to_string(storage->network[0].FC_1_OUTPUTS) + ", 1))\n"
+      + "MiB, (" + std::to_string(state.weights->featureTransformer->InputDimensions) + ", "
+      + std::to_string(state.weights->network[0].TransformedFeatureDimensions) + ", "
+      + std::to_string(state.weights->network[0].FC_0_OUTPUTS) + ", "
+      + std::to_string(state.weights->network[0].FC_1_OUTPUTS) + ", 1))\n"
       + "    source: " + origin + "\n    loaded: " + (loadedAt ? buffer : "never"));
 }
 

@@ -71,7 +71,8 @@ class Network {
         embeddedType(type),
         versionCounter(0),
         available(false),
-        lastLoadedTime(0) {}
+        lastLoadedTime(0),
+        lastLoadedFromPtr(nullptr) {}
 
     Network(const Network& other);
     Network(Network&& other) = default;
@@ -86,7 +87,19 @@ class Network {
     std::uint64_t version() const;
     bool          is_available() const;
     std::time_t   loaded_time() const;
-    const std::string& loaded_from() const;
+    std::string loaded_from() const;
+
+    struct StateSnapshot {
+        WeightsPtr     weights;
+        std::uint64_t  version;
+        bool           available;
+        std::time_t    loadedAt;
+        std::string    loadedFrom;
+        std::string    currentFile;
+        std::string    description;
+    };
+
+    [[nodiscard]] StateSnapshot snapshot() const;
 
     NetworkOutput evaluate(const Position&                         pos,
                            AccumulatorStack&                       accumulatorStack,
@@ -121,8 +134,12 @@ class Network {
 
     std::atomic<std::uint64_t> versionCounter;
     std::atomic<bool>          available;
-    std::atomic<std::time_t>   lastLoadedTime;
-    std::string                lastLoadedFrom;
+    std::atomic<std::time_t>             lastLoadedTime;
+    std::shared_ptr<const std::string>   lastLoadedFromPtr;
+
+    void set_loaded_from(std::string value);
+    void record_load(const std::string& resolvedPath, const std::string& evalfilePath);
+    void clear_loaded_metadata();
 
     // Hash value of evaluation function structure
     static constexpr std::uint32_t hash = Transformer::get_hash_value() ^ Arch::get_hash_value();
