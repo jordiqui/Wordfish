@@ -362,6 +362,10 @@ class Worker {
     Eval::NNUE::NetworkBig::WeightsPtr    bigWeightsHandle;
     Eval::NNUE::NetworkSmall::WeightsPtr  smallWeightsHandle;
     Eval::NNUE::NetworkFalcon::WeightsPtr falconWeightsHandle;
+    std::uint64_t                          bigWeightsVersion   = 0;
+    std::uint64_t                          smallWeightsVersion = 0;
+    std::uint64_t                          falconWeightsVersion = 0;
+    bool                                   falconAvailable     = false;
 
     bool experienceAvailable = false;
 

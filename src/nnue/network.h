@@ -29,6 +29,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <ctime>
 
 #include "../memory.h"
 #include "../types.h"
@@ -67,7 +68,10 @@ class Network {
     Network(EvalFile file, EmbeddedNNUEType type) :
         weights(std::make_shared<Weights>()),
         evalFile(file),
-        embeddedType(type) {}
+        embeddedType(type),
+        versionCounter(0),
+        available(false),
+        lastLoadedTime(0) {}
 
     Network(const Network& other);
     Network(Network&& other) = default;
@@ -75,10 +79,14 @@ class Network {
     Network& operator=(const Network& other);
     Network& operator=(Network&& other) = default;
 
-    void load(const std::string& rootDirectory, std::string evalfilePath);
+    bool load(const std::string& rootDirectory, std::string evalfilePath);
     bool save(const std::optional<std::string>& filename) const;
 
     WeightsPtr weights_handle() const;
+    std::uint64_t version() const;
+    bool          is_available() const;
+    std::time_t   loaded_time() const;
+    const std::string& loaded_from() const;
 
     NetworkOutput evaluate(const Position&                         pos,
                            AccumulatorStack&                       accumulatorStack,
@@ -91,8 +99,8 @@ class Network {
                                  AccumulatorCaches::Cache<FTDimensions>* cache) const;
 
    private:
-    void load_user_net(const std::string&, const std::string&);
-    void load_internal();
+    bool load_user_net(const std::string&, const std::string&);
+    bool load_internal();
 
     WeightsPtr allocate_weights() const;
 
@@ -110,6 +118,11 @@ class Network {
 
     EvalFile         evalFile;
     EmbeddedNNUEType embeddedType;
+
+    std::atomic<std::uint64_t> versionCounter;
+    std::atomic<bool>          available;
+    std::atomic<std::time_t>   lastLoadedTime;
+    std::string                lastLoadedFrom;
 
     // Hash value of evaluation function structure
     static constexpr std::uint32_t hash = Transformer::get_hash_value() ^ Arch::get_hash_value();

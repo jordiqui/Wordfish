@@ -21,6 +21,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <fstream>
+#include <ctime>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -149,7 +150,7 @@ Network<Arch, Transformer>::operator=(const Network<Arch, Transformer>& other) {
 }
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::string evalfilePath) {
+bool Network<Arch, Transformer>::load(const std::string& rootDirectory, std::string evalfilePath) {
 #if defined(DEFAULT_NNUE_DIRECTORY)
     std::vector<std::string> dirs = {"<internal>", "", rootDirectory,
                                      stringify(DEFAULT_NNUE_DIRECTORY)};
@@ -160,21 +161,65 @@ void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
 
+    auto previousWeights = weights_handle();
+    bool loadedNewWeights = false;
+    std::string resolvedPath;
+
     for (const auto& directory : dirs)
     {
-        if (evalFile.current != evalfilePath)
-        {
-            if (directory != "<internal>")
-            {
-                load_user_net(directory, evalfilePath);
-            }
+        if (evalFile.current == evalfilePath && available.load(std::memory_order_relaxed))
+            break;
 
-            if (directory == "<internal>" && evalfilePath == evalFile.defaultName)
-            {
-                load_internal();
-            }
+        bool loaded = false;
+
+        if (directory != "<internal>")
+        {
+            loaded = load_user_net(directory, evalfilePath);
+            if (loaded)
+                resolvedPath = directory.empty() ? evalfilePath : directory + evalfilePath;
+        }
+
+        if (!loaded && directory == "<internal>" && evalfilePath == evalFile.defaultName)
+        {
+            loaded = load_internal();
+            if (loaded)
+                resolvedPath = "<internal>";
+        }
+
+        if (loaded)
+        {
+            loadedNewWeights = true;
+            break;
         }
     }
+
+    auto currentWeights = weights_handle();
+
+    bool alreadyLoaded = evalFile.current == evalfilePath && bool(currentWeights);
+    bool success       = loadedNewWeights || alreadyLoaded;
+
+    if (success)
+    {
+        available.store(true, std::memory_order_relaxed);
+
+        if (loadedNewWeights && currentWeights && currentWeights != previousWeights)
+        {
+            versionCounter.fetch_add(1, std::memory_order_relaxed);
+            lastLoadedFrom = resolvedPath.empty() ? evalfilePath : resolvedPath;
+            lastLoadedTime.store(std::time(nullptr), std::memory_order_relaxed);
+        }
+
+        return true;
+    }
+
+    available.store(false, std::memory_order_relaxed);
+
+    if (embeddedType == EmbeddedNNUEType::FALCON)
+        std::atomic_store(&weights, WeightsPtr{});
+
+    evalFile.current.clear();
+
+    return false;
 }
 
 
@@ -224,6 +269,26 @@ Network<Arch, Transformer>::weights_handle() const {
     return std::atomic_load(&weights);
 }
 
+template<typename Arch, typename Transformer>
+std::uint64_t Network<Arch, Transformer>::version() const {
+    return versionCounter.load(std::memory_order_relaxed);
+}
+
+template<typename Arch, typename Transformer>
+bool Network<Arch, Transformer>::is_available() const {
+    return available.load(std::memory_order_relaxed) && bool(std::atomic_load(&weights));
+}
+
+template<typename Arch, typename Transformer>
+std::time_t Network<Arch, Transformer>::loaded_time() const {
+    return lastLoadedTime.load(std::memory_order_relaxed);
+}
+
+template<typename Arch, typename Transformer>
+const std::string& Network<Arch, Transformer>::loaded_from() const {
+    return lastLoadedFrom;
+}
+
 
 template<typename Arch, typename Transformer>
 NetworkOutput
@@ -259,8 +324,10 @@ void Network<Arch, Transformer>::verify(std::string                             
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
 
-    if (evalFile.current != evalfilePath)
-    {
+    bool required = embeddedType != EmbeddedNNUEType::FALCON;
+    auto storage  = weights_handle();
+
+    auto abort_with_message = [&]() {
         if (f)
         {
             std::string msg1 =
@@ -280,21 +347,44 @@ void Network<Arch, Transformer>::verify(std::string                             
         }
 
         exit(EXIT_FAILURE);
-    }
+    };
 
-    if (f)
+    if ((!storage || evalFile.current != evalfilePath) && required)
+        abort_with_message();
+
+    if (!f)
+        return;
+
+    if (!storage || evalFile.current != evalfilePath)
     {
-        auto storage = weights_handle();
-        if (!storage)
-            return;
-
-        size_t size = sizeof(*storage->featureTransformer) + sizeof(Arch) * LayerStacks;
-        f("NNUE evaluation using " + evalfilePath + " (" + std::to_string(size / (1024 * 1024))
-          + "MiB, (" + std::to_string(storage->featureTransformer->InputDimensions) + ", "
-          + std::to_string(storage->network[0].TransformedFeatureDimensions) + ", "
-          + std::to_string(storage->network[0].FC_0_OUTPUTS) + ", "
-          + std::to_string(storage->network[0].FC_1_OUTPUTS) + ", 1))");
+        f("Falcon network inactive (requested '" + evalfilePath
+          + "'); falling back to EvalFileSmall outputs.");
+        return;
     }
+
+    size_t size = sizeof(*storage->featureTransformer) + sizeof(Arch) * LayerStacks;
+
+    std::time_t loadedAt = loaded_time();
+    char        buffer[64]{};
+    if (loadedAt != 0)
+    {
+        std::tm tm{};
+#ifdef _WIN32
+        gmtime_s(&tm, &loadedAt);
+#else
+        gmtime_r(&loadedAt, &tm);
+#endif
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%SZ", &tm);
+    }
+
+    std::string origin = loaded_from().empty() ? "(unknown)" : loaded_from();
+
+    f("NNUE evaluation using " + evalfilePath + " (" + std::to_string(size / (1024 * 1024))
+      + "MiB, (" + std::to_string(storage->featureTransformer->InputDimensions) + ", "
+      + std::to_string(storage->network[0].TransformedFeatureDimensions) + ", "
+      + std::to_string(storage->network[0].FC_0_OUTPUTS) + ", "
+      + std::to_string(storage->network[0].FC_1_OUTPUTS) + ", 1))\n"
+      + "    source: " + origin + "\n    loaded: " + (loadedAt ? buffer : "never"));
 }
 
 
@@ -334,21 +424,22 @@ Network<Arch, Transformer>::trace_evaluate(const Position&                      
 
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::load_user_net(const std::string& dir,
+bool Network<Arch, Transformer>::load_user_net(const std::string& dir,
                                                const std::string& evalfilePath) {
     std::ifstream stream(dir + evalfilePath, std::ios::binary);
     auto          description = load(stream);
 
-    if (description.has_value())
-    {
-        evalFile.current        = evalfilePath;
-        evalFile.netDescription = description.value();
-    }
+    if (!description.has_value())
+        return false;
+
+    evalFile.current        = evalfilePath;
+    evalFile.netDescription = description.value();
+    return true;
 }
 
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::load_internal() {
+bool Network<Arch, Transformer>::load_internal() {
     // C++ way to prepare a buffer for a memory stream
     class MemoryBuffer: public std::basic_streambuf<char> {
        public:
@@ -364,13 +455,14 @@ void Network<Arch, Transformer>::load_internal() {
                         size_t(embedded.size));
 
     std::istream stream(&buffer);
-    auto         description = load(stream);
+    auto description = load(stream);
 
-    if (description.has_value())
-    {
-        evalFile.current        = evalFile.defaultName;
-        evalFile.netDescription = description.value();
-    }
+    if (!description.has_value())
+        return false;
+
+    evalFile.current        = evalFile.defaultName;
+    evalFile.netDescription = description.value();
+    return true;
 }
 
 

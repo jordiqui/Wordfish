@@ -223,6 +223,10 @@ Search::Worker::Worker(SharedState&                    sharedState,
     bigWeightsHandle         = netsForToken.big.weights_handle();
     smallWeightsHandle       = netsForToken.small.weights_handle();
     falconWeightsHandle      = netsForToken.falcon.weights_handle();
+    bigWeightsVersion        = netsForToken.big.version();
+    smallWeightsVersion      = netsForToken.small.version();
+    falconWeightsVersion     = netsForToken.falcon.version();
+    falconAvailable          = netsForToken.falcon.is_available();
     clear();
 }
 
@@ -233,15 +237,30 @@ void Search::Worker::ensure_network_replicated() {
     auto newSmall  = nets.small.weights_handle();
     auto newFalcon = nets.falcon.weights_handle();
 
-    if (newBig == bigWeightsHandle && newSmall == smallWeightsHandle
-        && newFalcon == falconWeightsHandle)
+    bool bigChanged = newBig != bigWeightsHandle || nets.big.version() != bigWeightsVersion;
+    bool smallChanged = newSmall != smallWeightsHandle || nets.small.version() != smallWeightsVersion;
+    bool falconStateChanged =
+      newFalcon != falconWeightsHandle || nets.falcon.version() != falconWeightsVersion
+      || nets.falcon.is_available() != falconAvailable;
+
+    if (!bigChanged && !smallChanged && !falconStateChanged)
         return;
 
     bigWeightsHandle    = std::move(newBig);
     smallWeightsHandle  = std::move(newSmall);
     falconWeightsHandle = std::move(newFalcon);
 
-    refreshTable.clear(nets);
+    if (bigChanged)
+        refreshTable.invalidate_big();
+    if (smallChanged)
+        refreshTable.invalidate_small();
+    if (falconStateChanged)
+        refreshTable.invalidate_falcon();
+
+    bigWeightsVersion    = nets.big.version();
+    smallWeightsVersion  = nets.small.version();
+    falconWeightsVersion = nets.falcon.version();
+    falconAvailable      = nets.falcon.is_available();
 }
 
 bool Search::Worker::experience_guidance_available() const { return experienceAvailable; }
