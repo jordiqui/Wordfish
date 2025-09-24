@@ -102,15 +102,95 @@ struct AccumulatorCaches {
 
     template<typename Networks>
     void clear(const Networks& networks) {
-        big.clear(networks.big);
-        small.clear(networks.small);
-        falcon.clear(networks.falcon);
+        bigCache.cache.clear(networks.big);
+        bigCache.version = networks.big.version();
+
+        sharedSmall.reset();
+        sharedSmall.cache.clear(networks.small);
+        sharedSmall.owner        = SharedSmallCache::Owner::Small;
+        sharedSmall.smallVersion = networks.small.version();
+        sharedSmall.falconVersion = networks.falcon.version();
     }
 
-    Cache<TransformedFeatureDimensionsBig>   big;
-    Cache<TransformedFeatureDimensionsSmall> small;
-    // Falcon network uses the small-network dimensions
-    Cache<TransformedFeatureDimensionsSmall> falcon;
+    template<typename Network>
+    Cache<TransformedFeatureDimensionsBig>& cache_for_big(const Network& network) {
+        auto version = network.version();
+        if (bigCache.version != version)
+        {
+            bigCache.cache.clear(network);
+            bigCache.version = version;
+        }
+        return bigCache.cache;
+    }
+
+    template<typename Network>
+    Cache<TransformedFeatureDimensionsSmall>& cache_for_small(const Network& network) {
+        auto version = network.version();
+        if (sharedSmall.owner != SharedSmallCache::Owner::Small
+            || sharedSmall.smallVersion != version)
+        {
+            sharedSmall.cache.clear(network);
+            sharedSmall.owner        = SharedSmallCache::Owner::Small;
+            sharedSmall.smallVersion = version;
+        }
+        return sharedSmall.cache;
+    }
+
+    template<typename Network>
+    Cache<TransformedFeatureDimensionsSmall>& cache_for_falcon(const Network& network) {
+        if (!network.is_available())
+        {
+            sharedSmall.owner = SharedSmallCache::Owner::None;
+            return sharedSmall.cache;
+        }
+
+        auto version = network.version();
+        if (sharedSmall.owner != SharedSmallCache::Owner::Falcon
+            || sharedSmall.falconVersion != version)
+        {
+            sharedSmall.cache.clear(network);
+            sharedSmall.owner         = SharedSmallCache::Owner::Falcon;
+            sharedSmall.falconVersion = version;
+        }
+        return sharedSmall.cache;
+    }
+
+    void invalidate_big() { bigCache.version = 0; }
+
+    void invalidate_small() {
+        sharedSmall.smallVersion = 0;
+        if (sharedSmall.owner == SharedSmallCache::Owner::Small)
+            sharedSmall.owner = SharedSmallCache::Owner::None;
+    }
+
+    void invalidate_falcon() {
+        sharedSmall.falconVersion = 0;
+        if (sharedSmall.owner == SharedSmallCache::Owner::Falcon)
+            sharedSmall.owner = SharedSmallCache::Owner::None;
+    }
+
+    struct BigCacheState {
+        Cache<TransformedFeatureDimensionsBig> cache;
+        std::uint64_t                         version = 0;
+    };
+
+    struct SharedSmallCache {
+        enum class Owner { None, Small, Falcon };
+
+        void reset() {
+            owner         = Owner::None;
+            smallVersion  = 0;
+            falconVersion = 0;
+        }
+
+        Cache<TransformedFeatureDimensionsSmall> cache;
+        std::uint64_t                            smallVersion  = 0;
+        std::uint64_t                            falconVersion = 0;
+        Owner                                    owner         = Owner::None;
+    };
+
+    BigCacheState    bigCache;
+    SharedSmallCache sharedSmall;
 };
 
 

@@ -48,6 +48,29 @@ int Eval::simple_eval(const Position& pos) {
 
 bool Eval::use_smallnet(const Position& pos) { return std::abs(simple_eval(pos)) > 962; }
 
+namespace {
+
+bool should_use_falcon(const Position& pos, bool smallNetPreferred) {
+    const int totalPieces    = pos.count<ALL_PIECES>();
+    const int pawns          = pos.count<PAWN>();
+    const int majorPieces    = pos.count<ROOK>() + pos.count<QUEEN>();
+    const int minorPieces    = pos.count<BISHOP>() + pos.count<KNIGHT>();
+    const int materialImb    = std::abs(Eval::simple_eval(pos));
+    const bool deepEndgame   = totalPieces <= 7 || (pawns <= 4 && majorPieces <= 1);
+    const bool lightMaterial = (pawns <= 5 && totalPieces <= 12) || minorPieces <= 1;
+    const bool highImbalance = materialImb > 800 && (pawns <= 6 || majorPieces <= 1);
+
+    if (deepEndgame)
+        return true;
+
+    if (smallNetPreferred)
+        return highImbalance || lightMaterial;
+
+    return highImbalance && lightMaterial;
+}
+
+}  // namespace
+
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
 Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
@@ -58,16 +81,63 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     assert(!pos.checkers());
 
-    bool smallNet           = use_smallnet(pos);
-    auto [psqt, positional] = smallNet ? networks.small.evaluate(pos, accumulators, &caches.small)
-                                       : networks.big.evaluate(pos, accumulators, &caches.big);
+    bool  smallNetCandidate = use_smallnet(pos);
+    bool  falconAvailable   = networks.falcon.is_available();
+    bool  useFalconNet      = falconAvailable && should_use_falcon(pos, smallNetCandidate);
+    bool  smallNet          = smallNetCandidate;
+    Value nnue              = VALUE_ZERO;
+    Value psqt              = VALUE_ZERO;
+    Value positional        = VALUE_ZERO;
 
-    Value nnue = (125 * psqt + 131 * positional) / 128;
+    if (useFalconNet)
+    {
+        auto& falconCache = caches.cache_for_falcon(networks.falcon);
+        auto  falconEval  = networks.falcon.evaluate(pos, accumulators, &falconCache);
+
+        auto& bigCache = caches.cache_for_big(networks.big);
+        auto  bigEval  = networks.big.evaluate(pos, accumulators, &bigCache);
+
+        Value falconPsqt, falconPositional;
+        Value bigPsqt, bigPositional;
+        std::tie(falconPsqt, falconPositional) = falconEval;
+        std::tie(bigPsqt, bigPositional)       = bigEval;
+
+        int imbalance     = std::min(1500, std::abs(simple_eval(pos)));
+        int scarcityBonus = std::max(0, 10 - pos.count<ALL_PIECES>());
+        int falconWeight  = 64 + imbalance * 32 / 1500 + scarcityBonus * 4;
+        falconWeight      = std::clamp(falconWeight, 48, 120);
+
+        psqt       = Value((falconWeight * falconPsqt + (128 - falconWeight) * bigPsqt) / 128);
+        positional = Value((falconWeight * falconPositional + (128 - falconWeight) * bigPositional)
+                           / 128);
+
+        Value falconScore = (125 * falconPsqt + 131 * falconPositional) / 128;
+        Value bigScore    = (125 * bigPsqt + 131 * bigPositional) / 128;
+        nnue              = Value((falconWeight * falconScore + (128 - falconWeight) * bigScore) / 128);
+        smallNet          = false;
+    }
+    else
+    {
+        if (smallNetCandidate)
+        {
+            auto& smallCache = caches.cache_for_small(networks.small);
+            std::tie(psqt, positional) = networks.small.evaluate(pos, accumulators, &smallCache);
+        }
+        else
+        {
+            auto& bigCache = caches.cache_for_big(networks.big);
+            std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &bigCache);
+            smallNet                   = false;
+        }
+
+        nnue = (125 * psqt + 131 * positional) / 128;
+    }
 
     // Re-evaluate the position when higher eval accuracy is worth the time spent
-    if (smallNet && (std::abs(nnue) < 236))
+    if (!useFalconNet && smallNet && (std::abs(nnue) < 236))
     {
-        std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
+        auto& bigCache = caches.cache_for_big(networks.big);
+        std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &bigCache);
         nnue                       = (125 * psqt + 131 * positional) / 128;
         smallNet                   = false;
     }
@@ -107,7 +177,8 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto [psqt, positional] = networks.big.evaluate(pos, accumulators, &caches->big);
+    auto& bigCache = caches->cache_for_big(networks.big);
+    auto [psqt, positional] = networks.big.evaluate(pos, accumulators, &bigCache);
     Value v                 = psqt + positional;
     v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
