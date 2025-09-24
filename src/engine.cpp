@@ -381,8 +381,8 @@ void Engine::verify_networks() const {
         std::string status = networks->falcon.is_available() ? "active" : "inactive";
         std::string requestedFile(options["FalconFile"]);
         std::string fallbackFile(options["EvalFileSmall"]);
-        std::string origin = networks->falcon.loaded_from().empty() ? "(unknown)"
-                                                                   : networks->falcon.loaded_from();
+        std::string originValue = networks->falcon.loaded_from();
+        std::string origin      = originValue.empty() ? "(unknown)" : originValue;
 
         std::time_t loadedAt = networks->falcon.loaded_time();
         char        buffer[64]{};
