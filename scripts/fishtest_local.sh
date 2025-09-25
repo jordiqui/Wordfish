@@ -4,7 +4,7 @@
 
 set -e
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ENGINE="$ROOT_DIR/src/wordfish"
+ENGINE="$ROOT_DIR/src/Wordfish v.2.70-dev-250925"
 FISHTEST_DIR="${FISHTEST_DIR:-$HOME/fishtest}"
 
 if [ ! -x "$ENGINE" ]; then
