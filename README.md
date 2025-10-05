@@ -1,8 +1,8 @@
 # Wordfish Chess Engine
 
-**Versión v.2.70-dev-250925**
+**Versión 2.80-061025**
 
-Este build se identifica como `Wordfish v.2.70-dev-250925`.
+Este build se identifica como `Wordfish-2.80-061025`.
 
 <div align="center">
   <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 

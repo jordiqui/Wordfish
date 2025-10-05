@@ -4,7 +4,7 @@
 
 set -e
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ENGINE_NAME="Wordfish v.2.70-dev-250925"
+ENGINE_NAME="Wordfish-2.80-061025"
 ENGINE_DEFAULT="$ROOT_DIR/src/$ENGINE_NAME"
 ENGINE="${ENGINE:-$ENGINE_DEFAULT}"
 OPPONENT="${1:?Opponent engine path required}"
