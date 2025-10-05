@@ -50,15 +50,31 @@ bool Eval::use_smallnet(const Position& pos) { return std::abs(simple_eval(pos))
 
 namespace {
 
-bool should_use_falcon(const Position& pos, bool smallNetPreferred) {
-    const int totalPieces    = pos.count<ALL_PIECES>();
-    const int pawns          = pos.count<PAWN>();
-    const int majorPieces    = pos.count<ROOK>() + pos.count<QUEEN>();
-    const int minorPieces    = pos.count<BISHOP>() + pos.count<KNIGHT>();
-    const int materialImb    = std::abs(Eval::simple_eval(pos));
-    const bool deepEndgame   = totalPieces <= 7 || (pawns <= 4 && majorPieces <= 1);
-    const bool lightMaterial = (pawns <= 5 && totalPieces <= 12) || minorPieces <= 1;
-    const bool highImbalance = materialImb > 800 && (pawns <= 6 || majorPieces <= 1);
+struct MaterialSummary {
+    int totalPieces;
+    int pawns;
+    int majorPieces;
+    int minorPieces;
+    int materialImbalance;
+};
+
+MaterialSummary summarize_material(const Position& pos, int simpleEvalAbs) {
+    MaterialSummary summary{};
+    summary.totalPieces       = pos.count<ALL_PIECES>();
+    summary.pawns             = pos.count<PAWN>();
+    summary.majorPieces       = pos.count<ROOK>() + pos.count<QUEEN>();
+    summary.minorPieces       = pos.count<BISHOP>() + pos.count<KNIGHT>();
+    summary.materialImbalance = simpleEvalAbs;
+    return summary;
+}
+
+bool should_use_falcon(const MaterialSummary& summary, bool smallNetPreferred) {
+    const bool deepEndgame   = summary.totalPieces <= 7
+                            || (summary.pawns <= 4 && summary.majorPieces <= 1);
+    const bool lightMaterial = (summary.pawns <= 5 && summary.totalPieces <= 12)
+                            || summary.minorPieces <= 1;
+    const bool highImbalance = summary.materialImbalance > 800
+                               && (summary.pawns <= 6 || summary.majorPieces <= 1);
 
     if (deepEndgame)
         return true;
@@ -81,9 +97,12 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     assert(!pos.checkers());
 
-    bool  smallNetCandidate = use_smallnet(pos);
+    const int  simpleEvalAbs    = std::abs(simple_eval(pos));
+    const auto materialSummary = summarize_material(pos, simpleEvalAbs);
+
+    bool  smallNetCandidate = materialSummary.materialImbalance > 962;
     bool  falconAvailable   = networks.falcon.is_available();
-    bool  useFalconNet      = falconAvailable && should_use_falcon(pos, smallNetCandidate);
+    bool  useFalconNet      = falconAvailable && should_use_falcon(materialSummary, smallNetCandidate);
     bool  smallNet          = smallNetCandidate;
     Value nnue              = VALUE_ZERO;
     Value psqt              = VALUE_ZERO;
@@ -102,8 +121,8 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
         std::tie(falconPsqt, falconPositional) = falconEval;
         std::tie(bigPsqt, bigPositional)       = bigEval;
 
-        int imbalance     = std::min(1500, std::abs(simple_eval(pos)));
-        int scarcityBonus = std::max(0, 10 - pos.count<ALL_PIECES>());
+        int imbalance     = std::min(1500, materialSummary.materialImbalance);
+        int scarcityBonus = std::max(0, 10 - materialSummary.totalPieces);
         int falconWeight  = 64 + imbalance * 32 / 1500 + scarcityBonus * 4;
         falconWeight      = std::clamp(falconWeight, 48, 120);
 
@@ -147,7 +166,7 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     optimism += optimism * nnueComplexity / 468;
     nnue -= nnue * nnueComplexity / 18000;
 
-    int material = 535 * pos.count<PAWN>() + pos.non_pawn_material();
+    int material = 535 * materialSummary.pawns + pos.non_pawn_material();
     int v        = (nnue * (77777 + material) + optimism * (7777 + material)) / 77777;
 
     // Damp down the evaluation linearly when shuffling

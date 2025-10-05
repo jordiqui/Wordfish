@@ -112,7 +112,7 @@ class Network {
                                  AccumulatorCaches::Cache<FTDimensions>* cache) const;
 
    private:
-    bool load_user_net(const std::string&, const std::string&);
+    bool load_user_net(const std::string&, const std::string&, std::string& resolvedPathOut);
     bool load_internal();
 
     WeightsPtr allocate_weights() const;

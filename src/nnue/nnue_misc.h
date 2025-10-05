@@ -20,6 +20,8 @@
 #define NNUE_MISC_H_INCLUDED
 
 #include <cstddef>
+#include <filesystem>
+#include <optional>
 #include <string>
 
 #include "../types.h"
@@ -39,6 +41,10 @@ struct EvalFile {
     std::string current;
     // Net description extracted from the net file
     std::string netDescription;
+    // Fully resolved path from which the network was loaded, if any
+    std::string resolvedPath;
+    // Timestamp of the backing file when the weights were last loaded
+    std::optional<std::filesystem::file_time_type> lastWriteTime;
 };
 
 
