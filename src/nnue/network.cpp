@@ -20,7 +20,9 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <ctime>
 #include <iostream>
 #include <memory>
@@ -189,9 +191,10 @@ bool Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
 
         if (directory != "<internal>")
         {
-            loaded = load_user_net(directory, evalfilePath);
+            std::string resolvedCandidate;
+            loaded = load_user_net(directory, evalfilePath, resolvedCandidate);
             if (loaded)
-                resolvedPath = directory.empty() ? evalfilePath : directory + evalfilePath;
+                resolvedPath = std::move(resolvedCandidate);
         }
 
         if (!loaded && directory == "<internal>" && evalfilePath == evalFile.defaultName)
@@ -344,6 +347,8 @@ template<typename Arch, typename Transformer>
 void Network<Arch, Transformer>::clear_loaded_metadata() {
     set_loaded_from(std::string{});
     lastLoadedTime.store(0, std::memory_order_relaxed);
+    evalFile.resolvedPath.clear();
+    evalFile.lastWriteTime = std::nullopt;
 }
 
 
@@ -482,15 +487,50 @@ Network<Arch, Transformer>::trace_evaluate(const Position&                      
 
 template<typename Arch, typename Transformer>
 bool Network<Arch, Transformer>::load_user_net(const std::string& dir,
-                                               const std::string& evalfilePath) {
-    std::ifstream stream(dir + evalfilePath, std::ios::binary);
-    auto          description = load(stream);
+                                               const std::string& evalfilePath,
+                                               std::string&       resolvedPathOut) {
+    namespace fs = std::filesystem;
+
+    const fs::path basePath = dir.empty() ? fs::path(evalfilePath) : fs::path(dir) / evalfilePath;
+
+    std::error_code ec;
+    fs::path        resolvedPath = fs::absolute(basePath, ec);
+    if (ec)
+        resolvedPath = basePath;
+
+    resolvedPath = resolvedPath.lexically_normal();
+    resolvedPathOut = resolvedPath.string();
+
+    std::optional<fs::file_time_type> candidateTimestamp;
+    auto                               timestamp = fs::last_write_time(resolvedPath, ec);
+    if (!ec)
+        candidateTimestamp = timestamp;
+
+    const bool hasLoadedWeights = available.load(std::memory_order_relaxed)
+                                  && bool(weights_handle()) && evalFile.current == evalfilePath
+                                  && !evalFile.resolvedPath.empty()
+                                  && evalFile.resolvedPath == resolvedPathOut;
+
+    if (hasLoadedWeights && evalFile.lastWriteTime && candidateTimestamp
+        && *evalFile.lastWriteTime == *candidateTimestamp)
+    {
+        resolvedPathOut = evalFile.resolvedPath;
+        return true;
+    }
+
+    std::ifstream stream(resolvedPath, std::ios::binary);
+    if (!stream)
+        return false;
+
+    auto description = load(stream);
 
     if (!description.has_value())
         return false;
 
     evalFile.current        = evalfilePath;
     evalFile.netDescription = description.value();
+    evalFile.resolvedPath   = resolvedPathOut;
+    evalFile.lastWriteTime  = candidateTimestamp;
     return true;
 }
 
@@ -519,6 +559,8 @@ bool Network<Arch, Transformer>::load_internal() {
 
     evalFile.current        = evalFile.defaultName;
     evalFile.netDescription = description.value();
+    evalFile.resolvedPath   = "<internal>";
+    evalFile.lastWriteTime  = std::nullopt;
     return true;
 }
 
