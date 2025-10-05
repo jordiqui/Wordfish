@@ -885,13 +885,22 @@ ifeq ($(debug), no)
 # GCC and CLANG use different methods for parallelizing LTO and CLANG pretends to be
 # GCC on some systems.
 	else ifeq ($(comp),gcc)
-	ifeq ($(gccisclang),)
-		CXXFLAGS += -flto -flto-partition=one
-		LDFLAGS += $(CXXFLAGS) -flto=jobserver
-	else
-		CXXFLAGS += -flto=full
-		LDFLAGS += $(CXXFLAGS)
-	endif
+        ifeq ($(gccisclang),)
+                CXXFLAGS += -flto -flto-partition=one
+                ifeq ($(target_windows),yes)
+                        # Native Windows builds of GCC frequently fail when
+                        # lto-wrapper tries to delete temporary files that are
+                        # still locked by another process.  Avoid using the
+                        # jobserver-assisted parallel LTO mode on Windows to
+                        # prevent these race conditions.
+                        LDFLAGS += $(CXXFLAGS)
+                else
+                        LDFLAGS += $(CXXFLAGS) -flto=jobserver
+                endif
+        else
+                CXXFLAGS += -flto=full
+                LDFLAGS += $(CXXFLAGS)
+        endif
 
 # To use LTO and static linking on Windows,
 # the tool chain requires gcc version 10.1 or later.
