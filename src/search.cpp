@@ -70,8 +70,9 @@ constexpr int SEARCHEDLIST_CAPACITY = 32;
 using SearchedList                  = ValueList<Move, SEARCHEDLIST_CAPACITY>;
 
 int king_file_exposure_scale(const Position& pos, Color us) {
-    const Square kingSq  = pos.square<KING>(us);
-    const int    forward = us == WHITE ? 8 : -8;
+    const Square     kingSq  = pos.square<KING>(us);
+    const int        forward = us == WHITE ? 8 : -8;
+    constexpr Bitboard DarkSquaresMask = 0xAA55AA55AA55AA55ULL;
 
     bool friendlyShield = false;
     bool enemyPressure  = false;
@@ -107,10 +108,82 @@ int king_file_exposure_scale(const Position& pos, Color us) {
     enemyPressure = enemyPressure || check_pressure(Square(int(kingSq) + forward))
                     || check_pressure(Square(int(kingSq) + 2 * forward));
 
-    if (enemyPressure)
-        return friendlyShield ? 112 : 96;
+    int scale = enemyPressure ? (friendlyShield ? 112 : 96) : (friendlyShield ? 140 : 128);
 
-    return friendlyShield ? 140 : 128;
+    const auto file_safety_penalty = [&](File f) {
+        if (f < FILE_A || f > FILE_H)
+            return 0;
+
+        Bitboard friendlyPawns = pos.pieces(us, PAWN) & file_bb(f);
+        Bitboard enemyPawns    = pos.pieces(~us, PAWN) & file_bb(f);
+
+        int penalty = 0;
+
+        if (!friendlyPawns)
+        {
+            penalty += enemyPawns ? 6 : 9;
+
+            if (pos.pieces(~us, ROOK, QUEEN) & file_bb(f))
+                penalty += 5;
+        }
+        else
+        {
+            Square guardSq = us == WHITE ? msb(friendlyPawns) : lsb(friendlyPawns);
+            Rank   guardRank = relative_rank(us, guardSq);
+
+            if (guardRank >= RANK_4)
+                penalty += 4 + (guardRank - RANK_3) * 2;
+        }
+
+        return penalty;
+    };
+
+    File kingFile = file_of(kingSq);
+    scale -= file_safety_penalty(kingFile);
+    scale -= file_safety_penalty(File(kingFile - 1));
+    scale -= file_safety_penalty(File(kingFile + 1));
+
+    Bitboard liftedMask = us == WHITE ? (rank_bb(RANK_3) | rank_bb(RANK_4))
+                                      : (rank_bb(RANK_6) | rank_bb(RANK_5));
+    Bitboard liftedRooks = pos.pieces(us, ROOK) & liftedMask;
+    while (liftedRooks)
+    {
+        Square rookSq = pop_lsb(liftedRooks);
+        if (std::abs(file_of(rookSq) - file_of(kingSq)) <= 1)
+            scale -= enemyPressure ? 6 : 8;
+    }
+
+    const bool kingOnDark = ((rank_of(kingSq) + file_of(kingSq)) % 2) == 0;
+    Bitboard   bishops    = pos.pieces(us, BISHOP);
+    const bool bishopCover = kingOnDark ? (bishops & DarkSquaresMask)
+                                        : (bishops & ~DarkSquaresMask);
+
+    if (!bishopCover)
+    {
+        int    weakDark = 0;
+        Square guardSq;
+
+        for (int df = -1; df <= 1; ++df)
+        {
+            guardSq = Square(int(kingSq) + forward + df);
+            if (!is_ok(guardSq))
+                continue;
+
+            const bool sameColor = ((rank_of(guardSq) + file_of(guardSq)) % 2)
+                                   == (kingOnDark ? 0 : 1);
+            if (!sameColor)
+                continue;
+
+            Piece pc = pos.piece_on(guardSq);
+            if (pc == NO_PIECE || color_of(pc) == ~us)
+                ++weakDark;
+        }
+
+        scale -= weakDark * 4;
+    }
+
+    scale = std::clamp(scale, 72, 160);
+    return scale;
 }
 
 // (*Scalers):
@@ -1092,7 +1165,8 @@ Value Search::Worker::search(
         assert((ss - 1)->currentMove != Move::null());
 
         // Null move dynamic reduction based on depth
-        Depth R = 7 + depth / 3;
+        int exposureScale = king_file_exposure_scale(pos, us);
+        Depth R = 6 + depth / 3 - Depth(std::clamp((140 - exposureScale) / 16, 0, 2));
 
         ss->currentMove                   = Move::null();
         ss->continuationHistory           = &continuationHistory[0][0][NO_PIECE][0];
@@ -1237,6 +1311,8 @@ moves_loop:  // When in check, search starts here
         capture    = pos.capture_stage(move);
         movedPiece = pos.moved_piece(move);
         givesCheck = pos.gives_check(move);
+
+        (ss + 1)->skipVerification = false;
 
         const bool negativeSee = capture && !pos.see_ge(move, VALUE_ZERO);
 
@@ -1411,7 +1487,8 @@ moves_loop:  // When in check, search starts here
 
         // These reduction adjustments have no proven non-linear scaling
 
-        r += 650;  // Base reduction offset to compensate for other tweaks
+        r += 520;  // Base reduction offset to compensate for other tweaks
+        r -= std::clamp((160 - king_file_exposure_scale(pos, us)) * 6, 0, 640);
         if (negativeSee)
             r = std::max<int>(0, r - 1024);
         r -= moveCount * 69;
@@ -1495,6 +1572,19 @@ moves_loop:  // When in check, search starts here
                 newDepth = std::max(newDepth, 1);
 
             value = -search<PV>(pos, ss + 1, -beta, -alpha, newDepth, false);
+        }
+
+        if (!rootNode && depth >= 3 && !capture && !givesCheck && !(ss + 1)->skipVerification)
+        {
+            Value swing = value - ss->staticEval;
+            if (std::abs(swing) > 320 && ((value > alpha && swing > 0) || (value < alpha && swing < 0)))
+            {
+                (ss + 1)->skipVerification = true;
+                Depth verifyDepth = std::max(1, newDepth - std::max(0, ss->reduction - 1));
+                Value verifyValue = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, verifyDepth, true);
+                value             = verifyValue;
+                (ss + 1)->skipVerification = false;
+            }
         }
 
         // Step 19. Undo move

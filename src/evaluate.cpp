@@ -30,6 +30,7 @@
 
 #include "nnue/network.h"
 #include "nnue/nnue_misc.h"
+#include "bitboard.h"
 #include "position.h"
 #include "types.h"
 #include "uci.h"
@@ -86,6 +87,152 @@ bool should_use_falcon(const MaterialSummary& summary, bool smallNetPreferred) {
 }
 
 }  // namespace
+
+constexpr Bitboard DarkSquaresMask = 0xAA55AA55AA55AA55ULL;
+
+bool rooks_connected_home(const Position& pos, Color c) {
+    if (pos.count<ROOK>(c) < 2)
+        return false;
+
+    Bitboard rooks    = pos.pieces(c, ROOK);
+    Bitboard homeRank = rank_bb(relative_rank(c, RANK_1));
+    Bitboard homeRooks = rooks & homeRank;
+
+    if (popcount(homeRooks) < 2)
+        return false;
+
+    Square left  = lsb(homeRooks);
+    Square right = msb(homeRooks);
+
+    Bitboard between = between_bb(left, right) ^ square_bb(right);
+    return !(between & pos.pieces());
+}
+
+int rook_connection_bonus(const Position& pos, Color c) {
+    if (pos.count<ROOK>(c) < 2)
+        return 0;
+
+    int      bonus       = 0;
+    Bitboard rooks       = pos.pieces(c, ROOK);
+    Bitboard connected   = rooks_connected_home(pos, c) ? rooks : Bitboard(0);
+    Bitboard liftedRanks = c == WHITE ? (rank_bb(RANK_3) | rank_bb(RANK_4))
+                                      : (rank_bb(RANK_6) | rank_bb(RANK_5));
+
+    if (connected)
+        bonus += 18;
+
+    Bitboard lifted = rooks & liftedRanks;
+    while (lifted)
+    {
+        Square rsq = pop_lsb(lifted);
+        if (!(pos.pieces(c, PAWN) & file_bb(file_of(rsq))))
+            bonus += 5;
+    }
+
+    return bonus;
+}
+
+int king_open_file_penalty(const Position& pos, Color c) {
+    const Square kingSq  = pos.square<KING>(c);
+    const File   kingFile = file_of(kingSq);
+
+    int penalty = 0;
+
+    for (int df = -1; df <= 1; ++df)
+    {
+        File f = File(int(kingFile) + df);
+        if (f < FILE_A || f > FILE_H)
+            continue;
+
+        Bitboard friendly = pos.pieces(c, PAWN) & file_bb(f);
+        Bitboard enemy    = pos.pieces(~c, PAWN) & file_bb(f);
+
+        if (!friendly)
+        {
+            penalty += enemy ? 16 : 20;
+            if (pos.pieces(~c, ROOK, QUEEN) & file_bb(f))
+                penalty += 8;
+        }
+        else
+        {
+            Square guardSq = c == WHITE ? msb(friendly) : lsb(friendly);
+            Rank   relRank = relative_rank(c, guardSq);
+
+            if (relRank >= RANK_4)
+                penalty += 10 + 2 * (int(relRank) - int(RANK_3));
+        }
+    }
+
+    return penalty;
+}
+
+int king_dark_square_penalty(const Position& pos, Color c) {
+    const Square kingSq    = pos.square<KING>(c);
+    const bool   kingOnDark = ((rank_of(kingSq) + file_of(kingSq)) % 2) == 0;
+
+    Bitboard bishops = pos.pieces(c, BISHOP);
+    bool     bishopCover = kingOnDark ? (bishops & DarkSquaresMask)
+                                      : (bishops & ~DarkSquaresMask);
+
+    if (bishopCover)
+        return 0;
+
+    int        penalty = 0;
+    const int  forward = c == WHITE ? 8 : -8;
+
+    for (int df = -1; df <= 1; ++df)
+    {
+        Square shieldSq = Square(int(kingSq) + forward + df);
+        if (!is_ok(shieldSq))
+            continue;
+
+        const bool sameColor = ((rank_of(shieldSq) + file_of(shieldSq)) % 2)
+                               == (kingOnDark ? 0 : 1);
+        if (!sameColor)
+            continue;
+
+        Piece shield = pos.piece_on(shieldSq);
+        if (shield == NO_PIECE)
+            penalty += 7;
+        else if (color_of(shield) == ~c)
+            penalty += 5;
+        else if (type_of(shield) == PAWN && relative_rank(c, shieldSq) >= RANK_4)
+            penalty += 6;
+    }
+
+    return penalty;
+}
+
+int flank_storm_penalty(const Position& pos, Color c) {
+    static constexpr File flankFiles[] = {FILE_A, FILE_B, FILE_G, FILE_H};
+
+    int      penalty      = 0;
+    Bitboard pawns        = pos.pieces(c, PAWN);
+    const bool rooksReady = rooks_connected_home(pos, c);
+
+    for (File f : flankFiles)
+    {
+        Bitboard filePawns = pawns & file_bb(f);
+        if (!filePawns)
+            continue;
+
+        Square front = c == WHITE ? msb(filePawns) : lsb(filePawns);
+        Rank   rel   = relative_rank(c, front);
+
+        if (rel >= RANK_4)
+        {
+            int base = (f == FILE_A || f == FILE_H) ? 14 : 10;
+            base += 2 * std::max(0, int(rel) - int(RANK_4));
+
+            if (!rooksReady)
+                base += 8;
+
+            penalty += base;
+        }
+    }
+
+    return penalty;
+}
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
@@ -168,6 +315,19 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     int material = 535 * materialSummary.pawns + pos.non_pawn_material();
     int v        = (nnue * (77777 + material) + optimism * (7777 + material)) / 77777;
+
+    const Color us   = pos.side_to_move();
+    const Color them = ~us;
+
+    int ourPenalty = king_open_file_penalty(pos, us) + king_dark_square_penalty(pos, us)
+                   + flank_storm_penalty(pos, us);
+    int theirPenalty = king_open_file_penalty(pos, them) + king_dark_square_penalty(pos, them)
+                     + flank_storm_penalty(pos, them);
+
+    int safetySwing = theirPenalty - ourPenalty;
+    int rookDiff    = rook_connection_bonus(pos, us) - rook_connection_bonus(pos, them);
+
+    v += safetySwing + rookDiff;
 
     // Damp down the evaluation linearly when shuffling
     v -= v * pos.rule50_count() / 212;
