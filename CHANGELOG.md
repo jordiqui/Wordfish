@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- Documented new training emphasis on king safety, rook coordination, and endgame supervision. 
+
+### Changed
+- Tightened king-safety heuristics for open files, rook lifts, and dark-square weaknesses.
+- Reduced aggressive pruning in sharp positions and added verification search for large evaluation swings.
+- Rewarded connected rooks while penalizing premature flank pawn storms in the handcrafted evaluation.
+
 ## [2.42-190825]
 ### Changed
 - Updated engine id name to "Wordfish 2.42-190825".
