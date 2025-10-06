@@ -90,6 +90,8 @@ bool should_use_falcon(const MaterialSummary& summary, bool smallNetPreferred) {
 
 constexpr Bitboard DarkSquaresMask = 0xAA55AA55AA55AA55ULL;
 
+namespace {
+
 bool rooks_connected_home(const Position& pos, Color c) {
     if (pos.count<ROOK>(c) < 2)
         return false;
@@ -233,6 +235,8 @@ int flank_storm_penalty(const Position& pos, Color c) {
 
     return penalty;
 }
+
+}  // namespace
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
