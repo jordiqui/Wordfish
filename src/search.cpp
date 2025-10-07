@@ -196,15 +196,21 @@ int correction_value(const Worker& w,
                      const Position& pos,
                      const Stack* const ss,
                      Depth            depth) {
-    const Color us    = pos.side_to_move();
-    const auto  m     = (ss - 1)->currentMove;
-    const auto  pcv   = w.pawnCorrectionHistory[pawn_correction_history_index(pos)][us];
-    const auto  micv  = w.minorPieceCorrectionHistory[minor_piece_index(pos)][us];
-    const auto  wnpcv = w.nonPawnCorrectionHistory[non_pawn_index<WHITE>(pos)][WHITE][us];
-    const auto  bnpcv = w.nonPawnCorrectionHistory[non_pawn_index<BLACK>(pos)][BLACK][us];
-    const auto  cntcv =
-      m.is_ok() ? (*(ss - 2)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
-                 : 0;
+    const Color  us   = pos.side_to_move();
+    const auto   m    = (ss - 1)->currentMove;
+    const auto   pcv  = w.pawnCorrectionHistory[pawn_correction_history_index(pos)][us];
+    const auto   micv = w.minorPieceCorrectionHistory[minor_piece_index(pos)][us];
+    const auto   wnpcv = w.nonPawnCorrectionHistory[non_pawn_index<WHITE>(pos)][WHITE][us];
+    const auto   bnpcv = w.nonPawnCorrectionHistory[non_pawn_index<BLACK>(pos)][BLACK][us];
+    int cntcv = 8;
+
+    if (m.is_ok())
+    {
+        const Square to = m.to_sq();
+        const Piece  pc = pos.piece_on(to);
+        cntcv = (*(ss - 2)->continuationCorrectionHistory)[pc][to]
+                + (*(ss - 4)->continuationCorrectionHistory)[pc][to];
+    }
 
     const int depthLeft     = std::max(int(depth), 0);
     const int depthScale    = 128 - std::min(48, depthLeft * 4);
@@ -254,8 +260,12 @@ void update_correction_history(const Position& pos,
       << scaledBonus * nonPawnWeight / 128;
 
     if (m.is_ok())
-        (*(ss - 2)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
-          << scaledBonus * 153 / 128;
+    {
+        const Square to = m.to_sq();
+        const Piece  pc = pos.piece_on(to);
+        (*(ss - 2)->continuationCorrectionHistory)[pc][to] << scaledBonus * 153 / 128;
+        (*(ss - 4)->continuationCorrectionHistory)[pc][to] << scaledBonus * 64 / 128;
+    }
 }
 
 // Add a small random component to draw evaluations to avoid 3-fold blindness
