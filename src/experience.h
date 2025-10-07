@@ -54,7 +54,7 @@ class Experience {
     bool                                                  is_ready() const;
     std::unordered_map<Key, std::vector<ExperienceEntry>> table;
     bool                                                  binaryFormat     = false;
-    bool                                                  brainLearnFormat = true;
+    bool                                                  brainLearnFormat = false;
     std::future<void>                                     loader;
     mutable std::mutex                                    tableMutex;
 };
