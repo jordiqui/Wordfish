@@ -52,10 +52,15 @@ Value evaluate(const NNUE::Networks&          networks,
                const Position&                pos,
                Eval::NNUE::AccumulatorStack&  accumulators,
                Eval::NNUE::AccumulatorCaches& caches,
-               int                            optimism);
+               int                            optimism,
+               Depth                          searchDepth);
 
 // Toggle for optional style-based evaluation adjustments.
 void set_adaptive_style(bool enabled);
+
+// Notify the evaluator that a new root FEN has been loaded so warm-up profiling
+// can cover the first few plies of the fresh position.
+void notify_new_fen(int gamePly);
 }  // namespace Eval
 
 }  // namespace Stockfish

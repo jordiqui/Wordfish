@@ -328,6 +328,8 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
         states->emplace_back();
         pos.do_move(m, states->back());
     }
+
+    Eval::notify_new_fen(pos.game_ply());
 }
 
 // modifiers
