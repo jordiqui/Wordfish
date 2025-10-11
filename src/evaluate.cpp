@@ -19,11 +19,16 @@
 #include "evaluate.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <cstdint>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <tuple>
@@ -31,6 +36,7 @@
 #include "nnue/network.h"
 #include "nnue/nnue_misc.h"
 #include "bitboard.h"
+#include "misc.h"
 #include "position.h"
 #include "types.h"
 #include "uci.h"
@@ -50,6 +56,32 @@ int Eval::simple_eval(const Position& pos) {
 bool Eval::use_smallnet(const Position& pos) { return std::abs(simple_eval(pos)) > 962; }
 
 namespace {
+
+enum class WarmupSlot : std::size_t {
+    Big,
+    Small,
+    Falcon,
+    Count
+};
+
+struct WarmupProfile {
+    std::atomic<int>         basePly{std::numeric_limits<int>::min()};
+    std::atomic<std::uint32_t> seenMask{0};
+    std::atomic<bool>          active{false};
+} warmupProfile;
+
+void log_warmup_sample(int relPly, const std::array<double, 3>& durations) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(3);
+    oss << "NNUE warmup ply " << (relPly + 1)
+        << " big=" << durations[static_cast<std::size_t>(WarmupSlot::Big)] << "ms"
+        << " small=" << durations[static_cast<std::size_t>(WarmupSlot::Small)] << "ms"
+        << " falcon=" << durations[static_cast<std::size_t>(WarmupSlot::Falcon)] << "ms";
+
+    sync_cout_start();
+    std::cout << "info string " << oss.str() << '\n';
+    sync_cout_end();
+}
 
 struct MaterialSummary {
     int totalPieces;
@@ -244,9 +276,44 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
                      const Position&                pos,
                      Eval::NNUE::AccumulatorStack&  accumulators,
                      Eval::NNUE::AccumulatorCaches& caches,
-                     int                            optimism) {
+                     int                            optimism,
+                     Depth                          searchDepth) {
 
     assert(!pos.checkers());
+
+    using Clock = std::chrono::steady_clock;
+
+    std::array<double, static_cast<std::size_t>(WarmupSlot::Count)> warmupDurations{};
+    std::uint32_t warmupMask  = 0;
+    bool          warmupLog   = false;
+    int           warmupRelPly = -1;
+
+    if (warmupProfile.active.load(std::memory_order_relaxed))
+    {
+        int base = warmupProfile.basePly.load(std::memory_order_relaxed);
+        if (base != std::numeric_limits<int>::min())
+        {
+            int rel = pos.game_ply() - base;
+            if (rel >= 0 && rel < 5)
+            {
+                warmupMask  = 1u << rel;
+                warmupRelPly = rel;
+                if (!(warmupProfile.seenMask.load(std::memory_order_relaxed) & warmupMask))
+                    warmupLog = true;
+            }
+        }
+    }
+
+    auto time_call = [&](auto&& fn, WarmupSlot slot) {
+        if (!warmupLog)
+            return fn();
+
+        auto start   = Clock::now();
+        auto result  = fn();
+        auto elapsed = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        warmupDurations[static_cast<std::size_t>(slot)] += elapsed;
+        return result;
+    };
 
     const int  simpleEvalAbs    = std::abs(simple_eval(pos));
     const auto materialSummary = summarize_material(pos, simpleEvalAbs);
@@ -262,10 +329,12 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     if (useFalconNet)
     {
         auto& falconCache = caches.cache_for_falcon(networks.falcon);
-        auto  falconEval  = networks.falcon.evaluate(pos, accumulators, &falconCache);
+        auto  falconEval  = time_call(
+          [&] { return networks.falcon.evaluate(pos, accumulators, &falconCache); }, WarmupSlot::Falcon);
 
         auto& bigCache = caches.cache_for_big(networks.big);
-        auto  bigEval  = networks.big.evaluate(pos, accumulators, &bigCache);
+        auto  bigEval  = time_call(
+          [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
 
         Value falconPsqt, falconPositional;
         Value bigPsqt, bigPositional;
@@ -291,12 +360,16 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
         if (smallNetCandidate)
         {
             auto& smallCache = caches.cache_for_small(networks.small);
-            std::tie(psqt, positional) = networks.small.evaluate(pos, accumulators, &smallCache);
+            auto smallEval = time_call(
+              [&] { return networks.small.evaluate(pos, accumulators, &smallCache); }, WarmupSlot::Small);
+            std::tie(psqt, positional) = smallEval;
         }
         else
         {
             auto& bigCache = caches.cache_for_big(networks.big);
-            std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &bigCache);
+            auto bigEval = time_call(
+              [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
+            std::tie(psqt, positional) = bigEval;
             smallNet                   = false;
         }
 
@@ -307,7 +380,9 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     if (!useFalconNet && smallNet && (std::abs(nnue) < 236))
     {
         auto& bigCache = caches.cache_for_big(networks.big);
-        std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &bigCache);
+        auto  bigEval  = time_call(
+          [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
+        std::tie(psqt, positional) = bigEval;
         nnue                       = (125 * psqt + 131 * positional) / 128;
         smallNet                   = false;
     }
@@ -323,8 +398,16 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     const Color us   = pos.side_to_move();
     const Color them = ~us;
 
+    int ourStormPenalty = flank_storm_penalty(pos, us);
+    if (ourStormPenalty && searchDepth < 14)
+    {
+        int depthShortfall = std::max(0, 14 - std::max<int>(0, searchDepth));
+        int scale          = 128 + depthShortfall * 12;
+        ourStormPenalty    = ourStormPenalty * scale / 128;
+    }
+
     int ourPenalty = king_open_file_penalty(pos, us) + king_dark_square_penalty(pos, us)
-                   + flank_storm_penalty(pos, us);
+                   + ourStormPenalty;
     int theirPenalty = king_open_file_penalty(pos, them) + king_dark_square_penalty(pos, them)
                      + flank_storm_penalty(pos, them);
 
@@ -339,7 +422,24 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 
+    if (warmupLog && warmupMask)
+    {
+        std::uint32_t previous = warmupProfile.seenMask.fetch_or(warmupMask, std::memory_order_acq_rel);
+        if ((previous & warmupMask) == 0 && warmupRelPly >= 0)
+        {
+            log_warmup_sample(warmupRelPly, warmupDurations);
+            if ((previous | warmupMask) == ((1u << 5) - 1))
+                warmupProfile.active.store(false, std::memory_order_relaxed);
+        }
+    }
+
     return v;
+}
+
+void Eval::notify_new_fen(int gamePly) {
+    warmupProfile.seenMask.store(0, std::memory_order_relaxed);
+    warmupProfile.basePly.store(gamePly, std::memory_order_relaxed);
+    warmupProfile.active.store(true, std::memory_order_relaxed);
 }
 
 // Like evaluate(), but instead of returning a value, it returns
@@ -366,7 +466,7 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
     v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
 
-    v = evaluate(networks, pos, accumulators, *caches, VALUE_ZERO);
+    v = evaluate(networks, pos, accumulators, *caches, VALUE_ZERO, Depth(99));
     v = pos.side_to_move() == WHITE ? v : -v;
     ss << "Final evaluation       " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
     ss << " [with scaled NNUE, ...]";
