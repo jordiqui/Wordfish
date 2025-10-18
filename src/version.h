@@ -4,11 +4,11 @@
 #include <string_view>
 
 #ifndef ENGINE_NAME
-    #define ENGINE_NAME "wordfish-2.81-071025"
+    #define ENGINE_NAME "Wordfish 2.90"
 #endif
 
 #ifndef ENGINE_BUILD_DATE
-    #define ENGINE_BUILD_DATE ""
+    #define ENGINE_BUILD_DATE "191025"
 #endif
 
 namespace Stockfish::Version {

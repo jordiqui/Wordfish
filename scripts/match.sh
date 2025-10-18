@@ -4,9 +4,11 @@
 
 set -e
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ENGINE_NAME="wordfish-2.81-071025"
-ENGINE_DEFAULT="$ROOT_DIR/src/$ENGINE_NAME"
+ENGINE_ID="Wordfish 2.90 191025"
+ENGINE_BASENAME="wordfish-2.90-191025"
+ENGINE_DEFAULT="$ROOT_DIR/src/$ENGINE_BASENAME"
 ENGINE="${ENGINE:-$ENGINE_DEFAULT}"
+ENGINE_NAME="${ENGINE_NAME:-$ENGINE_ID}"
 OPPONENT="${1:?Opponent engine path required}"
 GAMES="${2:-10}"
 TC="${3:-40/0.4+0.4}"
