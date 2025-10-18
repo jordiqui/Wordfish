@@ -1,8 +1,8 @@
 # Wordfish Chess Engine
 
-**Versión 2.81-071025**
+**Versión 2.90 191025**
 
-Este build se identifica como `wordfish-2.81-071025`.
+Este build se identifica como `Wordfish 2.90 191025` en la consola UCI y el binario predeterminado se distribuye como `wordfish-2.90-191025`.
 
 <div align="center">
   <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 

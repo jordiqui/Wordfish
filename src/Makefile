@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-        EXE = wordfish-2.81-071025.exe
+        EXE = wordfish-2.90-191025.exe
 else
-        EXE = wordfish-2.81-071025
+        EXE = wordfish-2.90-191025
 endif
 
 ### Installation dir definitions
@@ -859,12 +859,12 @@ endif
 ### 3.8.4 Engine identity (UCI id name / build date)
 # UCI "id name" string shown in GUIs.
 # Defaults:
-#   - ENGINE_NAME: "wordfish-2.81-071025"
+#   - ENGINE_NAME: "Wordfish 2.90"
 #   - ENGINE_BUILD_DATE: optional build identifier
 # You can override on the command line:
-#   make ENGINE_NAME="wordfish-2.81-071025" ENGINE_BUILD_DATE=20250907
-ENGINE_NAME        ?= wordfish-2.81-071025
-ENGINE_BUILD_DATE  ?=
+#   make ENGINE_NAME="Wordfish 2.90" ENGINE_BUILD_DATE=191025
+ENGINE_NAME        ?= Wordfish 2.90
+ENGINE_BUILD_DATE  ?= 191025
 CXXFLAGS += -DENGINE_NAME='"$(ENGINE_NAME)"' -DENGINE_BUILD_DATE='"$(ENGINE_BUILD_DATE)"'
 
 ### 3.9 Link Time Optimization
