@@ -57,6 +57,19 @@ Improvements require extensive testing:
 - Participate in active tests on [Wordfish Test Suite][testsuite-link]
 - Verify ELO gains through SPRT validation
 
+### Continuous Integration
+Automated checks run for every push and pull request targeting `main`.
+The [CI workflow](.github/workflows/ci.yml) executes on Ubuntu, installs the
+required system packages (`expect`, `python3-venv`, `python3-requests`), and
+then runs the core validation commands:
+
+```bash
+scripts/perft.sh
+python3 tests/testing.py --quick
+```
+
+These jobs must pass before changes are merged.
+
 ### Community
 Technical discussions occur primarily through:
 - [Wordfish Discord Server][discord-link]
