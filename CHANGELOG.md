@@ -9,6 +9,10 @@
 - Reduced aggressive pruning in sharp positions and added verification search for large evaluation swings.
 - Rewarded connected rooks while penalizing premature flank pawn storms in the handcrafted evaluation.
 
+## [3.0 281025]
+### Changed
+- Updated engine id name to "wordfish-3.0-281025" and aligned the generated executable name with the new branding.
+
 ## [2.90 191025]
 ### Changed
 - Updated engine id name to "Wordfish 2.90 191025".

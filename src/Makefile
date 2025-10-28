@@ -54,7 +54,14 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-EXE_BASE := wordfish-$(ENGINE_NAME_SLUG)-$(ENGINE_BUILD_DATE)
+EXE_BASE := $(ENGINE_NAME_SLUG)
+
+ifneq ($(strip $(ENGINE_BUILD_DATE)),)
+ifneq ($(findstring $(ENGINE_BUILD_DATE),$(EXE_BASE)),)
+else
+        EXE_BASE := $(EXE_BASE)-$(ENGINE_BUILD_DATE)
+endif
+endif
 
 ifeq ($(target_windows),yes)
         EXE = $(EXE_BASE).exe
@@ -877,12 +884,12 @@ endif
 ### 3.8.4 Engine identity (UCI id name / build date)
 # UCI "id name" string shown in GUIs.
 # Defaults:
-#   - ENGINE_NAME: "Wordfish 2.90"
+#   - ENGINE_NAME: "wordfish-3.0"
 #   - ENGINE_BUILD_DATE: optional build identifier
 # You can override on the command line:
-#   make ENGINE_NAME="Wordfish 2.90" ENGINE_BUILD_DATE=191025
-ENGINE_NAME        ?= Wordfish 2.90
-ENGINE_BUILD_DATE  ?= 191025
+#   make ENGINE_NAME="wordfish-3.0" ENGINE_BUILD_DATE=281025
+ENGINE_NAME        ?= wordfish-3.0
+ENGINE_BUILD_DATE  ?= 281025
 CXXFLAGS += -DENGINE_NAME='"$(ENGINE_NAME)"' -DENGINE_BUILD_DATE='"$(ENGINE_BUILD_DATE)"'
 
 ### 3.9 Link Time Optimization
