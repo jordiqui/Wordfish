@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ubuntu:
+    name: Ubuntu CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y expect python3-venv python3-requests
+
+      - name: Run perft validation
+        run: scripts/perft.sh
+
+      - name: Run quick Python tests
+        run: python3 tests/testing.py --quick
