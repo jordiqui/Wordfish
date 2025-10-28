@@ -15,6 +15,22 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
+VERSION_MK := version.mk
+VERSION_HEADER := version.h
+VERSION_SCRIPT := ../scripts/extract_version.py
+
+$(VERSION_MK): $(VERSION_HEADER) $(VERSION_SCRIPT)
+	python3 $(VERSION_SCRIPT) --header $(VERSION_HEADER) --output $@
+
+.PHONY: version
+version: $(VERSION_MK)
+
+include $(VERSION_MK)
+
+empty :=
+space := $(empty) $(empty)
+ENGINE_NAME_SLUG := $(subst $(space),-,$(strip $(ENGINE_NAME)))
+
 ### ==========================================================================
 ### Section 1. General Configuration
 ### ==========================================================================
@@ -38,10 +54,12 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
+EXE_BASE := wordfish-$(ENGINE_NAME_SLUG)-$(ENGINE_BUILD_DATE)
+
 ifeq ($(target_windows),yes)
-        EXE = wordfish-2.90-191025.exe
+        EXE = $(EXE_BASE).exe
 else
-        EXE = wordfish-2.90-191025
+        EXE = $(EXE_BASE)
 endif
 
 ### Installation dir definitions
@@ -1002,11 +1020,11 @@ endif
 
 
 .PHONY: help analyze build profile-build strip install clean net \
-	objclean profileclean config-sanity \
-	icx-profile-use icx-profile-make \
-	gcc-profile-use gcc-profile-make \
-	clang-profile-use clang-profile-make FORCE \
-	format analyze
+        objclean profileclean config-sanity version \
+        icx-profile-use icx-profile-make \
+        gcc-profile-use gcc-profile-make \
+        clang-profile-use clang-profile-make FORCE \
+        format analyze
 
 analyze: net config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
@@ -1141,7 +1159,7 @@ config-sanity: net
 	 test "$(comp)" = "clang" || test "$(comp)" = "armv7a-linux-androideabi16-clang" || \
 	 test "$(comp)" = "aarch64-linux-android21-clang")
 
-$(EXE): $(OBJS)
+$(EXE): $(OBJS) $(VERSION_MK)
 	+$(CXX) -o $@ $(OBJS) $(LDFLAGS)
 
 # Force recompilation to ensure version info is up-to-date
