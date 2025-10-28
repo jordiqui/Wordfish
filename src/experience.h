@@ -26,6 +26,9 @@
 #include <string>
 #include <future>
 #include <mutex>
+#ifdef WORDFISH_TESTING
+#    include <utility>
+#endif
 
 #include "position.h"
 #include "types.h"
@@ -49,6 +52,9 @@ class Experience {
     Move probe(Position& pos, int width, int evalImportance, int minDepth, int maxMoves);
     void update(Position& pos, Move move, int score, int depth);
     void show(const Position& pos, int evalImportance, int maxMoves) const;
+#ifdef WORDFISH_TESTING
+    std::vector<std::pair<Key, std::vector<ExperienceEntry>>> dump_table() const;
+#endif
 
    private:
     bool                                                  is_ready() const;

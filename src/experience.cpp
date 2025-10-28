@@ -398,6 +398,33 @@ void Experience::update(Position& pos, Move move, int score, int depth) {
     vec.push_back({move, score, depth, 1});
 }
 
+#ifdef WORDFISH_TESTING
+std::vector<std::pair<Key, std::vector<ExperienceEntry>>> Experience::dump_table() const {
+    wait_until_loaded();
+    std::lock_guard<std::mutex> lock(tableMutex);
+
+    std::vector<std::pair<Key, std::vector<ExperienceEntry>>> snapshot;
+    snapshot.reserve(table.size());
+
+    for (const auto& [key, entries] : table)
+    {
+        auto ordered = entries;
+        std::sort(ordered.begin(), ordered.end(), [](const ExperienceEntry& lhs, const ExperienceEntry& rhs) {
+            return lhs.move.raw() < rhs.move.raw();
+        });
+        snapshot.emplace_back(key, std::move(ordered));
+    }
+
+    std::sort(snapshot.begin(), snapshot.end(),
+              [](const std::pair<Key, std::vector<ExperienceEntry>>& lhs,
+                 const std::pair<Key, std::vector<ExperienceEntry>>& rhs) {
+                  return lhs.first < rhs.first;
+              });
+
+    return snapshot;
+}
+#endif
+
 void Experience::show(const Position& pos, int evalImportance, int maxMoves) const {
     if (!is_ready())
         return;
