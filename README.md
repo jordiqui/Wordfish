@@ -65,11 +65,20 @@ Technical discussions occur primarily through:
 
 ## Compilation
 
-Compile from source using included Makefiles:
+Generate up-to-date build metadata and compile from source using the included
+Makefiles:
 ```bash
 cd src
+make version
 make -j ARCH=x86-64-modern
 ```
+
+The `version` target runs `scripts/extract_version.py`, which reads
+`src/version.h` and emits `src/version.mk`. The generated Makefile fragment
+defines the `ENGINE_NAME` and `ENGINE_BUILD_DATE` variables that are used to
+name the final binary (for example,
+`wordfish-$(ENGINE_NAME)-$(ENGINE_BUILD_DATE)` with spaces converted to dashes),
+and it is also rebuilt automatically when `src/version.h` changes.
 
 Supported architectures:
 - `x86-64`: Modern x86 processors
