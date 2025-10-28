@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" role="img" aria-labelledby="title desc">
+  <title id="title">Wordfish Chess Engine logo</title>
+  <desc id="desc">Stylized fish outline with a chess knight silhouette.</desc>
+  <rect width="320" height="120" fill="#0d1117" rx="12"/>
+  <g fill="none" stroke="#58a6ff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M36 60c36-48 120-48 156 0-36 48-120 48-156 0z"/>
+    <path d="M160 52c12-28 48-44 108-36-16 32-16 60 0 92-60 8-96-8-108-36"/>
+    <path d="M84 60l24 20 24-20-24-20z"/>
+  </g>
+  <g transform="translate(190 32)" fill="#f0f6fc">
+    <path d="M24 0c14 0 24 10 24 24 0 12-10 22-20 22l4 10h-12l-4-12h-12V32l16-4c-6-2-12-8-12-16C8 10 12 0 24 0z"/>
+    <circle cx="30" cy="18" r="3" fill="#58a6ff"/>
+  </g>
+  <text x="32" y="110" fill="#f0f6fc" font-family="'Fira Sans', 'Segoe UI', sans-serif" font-size="28" letter-spacing="2">WORDFISH</text>
+</svg>

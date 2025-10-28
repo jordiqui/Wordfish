@@ -4,17 +4,15 @@
 
 Este build se identifica como `Wordfish 2.90 191025` en la consola UCI y el binario predeterminado se distribuye como `wordfish-2.90-191025`.
 
-<div align="center">
-  <img src="[https://ijccrl.com/wp-content/uploads/2025/08/wordfish.png]" 
-  <h3>Wordfish</h3>
-  
-  A free and open-source UCI chess engine combining classical algorithms with neural network innovations.
-  <br>
-  <strong><a href="#">Explore Wordfish Documentation »</a>
+![Stylized Wordfish chess engine logo](docs/assets/wordfish.svg)
 
-  <em>Author: This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.</em>
-  
-</div>
+### Wordfish
+
+A free and open-source UCI chess engine combining classical algorithms with neural network innovations.
+
+**[Explore Wordfish Documentation »](#)**
+
+*Author: This distribution includes modifications and new code by Jorge Ruiz Centelles, with credit to ChatGPT, exploring new ideas.*
 
 ## Overview
 
