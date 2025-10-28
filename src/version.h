@@ -30,10 +30,14 @@ inline std::string string() {
 
     if (ends_with_joiner)
         result.append(BuildTag);
-    else if (!has_space && !result.empty())
-        result.append('-').append(BuildTag);
-    else if (!result.empty())
-        result.append(" ").append(BuildTag);
+    else if (!has_space && !result.empty()) {
+        result.push_back('-');
+        result.append(BuildTag);
+    }
+    else if (!result.empty()) {
+        result.push_back(' ');
+        result.append(BuildTag);
+    }
     else
         result = std::string(BuildTag);
 
