@@ -4,11 +4,11 @@
 #include <string_view>
 
 #ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish 2.90"
+    #define ENGINE_NAME "wordfish-3.0"
 #endif
 
 #ifndef ENGINE_BUILD_DATE
-    #define ENGINE_BUILD_DATE "191025"
+    #define ENGINE_BUILD_DATE "281025"
 #endif
 
 namespace Stockfish::Version {
@@ -17,12 +17,26 @@ inline constexpr std::string_view Name      = ENGINE_NAME;
 inline constexpr std::string_view BuildTag = ENGINE_BUILD_DATE;
 
 inline std::string string() {
-    if (BuildTag.empty())
-        return std::string(Name);
-
     std::string result(Name);
-    result += ' ';
-    result.append(BuildTag);
+
+    if (BuildTag.empty())
+        return result;
+
+    if (!result.empty() && result.find(BuildTag) != std::string::npos)
+        return result;
+
+    const bool ends_with_joiner = !result.empty() && (result.back() == '-' || result.back() == '_');
+    const bool has_space        = result.find(' ') != std::string::npos;
+
+    if (ends_with_joiner)
+        result.append(BuildTag);
+    else if (!has_space && !result.empty())
+        result.append('-').append(BuildTag);
+    else if (!result.empty())
+        result.append(" ").append(BuildTag);
+    else
+        result = std::string(BuildTag);
+
     return result;
 }
 
