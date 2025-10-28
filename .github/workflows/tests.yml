@@ -377,3 +377,16 @@ jobs:
           make -j4 ARCH=x86-64-avx2 build
           ../tests/perft.sh
           ../tests/reprosearch.sh
+
+      - name: Run experience compatibility tests
+        if: matrix.config.run_64bit_tests
+        run: |
+          make clean
+          CXXFLAGS="$CXXFLAGS -DWORDFISH_TESTING" make -j4 ARCH=x86-64-avx2 build
+          BIN=$(ls -1 wordfish* stockfish* 2>/dev/null | head -n 1)
+          if [ -z "$BIN" ]; then
+            echo "Engine binary not found" >&2
+            exit 1
+          fi
+          cd ..
+          STOCKFISH_BINARY=./src/$BIN python3 -m unittest tests.test_experience

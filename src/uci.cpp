@@ -164,6 +164,28 @@ void UCIEngine::loop() {
         else if (token == "showexp")
             experience.show(engine.position(), (int) engine.get_options()["Experience Eval Weight"],
                             (int) engine.get_options()["Experience Book Max Moves"]);
+#ifdef WORDFISH_TESTING
+        else if (token == "experience")
+        {
+            std::string subcommand;
+            is >> std::skipws >> subcommand;
+
+            if (subcommand == "dump")
+            {
+                const auto snapshot = experience.dump_table();
+
+                sync_cout_start();
+                std::cout << "info string experience dump begin\n";
+                for (const auto& entry : snapshot)
+                    for (const auto& value : entry.second)
+                        std::cout << "info string experience entry " << entry.first << ' '
+                                  << value.move.raw() << ' ' << value.score << ' ' << value.depth << ' '
+                                  << value.count << '\n';
+                std::cout << "info string experience dump end\n";
+                sync_cout_end();
+            }
+        }
+#endif
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
