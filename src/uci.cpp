@@ -164,7 +164,6 @@ void UCIEngine::loop() {
         else if (token == "showexp")
             experience.show(engine.position(), (int) engine.get_options()["Experience Eval Weight"],
                             (int) engine.get_options()["Experience Book Max Moves"]);
-#ifdef WORDFISH_TESTING
         else if (token == "experience")
         {
             std::string subcommand;
@@ -185,7 +184,6 @@ void UCIEngine::loop() {
                 sync_cout_end();
             }
         }
-#endif
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
