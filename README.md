@@ -1,8 +1,8 @@
 # Wordfish Chess Engine
 
-**Versión wordfish-3.0-281025**
+**Versión Wordfish-3.10-011125**
 
-Este build se identifica como `wordfish-3.0-281025` en la consola UCI y el binario predeterminado se distribuye como `wordfish-3.0-281025`.
+Este build se identifica como `Wordfish-3.10-011125` en la consola UCI y el binario predeterminado se distribuye como `Wordfish-3.10-011125`.
 
 ![Stylized Wordfish chess engine logo](docs/assets/wordfish.svg)
 
@@ -88,7 +88,7 @@ The `version` target runs `scripts/extract_version.py`, which reads
 `src/version.h` and emits `src/version.mk`. The generated Makefile fragment
 defines the `ENGINE_NAME` and `ENGINE_BUILD_DATE` variables used to name the
 final binary. The build system slugifies the engine name and appends the build
-identifier if it is not already present (for example, `wordfish-3.0-281025`),
+identifier if it is not already present (for example, `Wordfish-3.10-011125`),
 and it is also rebuilt automatically when `src/version.h` changes.
 
 Supported architectures:

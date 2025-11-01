@@ -884,12 +884,12 @@ endif
 ### 3.8.4 Engine identity (UCI id name / build date)
 # UCI "id name" string shown in GUIs.
 # Defaults:
-#   - ENGINE_NAME: "wordfish-3.0"
+#   - ENGINE_NAME: "Wordfish-3.10-011125"
 #   - ENGINE_BUILD_DATE: optional build identifier
 # You can override on the command line:
-#   make ENGINE_NAME="wordfish-3.0" ENGINE_BUILD_DATE=281025
-ENGINE_NAME        ?= wordfish-3.0
-ENGINE_BUILD_DATE  ?= 281025
+#   make ENGINE_NAME="Wordfish-3.10-011125" ENGINE_BUILD_DATE=
+ENGINE_NAME        ?= Wordfish-3.10-011125
+ENGINE_BUILD_DATE  ?= 
 CXXFLAGS += -DENGINE_NAME='"$(ENGINE_NAME)"' -DENGINE_BUILD_DATE='"$(ENGINE_BUILD_DATE)"'
 
 ### 3.9 Link Time Optimization
