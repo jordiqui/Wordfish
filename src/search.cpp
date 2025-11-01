@@ -1160,7 +1160,6 @@ Value Search::Worker::search(
             return futilityMult * d                      //
                  - improving * futilityMult * 2          //
                  - opponentWorsening * futilityMult / 3  //
-                 + (ss - 1)->statScore / 356             //
                  + std::abs(correctionValue) / 171290;
         };
 
