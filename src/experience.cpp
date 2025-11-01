@@ -398,7 +398,6 @@ void Experience::update(Position& pos, Move move, int score, int depth) {
     vec.push_back({move, score, depth, 1});
 }
 
-#ifdef WORDFISH_TESTING
 std::vector<std::pair<Key, std::vector<ExperienceEntry>>> Experience::dump_table() const {
     wait_until_loaded();
     std::lock_guard<std::mutex> lock(tableMutex);
@@ -423,7 +422,6 @@ std::vector<std::pair<Key, std::vector<ExperienceEntry>>> Experience::dump_table
 
     return snapshot;
 }
-#endif
 
 void Experience::show(const Position& pos, int evalImportance, int maxMoves) const {
     if (!is_ready())
