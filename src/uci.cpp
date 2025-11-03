@@ -27,6 +27,7 @@
 #include <iterator>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -126,6 +127,10 @@ void UCIEngine::loop() {
               << "\n"
               << engine.get_options() << std::endl;
             sync_cout_end();
+
+            const bool largePagesAvailable = has_large_pages();
+            print_info_string(std::string("Large Memory Pages    : ")
+                              + (largePagesAvailable ? "available" : "unavailable"));
 
             sync_cout << "uciok" << sync_endl;
 
