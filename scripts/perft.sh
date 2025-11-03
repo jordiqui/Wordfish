@@ -12,4 +12,4 @@ if [ ! -x "$ENGINE" ]; then
   (cd "$ROOT_DIR/src" && make -j2 build ARCH=x86-64 >/dev/null)
 fi
 
-(cd "$TEST_DIR" && ./perft.sh "$ENGINE")
+(cd "$TEST_DIR" && bash ./perft.sh "$ENGINE")
