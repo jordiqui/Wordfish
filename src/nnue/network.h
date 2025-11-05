@@ -19,7 +19,7 @@
 #ifndef NETWORK_H_INCLUDED
 #define NETWORK_H_INCLUDED
 
-#include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -29,9 +29,8 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
-#include <ctime>
 
-#include "../memory.h"
+#include "../misc.h"
 #include "../types.h"
 #include "nnue_accumulator.h"
 #include "nnue_architecture.h"
@@ -52,53 +51,28 @@ enum class EmbeddedNNUEType {
 
 using NetworkOutput = std::tuple<Value, Value>;
 
+// The network must be a trivial type, i.e. the memory must be in-line.
+// This is required to allow sharing the network via shared memory, as
+// there is no way to run destructors.
 template<typename Arch, typename Transformer>
 class Network {
     static constexpr IndexType FTDimensions = Arch::TransformedFeatureDimensions;
 
    public:
-    struct Weights {
-        Weights();
-        LargePagePtr<Transformer> featureTransformer;
-        AlignedPtr<Arch[]>        network;
-    };
-    using WeightsPtr = std::shared_ptr<Weights>;
-
     Network(EvalFile file, EmbeddedNNUEType type) :
-        weights(std::make_shared<Weights>()),
         evalFile(file),
-        embeddedType(type),
-        versionCounter(0),
-        available(false),
-        lastLoadedTime(0),
-        lastLoadedFromPtr(nullptr) {}
+        embeddedType(type) {}
 
-    Network(const Network& other);
-    Network(Network&& other) = default;
+    Network(const Network& other) = default;
+    Network(Network&& other)      = default;
 
-    Network& operator=(const Network& other);
-    Network& operator=(Network&& other) = default;
+    Network& operator=(const Network& other) = default;
+    Network& operator=(Network&& other)      = default;
 
-    bool load(const std::string& rootDirectory, std::string evalfilePath);
+    void load(const std::string& rootDirectory, std::string evalfilePath);
     bool save(const std::optional<std::string>& filename) const;
 
-    WeightsPtr weights_handle() const;
-    std::uint64_t version() const;
-    bool          is_available() const;
-    std::time_t   loaded_time() const;
-    std::string loaded_from() const;
-
-    struct StateSnapshot {
-        WeightsPtr     weights;
-        std::uint64_t  version;
-        bool           available;
-        std::time_t    loadedAt;
-        std::string    loadedFrom;
-        std::string    currentFile;
-        std::string    description;
-    };
-
-    [[nodiscard]] StateSnapshot snapshot() const;
+    std::size_t get_content_hash() const;
 
     NetworkOutput evaluate(const Position&                         pos,
                            AccumulatorStack&                       accumulatorStack,
@@ -111,42 +85,36 @@ class Network {
                                  AccumulatorCaches::Cache<FTDimensions>* cache) const;
 
    private:
-    bool load_user_net(const std::string&, const std::string&, std::string& resolvedPathOut);
-    bool load_internal();
+    void load_user_net(const std::string&, const std::string&);
+    void load_internal();
 
-    WeightsPtr allocate_weights() const;
+    void initialize();
 
-    bool save(std::ostream&, const std::string&, const std::string&, const Weights&) const;
+    bool                       save(std::ostream&, const std::string&, const std::string&) const;
     std::optional<std::string> load(std::istream&);
 
     bool read_header(std::istream&, std::uint32_t*, std::string*) const;
     bool write_header(std::ostream&, std::uint32_t, const std::string&) const;
 
-    bool read_parameters(std::istream&, std::string&, Weights&) const;
-    bool write_parameters(std::ostream&, const std::string&, const Weights&) const;
+    bool read_parameters(std::istream&, std::string&);
+    bool write_parameters(std::ostream&, const std::string&) const;
 
     // Input feature converter
-    WeightsPtr weights;
+    Transformer featureTransformer;
+
+    // Evaluation function
+    Arch network[LayerStacks];
 
     EvalFile         evalFile;
     EmbeddedNNUEType embeddedType;
 
-    std::atomic<std::uint64_t> versionCounter;
-    std::atomic<bool>          available;
-    std::atomic<std::time_t>             lastLoadedTime;
-    std::shared_ptr<const std::string>   lastLoadedFromPtr;
-
-    void set_loaded_from(std::string value);
-    void record_load(const std::string& resolvedPath, const std::string& evalfilePath);
-    void clear_loaded_metadata();
+    bool initialized = false;
 
     // Hash value of evaluation function structure
     static constexpr std::uint32_t hash = Transformer::get_hash_value() ^ Arch::get_hash_value();
 
     template<IndexType Size>
     friend struct AccumulatorCaches::Cache;
-
-    friend class AccumulatorStack;
 };
 
 // Definitions of the network types
@@ -159,10 +127,12 @@ using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsB
 
 using NetworkBig   = Network<BigNetworkArchitecture, BigFeatureTransformer>;
 using NetworkSmall = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
+
+
 struct Networks {
-    Networks(NetworkBig&& nB, NetworkSmall&& nS) :
-        big(std::move(nB)),
-        small(std::move(nS)) {}
+    Networks(std::unique_ptr<NetworkBig>&& nB, std::unique_ptr<NetworkSmall>&& nS) :
+        big(std::move(*nB)),
+        small(std::move(*nS)) {}
 
     NetworkBig   big;
     NetworkSmall small;
@@ -170,5 +140,23 @@ struct Networks {
 
 
 }  // namespace Stockfish
+
+template<typename ArchT, typename FeatureTransformerT>
+struct std::hash<Stockfish::Eval::NNUE::Network<ArchT, FeatureTransformerT>> {
+    std::size_t operator()(
+      const Stockfish::Eval::NNUE::Network<ArchT, FeatureTransformerT>& network) const noexcept {
+        return network.get_content_hash();
+    }
+};
+
+template<>
+struct std::hash<Stockfish::Eval::NNUE::Networks> {
+    std::size_t operator()(const Stockfish::Eval::NNUE::Networks& networks) const noexcept {
+        std::size_t h = 0;
+        Stockfish::hash_combine(h, networks.big);
+        Stockfish::hash_combine(h, networks.small);
+        return h;
+    }
+};
 
 #endif

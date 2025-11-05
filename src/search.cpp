@@ -302,36 +302,13 @@ Search::Worker::Worker(SharedState&                    sharedState,
     tt(sharedState.tt),
     networks(sharedState.networks),
     refreshTable(networks[token]) {
-    const auto& netsForToken = networks[token];
-    bigWeightsHandle         = netsForToken.big.weights_handle();
-    smallWeightsHandle       = netsForToken.small.weights_handle();
-    bigWeightsVersion        = netsForToken.big.version();
-    smallWeightsVersion      = netsForToken.small.version();
     clear();
 }
 
 void Search::Worker::ensure_network_replicated() {
-    const auto& nets = networks[numaAccessToken];
-
-    auto newBig   = nets.big.weights_handle();
-    auto newSmall = nets.small.weights_handle();
-
-    bool bigChanged = newBig != bigWeightsHandle || nets.big.version() != bigWeightsVersion;
-    bool smallChanged = newSmall != smallWeightsHandle || nets.small.version() != smallWeightsVersion;
-
-    if (!bigChanged && !smallChanged)
-        return;
-
-    bigWeightsHandle   = std::move(newBig);
-    smallWeightsHandle = std::move(newSmall);
-
-    if (bigChanged)
-        refreshTable.invalidate_big();
-    if (smallChanged)
-        refreshTable.invalidate_small();
-
-    bigWeightsVersion   = nets.big.version();
-    smallWeightsVersion = nets.small.version();
+    // Access once to force lazy initialization.
+    // We do this because we want to avoid initialization during search.
+    (void) (networks[numaAccessToken]);
 }
 
 bool Search::Worker::experience_guidance_available() const { return experienceAvailable; }

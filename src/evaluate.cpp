@@ -309,14 +309,14 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     if (smallNetCandidate)
     {
-        auto& smallCache = caches.cache_for_small(networks.small);
+        auto& smallCache = caches.small;
         auto  smallEval  = time_call(
           [&] { return networks.small.evaluate(pos, accumulators, &smallCache); }, WarmupSlot::Small);
         std::tie(psqt, positional) = smallEval;
     }
     else
     {
-        auto& bigCache = caches.cache_for_big(networks.big);
+        auto& bigCache = caches.big;
         auto  bigEval  = time_call(
           [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
         std::tie(psqt, positional) = bigEval;
@@ -328,7 +328,7 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     // Re-evaluate the position when higher eval accuracy is worth the time spent
     if (smallNet && (std::abs(nnue) < 236))
     {
-        auto& bigCache = caches.cache_for_big(networks.big);
+        auto& bigCache = caches.big;
         auto  bigEval  = time_call(
           [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
         std::tie(psqt, positional) = bigEval;
@@ -400,8 +400,8 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
     if (pos.checkers())
         return "Final evaluation: none (in check)";
 
-    Eval::NNUE::AccumulatorStack accumulators;
-    auto                         caches = std::make_unique<Eval::NNUE::AccumulatorCaches>(networks);
+    auto accumulators = std::make_unique<Eval::NNUE::AccumulatorStack>();
+    auto caches       = std::make_unique<Eval::NNUE::AccumulatorCaches>(networks);
 
     std::stringstream ss;
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
@@ -409,13 +409,12 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto& bigCache = caches->cache_for_big(networks.big);
-    auto [psqt, positional] = networks.big.evaluate(pos, accumulators, &bigCache);
+    auto [psqt, positional] = networks.big.evaluate(pos, *accumulators, &caches->big);
     Value v                 = psqt + positional;
     v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
 
-    v = evaluate(networks, pos, accumulators, *caches, VALUE_ZERO, Depth(99));
+    v = evaluate(networks, pos, *accumulators, *caches, VALUE_ZERO, Depth(99));
     v = pos.side_to_move() == WHITE ? v : -v;
     ss << "Final evaluation       " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
     ss << " [with scaled NNUE, ...]";
