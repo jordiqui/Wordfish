@@ -53,13 +53,6 @@
 #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUEBig, EvalFileDefaultNameBig);
 INCBIN(EmbeddedNNUESmall, EvalFileDefaultNameSmall);
-#  if __has_include(FalconFileDefaultName)
-INCBIN(EmbeddedNNUEFalcon, FalconFileDefaultName);
-#  else
-const unsigned char        gEmbeddedNNUEFalconData[1] = {0x0};
-const unsigned char* const gEmbeddedNNUEFalconEnd     = &gEmbeddedNNUEFalconData[1];
-const unsigned int         gEmbeddedNNUEFalconSize    = 1;
-#  endif
 #else
 const unsigned char        gEmbeddedNNUEBigData[1]   = {0x0};
 const unsigned char* const gEmbeddedNNUEBigEnd       = &gEmbeddedNNUEBigData[1];
@@ -67,9 +60,6 @@ const unsigned int         gEmbeddedNNUEBigSize      = 1;
 const unsigned char        gEmbeddedNNUESmallData[1] = {0x0};
 const unsigned char* const gEmbeddedNNUESmallEnd     = &gEmbeddedNNUESmallData[1];
 const unsigned int         gEmbeddedNNUESmallSize    = 1;
-const unsigned char        gEmbeddedNNUEFalconData[1] = {0x0};
-const unsigned char* const gEmbeddedNNUEFalconEnd     = &gEmbeddedNNUEFalconData[1];
-const unsigned int         gEmbeddedNNUEFalconSize    = 1;
 #endif
 
 namespace {
@@ -91,11 +81,8 @@ using namespace Stockfish::Eval::NNUE;
 EmbeddedNNUE get_embedded(EmbeddedNNUEType type) {
     if (type == EmbeddedNNUEType::BIG)
         return EmbeddedNNUE(gEmbeddedNNUEBigData, gEmbeddedNNUEBigEnd, gEmbeddedNNUEBigSize);
-    else if (type == EmbeddedNNUEType::SMALL)
-        return EmbeddedNNUE(gEmbeddedNNUESmallData, gEmbeddedNNUESmallEnd, gEmbeddedNNUESmallSize);
-    else
-        return EmbeddedNNUE(
-          gEmbeddedNNUEFalconData, gEmbeddedNNUEFalconEnd, gEmbeddedNNUEFalconSize);
+
+    return EmbeddedNNUE(gEmbeddedNNUESmallData, gEmbeddedNNUESmallEnd, gEmbeddedNNUESmallSize);
 }
 
 }
@@ -230,9 +217,6 @@ bool Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
     }
 
     available.store(false, std::memory_order_relaxed);
-
-    if (embeddedType == EmbeddedNNUEType::FALCON)
-        std::atomic_store(&weights, WeightsPtr{});
 
     evalFile.current.clear();
     clear_loaded_metadata();
@@ -386,8 +370,7 @@ void Network<Arch, Transformer>::verify(std::string                             
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
 
-    bool required = embeddedType != EmbeddedNNUEType::FALCON;
-    auto state    = snapshot();
+    auto state = snapshot();
 
     auto abort_with_message = [&]() {
         if (f)
@@ -411,18 +394,11 @@ void Network<Arch, Transformer>::verify(std::string                             
         exit(EXIT_FAILURE);
     };
 
-    if ((!state.weights || state.currentFile != evalfilePath) && required)
+    if (!state.weights || state.currentFile != evalfilePath)
         abort_with_message();
 
     if (!f)
         return;
-
-    if (!state.weights || state.currentFile != evalfilePath)
-    {
-        f("Falcon network inactive (requested '" + evalfilePath
-          + "'); falling back to EvalFileSmall outputs.");
-        return;
-    }
 
     size_t size = sizeof(*state.weights->featureTransformer) + sizeof(Arch) * LayerStacks;
 

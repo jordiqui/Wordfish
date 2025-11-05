@@ -88,8 +88,5 @@ fetch_network() {
   return 1
 }
 
-falcon_name=$(get_nnue_filename FalconFileDefaultName)
 fetch_network EvalFileDefaultNameBig || exit 1
 fetch_network EvalFileDefaultNameSmall || exit 1
-fetch_network FalconFileDefaultName || \
-  echo "Falcon network (${falcon_name}) not found; continuing without it."

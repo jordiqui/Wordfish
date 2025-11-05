@@ -154,13 +154,12 @@ struct AccumulatorCaches {
         else
             bigCache.binding.invalidate();
 
-        sharedSmall.reset();
-
         if (auto weights = networks.small.weights_handle())
         {
-            sharedSmall.bindingSmall.prime(networks.small, sharedSmall.cache);
-            sharedSmall.owner = SharedSmallCache::Owner::Small;
+            smallCache.binding.prime(networks.small, smallCache.cache);
         }
+        else
+            smallCache.binding.invalidate();
     }
 
     template<typename Network>
@@ -171,79 +170,26 @@ struct AccumulatorCaches {
 
     template<typename Network>
     Cache<TransformedFeatureDimensionsSmall>& cache_for_small(const Network& network) {
-        sharedSmall.ensure_owner(network, SharedSmallCache::Owner::Small);
-        return sharedSmall.cache;
-    }
-
-    template<typename Network>
-    Cache<TransformedFeatureDimensionsSmall>& cache_for_falcon(const Network& network) {
-        if (!network.is_available())
-        {
-            if (sharedSmall.owner == SharedSmallCache::Owner::Falcon)
-                sharedSmall.owner = SharedSmallCache::Owner::None;
-            sharedSmall.bindingFalcon.invalidate();
-            return sharedSmall.cache;
-        }
-
-        sharedSmall.ensure_owner(network, SharedSmallCache::Owner::Falcon);
-        return sharedSmall.cache;
+        smallCache.binding.ensure(network, smallCache.cache);
+        return smallCache.cache;
     }
 
     void invalidate_big() { bigCache.binding.invalidate(); }
 
-    void invalidate_small() {
-        if (sharedSmall.owner == SharedSmallCache::Owner::Small)
-            sharedSmall.owner = SharedSmallCache::Owner::None;
-        sharedSmall.bindingSmall.invalidate();
-    }
-
-    void invalidate_falcon() {
-        if (sharedSmall.owner == SharedSmallCache::Owner::Falcon)
-            sharedSmall.owner = SharedSmallCache::Owner::None;
-        sharedSmall.bindingFalcon.invalidate();
-    }
+    void invalidate_small() { smallCache.binding.invalidate(); }
 
     struct BigCacheState {
         Cache<TransformedFeatureDimensionsBig> cache;
         CacheBinding                           binding;
     };
 
-    struct SharedSmallCache {
-        enum class Owner { None, Small, Falcon };
-
-        void reset() {
-            owner         = Owner::None;
-            bindingSmall.invalidate();
-            bindingFalcon.invalidate();
-        }
-
-        template<typename Network>
-        void ensure_owner(const Network& network, Owner desiredOwner) {
-            CacheBinding& binding = desiredOwner == Owner::Small ? bindingSmall : bindingFalcon;
-
-            if (!binding.ensure(network, cache))
-            {
-                if ((desiredOwner == Owner::Falcon && owner == Owner::Falcon)
-                    || desiredOwner == Owner::Small)
-                    owner = Owner::None;
-                return;
-            }
-
-            if (owner != desiredOwner)
-            {
-                owner = desiredOwner;
-                (desiredOwner == Owner::Small ? bindingFalcon : bindingSmall).invalidate();
-            }
-        }
-
+    struct SmallCacheState {
         Cache<TransformedFeatureDimensionsSmall> cache;
-        CacheBinding                             bindingSmall;
-        CacheBinding                             bindingFalcon;
-        Owner                                    owner = Owner::None;
+        CacheBinding                             binding;
     };
 
-    BigCacheState    bigCache;
-    SharedSmallCache sharedSmall;
+    BigCacheState   bigCache;
+    SmallCacheState smallCache;
 };
 
 

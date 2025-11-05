@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Configure a Cute Chess match preset for 10+0.1 bullet games.
-# Applies a low-latency configuration for Wordfish by disabling Falcon/Experience
+# Applies a low-latency configuration for Wordfish by disabling Experience
 # features, reducing move overhead, and enforcing a 10 ms minimum thinking time.
 
 set -euo pipefail
@@ -42,7 +42,6 @@ OUTPUT_PGN="${OUTPUT_PGN:-$ROOT_DIR/bullet-10_0.1.pgn}"
 
 "$CUTECHESS_CLI_BIN" \
   -engine cmd="$ENGINE_BIN" name="$ENGINE_NAME" \
-    option.FalconFile=None \
     option."Experience Enabled"=false \
     option."Experience Book"=false \
     option."Experience Concurrent"=false \
