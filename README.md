@@ -145,18 +145,6 @@ Set it with:
 setoption name Minimum Thinking Time value <milliseconds>
 ```
 
-### Falcon Net
-
-Wordfish can switch to an alternative neural network using the
-`FalconFile` option. If a `nn-c01dc0ffeede.nnue` file is present in the
-engine directory it will be embedded automatically; otherwise the engine
-falls back to the standard networks. To load the `nn-c01dc0ffeede.nnue`
-file when available, send:
-
-```
-setoption name FalconFile value nn-c01dc0ffeede.nnue
-```
-
 ## Roadmap de optimización
 
 La rama `codex/update-entry-points-and-utilities` sirve de base estable para

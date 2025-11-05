@@ -124,12 +124,8 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
 
     // We estimate the value of each piece by doing a differential evaluation from
     // the current base eval, simulating the removal of the piece from its square.
-    auto& cacheToUse = networks.falcon.is_available()
-                         ? caches.cache_for_falcon(networks.falcon)
-                         : caches.cache_for_small(networks.small);
-    auto [psqt, positional] = networks.falcon.is_available()
-                                ? networks.falcon.evaluate(pos, accumulators, &cacheToUse)
-                                : networks.small.evaluate(pos, accumulators, &cacheToUse);
+    auto& cacheToUse = caches.cache_for_big(networks.big);
+    auto [psqt, positional] = networks.big.evaluate(pos, accumulators, &cacheToUse);
     Value base              = psqt + positional;
     base                    = pos.side_to_move() == WHITE ? base : -base;
 
@@ -145,12 +141,8 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
                 pos.remove_piece(sq);
 
                 accumulators.reset();
-                auto& loopCache = networks.falcon.is_available()
-                                     ? caches.cache_for_falcon(networks.falcon)
-                                     : caches.cache_for_small(networks.small);
-                std::tie(psqt, positional) = networks.falcon.is_available()
-                                               ? networks.falcon.evaluate(pos, accumulators, &loopCache)
-                                               : networks.small.evaluate(pos, accumulators, &loopCache);
+                auto& loopCache = caches.cache_for_big(networks.big);
+                std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &loopCache);
                 Value eval                 = psqt + positional;
                 eval                       = pos.side_to_move() == WHITE ? eval : -eval;
                 v                          = base - eval;
@@ -167,12 +159,8 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     ss << '\n';
 
     accumulators.reset();
-    auto& traceCache = networks.falcon.is_available()
-                         ? caches.cache_for_falcon(networks.falcon)
-                         : caches.cache_for_small(networks.small);
-    auto t = networks.falcon.is_available()
-                ? networks.falcon.trace_evaluate(pos, accumulators, &traceCache)
-                : networks.small.trace_evaluate(pos, accumulators, &traceCache);
+    auto& traceCache = caches.cache_for_big(networks.big);
+    auto t = networks.big.trace_evaluate(pos, accumulators, &traceCache);
 
     ss << " NNUE network contributions "
        << (pos.side_to_move() == WHITE ? "(White to move)" : "(Black to move)") << std::endl

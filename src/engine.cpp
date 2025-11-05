@@ -66,9 +66,7 @@ Engine::Engine(std::optional<std::string> path) :
         NN::NetworkBig({EvalFileDefaultNameBig, "None", "", "", std::nullopt},
                        NN::EmbeddedNNUEType::BIG),
         NN::NetworkSmall({EvalFileDefaultNameSmall, "None", "", "", std::nullopt},
-                         NN::EmbeddedNNUEType::SMALL),
-        NN::NetworkFalcon({FalconFileDefaultName, "None", "", "", std::nullopt},
-                          NN::EmbeddedNNUEType::FALCON))) {
+                         NN::EmbeddedNNUEType::SMALL))) {
     pos.set(StartFEN, false, &states->back());
 
 
@@ -228,12 +226,6 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
-    options.add(  //
-      "FalconFile", Option(FalconFileDefaultName, [this](const Option& o) {
-          load_falcon_network(o);
-          return std::nullopt;
-      }));
-
     load_networks();
     resize_threads();
 }
@@ -379,50 +371,15 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 void Engine::verify_networks() const {
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
-    networks->falcon.verify(options["FalconFile"], onVerifyNetworks);
-
-    if (onVerifyNetworks)
-    {
-        std::string status = networks->falcon.is_available() ? "active" : "inactive";
-        std::string requestedFile(options["FalconFile"]);
-        std::string fallbackFile(options["EvalFileSmall"]);
-        std::string originValue = networks->falcon.loaded_from();
-        std::string origin      = originValue.empty() ? "(unknown)" : originValue;
-
-        std::time_t loadedAt = networks->falcon.loaded_time();
-        char        buffer[64]{};
-        if (loadedAt != 0)
-        {
-            std::tm tm{};
-#ifdef _WIN32
-            gmtime_s(&tm, &loadedAt);
-#else
-            gmtime_r(&loadedAt, &tm);
-#endif
-            std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%SZ", &tm);
-        }
-
-        std::string when = loadedAt ? buffer : "never";
-
-        onVerifyNetworks("Falcon NNUE status: " + status + ", requested='" + requestedFile
-                          + "', source='" + origin + "', loaded=" + when
-                          + ", fallback='" + fallbackFile + "'");
-    }
 }
 
 void Engine::load_networks() {
-    bool falconLoaded = true;
-    networks.modify_and_replicate([this, &falconLoaded](NN::Networks& networks_) {
+    networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
-        falconLoaded = networks_.falcon.load(binaryDirectory, options["FalconFile"]);
     });
     threads.clear();
     threads.ensure_network_replicated();
-
-    if (!falconLoaded)
-        sync_cout << "Falcon network ('" << std::string(options["FalconFile"]) << "') unavailable;"
-                  << " falling back to EvalFileSmall." << sync_endl;
 }
 
 void Engine::load_big_network(const std::string& file) {
@@ -437,20 +394,6 @@ void Engine::load_small_network(const std::string& file) {
       [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
     threads.clear();
     threads.ensure_network_replicated();
-}
-
-void Engine::load_falcon_network(const std::string& file) {
-    bool falconLoaded = true;
-    networks.modify_and_replicate(
-      [this, &file, &falconLoaded](NN::Networks& networks_) {
-          falconLoaded = networks_.falcon.load(binaryDirectory, file);
-      });
-    threads.clear();
-    threads.ensure_network_replicated();
-
-    if (!falconLoaded)
-        sync_cout << "Falcon network ('" << file << "') unavailable; falling back to EvalFileSmall."
-                  << sync_endl;
 }
 
 void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {

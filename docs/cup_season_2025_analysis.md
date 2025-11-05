@@ -27,7 +27,7 @@ The PGN extracts highlight three persistent failure modes:
 1. **Slow starts from preloaded FENs.** The event used random mid-game FENs from `UHO_Lichess_4852_v1.epd`, often with locked
    pawn structures. Wordfish repeatedly spent 0.4–0.7 seconds on the first move of the game to load the correct NNUE (see
    rounds 1, 2, 3, 5, 8 and 9). Opponents playing pure Stockfish code replied in 0.1–0.2 seconds and seized initiative. The
-   triple-network handshake (big / small / falcon) appears to resample evaluation caches at move one, costing ≈40% of the
+   dual-network handshake (big / small) appears to resample evaluation caches at move one, costing ≈40% of the
    allotted bullet time.
 2. **Over-aggressive pawn storms without coordination.** In several black games (e.g. vs. ZurgaaPOLY round 1, HypnoS rounds 9
    and 216, RapTora round 8) Wordfish pushed the f- and g-pawns before completing development, opening files that the opponent
@@ -40,11 +40,10 @@ The PGN extracts highlight three persistent failure modes:
 
 ### Immediate mitigations
 
-* **Profile network warm-up.** Instrument `evaluate.cpp` to log the time spent on `nets.big`, `nets.small` and `nets.falcon`
+* **Profile network warm-up.** Instrument `evaluate.cpp` to log the time spent on `nets.big` and `nets.small`
   acquisition during the first five plies when the engine receives a fresh FEN. Reproduce the 10+0.1 settings with the same
-  Cute Chess command line used in the event to confirm whether the three-network cascade costs >150 ms per move.
-* **Bullet-oriented option preset.** Ship a helper shell script (e.g. `scripts/presets/bullet-10_0.1.sh`) that disables Falcon
-  and Experience features, sets `Minimum Thinking Time` to 10 ms, and caps `Move Overhead` aggressively. This gives operators a
+  Cute Chess command line used in the event to confirm whether the dual-network cascade costs >150 ms per move.
+* **Bullet-oriented option preset.** Ship a helper shell script (e.g. `scripts/presets/bullet-10_0.1.sh`) that disables Experience features, sets `Minimum Thinking Time` to 10 ms, and caps `Move Overhead` aggressively. This gives operators a
   reproducible configuration instead of manual tinkering.
 * **Tighten king-safety features for low depth.** Introduce a depth-aware scaling factor so that pawn storms around our own king
   are discouraged when search depth < 14. The PGNs show repeated cases where depth-9 or depth-10 searches endorsed unsound pawn
@@ -57,8 +56,8 @@ The PGN extracts highlight three persistent failure modes:
    baseline loss caused by heavier evaluation.
 2. **Selective-search audit.** Run self-play matches at 10+0.1 toggling `Late Move Pruning` and `Futility Pruning` knobs. The
    goal is to find a configuration that restores verification search depth in tactical positions without breaking LTC strength.
-3. **NNUE cache residency experiment.** Modify the network loader to keep Falcon disabled by default in bullet. If this change
-   recovers ≥40 Elo at fast TC, we can revisit enabling Falcon only when `time > 12000 ms` per move.
+3. **NNUE cache residency experiment.** Measure the impact of skipping small-network warm-ups under bullet constraints.
+   If this change recovers ≥40 Elo at fast TC, we can revisit enabling the secondary network only for `time > 12000 ms` per move.
 4. **Opening policy refresh.** Generate a compact book targeting the UHO_Lichess_4852_v1 suite, focusing on solid development
    moves for both colours. Feeding better first moves into the search reduces the need to burn time recalculating well-known
    continuations.

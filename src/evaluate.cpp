@@ -60,9 +60,10 @@ namespace {
 enum class WarmupSlot : std::size_t {
     Big,
     Small,
-    Falcon,
     Count
 };
+
+using WarmupDurations = std::array<double, static_cast<std::size_t>(WarmupSlot::Count)>;
 
 struct WarmupProfile {
     std::atomic<int>         basePly{std::numeric_limits<int>::min()};
@@ -70,13 +71,12 @@ struct WarmupProfile {
     std::atomic<bool>          active{false};
 } warmupProfile;
 
-void log_warmup_sample(int relPly, const std::array<double, 3>& durations) {
+void log_warmup_sample(int relPly, const WarmupDurations& durations) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(3);
     oss << "NNUE warmup ply " << (relPly + 1)
         << " big=" << durations[static_cast<std::size_t>(WarmupSlot::Big)] << "ms"
-        << " small=" << durations[static_cast<std::size_t>(WarmupSlot::Small)] << "ms"
-        << " falcon=" << durations[static_cast<std::size_t>(WarmupSlot::Falcon)] << "ms";
+        << " small=" << durations[static_cast<std::size_t>(WarmupSlot::Small)] << "ms";
 
     sync_cout_start();
     std::cout << "info string " << oss.str() << '\n';
@@ -99,23 +99,6 @@ MaterialSummary summarize_material(const Position& pos, int simpleEvalAbs) {
     summary.minorPieces       = pos.count<BISHOP>() + pos.count<KNIGHT>();
     summary.materialImbalance = simpleEvalAbs;
     return summary;
-}
-
-bool should_use_falcon(const MaterialSummary& summary, bool smallNetPreferred) {
-    const bool deepEndgame   = summary.totalPieces <= 7
-                            || (summary.pawns <= 4 && summary.majorPieces <= 1);
-    const bool lightMaterial = (summary.pawns <= 5 && summary.totalPieces <= 12)
-                            || summary.minorPieces <= 1;
-    const bool highImbalance = summary.materialImbalance > 800
-                               && (summary.pawns <= 6 || summary.majorPieces <= 1);
-
-    if (deepEndgame)
-        return true;
-
-    if (smallNetPreferred)
-        return highImbalance || lightMaterial;
-
-    return highImbalance && lightMaterial;
 }
 
 }  // namespace
@@ -319,65 +302,31 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     const auto materialSummary = summarize_material(pos, simpleEvalAbs);
 
     bool  smallNetCandidate = materialSummary.materialImbalance > 962;
-    bool  falconAvailable   = networks.falcon.is_available();
-    bool  useFalconNet      = falconAvailable && should_use_falcon(materialSummary, smallNetCandidate);
     bool  smallNet          = smallNetCandidate;
     Value nnue              = VALUE_ZERO;
     Value psqt              = VALUE_ZERO;
     Value positional        = VALUE_ZERO;
 
-    if (useFalconNet)
+    if (smallNetCandidate)
     {
-        auto& falconCache = caches.cache_for_falcon(networks.falcon);
-        auto  falconEval  = time_call(
-          [&] { return networks.falcon.evaluate(pos, accumulators, &falconCache); }, WarmupSlot::Falcon);
-
-        auto& bigCache = caches.cache_for_big(networks.big);
-        auto  bigEval  = time_call(
-          [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
-
-        Value falconPsqt, falconPositional;
-        Value bigPsqt, bigPositional;
-        std::tie(falconPsqt, falconPositional) = falconEval;
-        std::tie(bigPsqt, bigPositional)       = bigEval;
-
-        int imbalance     = std::min(1500, materialSummary.materialImbalance);
-        int scarcityBonus = std::max(0, 10 - materialSummary.totalPieces);
-        int falconWeight  = 64 + imbalance * 32 / 1500 + scarcityBonus * 4;
-        falconWeight      = std::clamp(falconWeight, 48, 120);
-
-        psqt       = Value((falconWeight * falconPsqt + (128 - falconWeight) * bigPsqt) / 128);
-        positional = Value((falconWeight * falconPositional + (128 - falconWeight) * bigPositional)
-                           / 128);
-
-        Value falconScore = (125 * falconPsqt + 131 * falconPositional) / 128;
-        Value bigScore    = (125 * bigPsqt + 131 * bigPositional) / 128;
-        nnue              = Value((falconWeight * falconScore + (128 - falconWeight) * bigScore) / 128);
-        smallNet          = false;
+        auto& smallCache = caches.cache_for_small(networks.small);
+        auto  smallEval  = time_call(
+          [&] { return networks.small.evaluate(pos, accumulators, &smallCache); }, WarmupSlot::Small);
+        std::tie(psqt, positional) = smallEval;
     }
     else
     {
-        if (smallNetCandidate)
-        {
-            auto& smallCache = caches.cache_for_small(networks.small);
-            auto smallEval = time_call(
-              [&] { return networks.small.evaluate(pos, accumulators, &smallCache); }, WarmupSlot::Small);
-            std::tie(psqt, positional) = smallEval;
-        }
-        else
-        {
-            auto& bigCache = caches.cache_for_big(networks.big);
-            auto bigEval = time_call(
-              [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
-            std::tie(psqt, positional) = bigEval;
-            smallNet                   = false;
-        }
-
-        nnue = (125 * psqt + 131 * positional) / 128;
+        auto& bigCache = caches.cache_for_big(networks.big);
+        auto  bigEval  = time_call(
+          [&] { return networks.big.evaluate(pos, accumulators, &bigCache); }, WarmupSlot::Big);
+        std::tie(psqt, positional) = bigEval;
+        smallNet                   = false;
     }
 
+    nnue = (125 * psqt + 131 * positional) / 128;
+
     // Re-evaluate the position when higher eval accuracy is worth the time spent
-    if (!useFalconNet && smallNet && (std::abs(nnue) < 236))
+    if (smallNet && (std::abs(nnue) < 236))
     {
         auto& bigCache = caches.cache_for_big(networks.big);
         auto  bigEval  = time_call(
