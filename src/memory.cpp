@@ -55,12 +55,6 @@
 // the calls at compile time), try to load them at runtime. To do this we need
 // first to define the corresponding function pointers.
 
-extern "C" {
-using OpenProcessToken_t      = bool (*)(HANDLE, DWORD, PHANDLE);
-using LookupPrivilegeValueA_t = bool (*)(LPCSTR, LPCSTR, PLUID);
-using AdjustTokenPrivileges_t =
-  bool (*)(HANDLE, BOOL, PTOKEN_PRIVILEGES, DWORD, PTOKEN_PRIVILEGES, PDWORD);
-}
 #endif
 
 
@@ -106,94 +100,14 @@ void std_aligned_free(void* ptr) {
 #if defined(_WIN32)
 
 static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize) {
-
-    #if !defined(_WIN64)
-    return nullptr;
-    #else
-
-    HANDLE hProcessToken{};
-    LUID   luid{};
-    void*  mem = nullptr;
-
-    const size_t largePageSize = GetLargePageMinimum();
-    if (!largePageSize)
-        return nullptr;
-
-    // Dynamically link OpenProcessToken, LookupPrivilegeValue and AdjustTokenPrivileges
-
-    struct Advapi32Guard {
-        HMODULE hModule{};
-        bool    loaded{};
-
-        Advapi32Guard() {
-            hModule = GetModuleHandle(TEXT("advapi32.dll"));
-            if (!hModule) {
-                hModule = LoadLibrary(TEXT("advapi32.dll"));
-                loaded  = (hModule != nullptr);
-            }
-        }
-
-        ~Advapi32Guard() {
-            if (loaded && hModule)
-                FreeLibrary(hModule);
-        }
-    } advapi32;
-
-    if (!advapi32.hModule)
-        return nullptr;
-
-    auto OpenProcessToken_f =
-      OpenProcessToken_t((void (*)()) GetProcAddress(advapi32.hModule, "OpenProcessToken"));
-    if (!OpenProcessToken_f)
-        return nullptr;
-    auto LookupPrivilegeValueA_f =
-      LookupPrivilegeValueA_t((void (*)()) GetProcAddress(advapi32.hModule, "LookupPrivilegeValueA"));
-    if (!LookupPrivilegeValueA_f)
-        return nullptr;
-    auto AdjustTokenPrivileges_f =
-      AdjustTokenPrivileges_t((void (*)()) GetProcAddress(advapi32.hModule, "AdjustTokenPrivileges"));
-    if (!AdjustTokenPrivileges_f)
-        return nullptr;
-
-    // We need SeLockMemoryPrivilege, so try to enable it for the process
-
-    if (!OpenProcessToken_f(  // OpenProcessToken()
-          GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hProcessToken))
-        return nullptr;
-
-    if (LookupPrivilegeValueA_f(nullptr, "SeLockMemoryPrivilege", &luid))
-    {
-        TOKEN_PRIVILEGES tp{};
-        TOKEN_PRIVILEGES prevTp{};
-        DWORD            prevTpLen = 0;
-
-        tp.PrivilegeCount           = 1;
-        tp.Privileges[0].Luid       = luid;
-        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-        // Try to enable SeLockMemoryPrivilege. Note that even if AdjustTokenPrivileges()
-        // succeeds, we still need to query GetLastError() to ensure that the privileges
-        // were actually obtained.
-
-        if (AdjustTokenPrivileges_f(hProcessToken, FALSE, &tp, sizeof(TOKEN_PRIVILEGES), &prevTp,
-                                    &prevTpLen)
-            && GetLastError() == ERROR_SUCCESS)
-        {
-            // Round up size to full pages and allocate
-            allocSize = (allocSize + largePageSize - 1) & ~size_t(largePageSize - 1);
-            mem       = VirtualAlloc(nullptr, allocSize, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES,
-                                     PAGE_READWRITE);
-
-            // Privilege no longer needed, restore previous state
-            AdjustTokenPrivileges_f(hProcessToken, FALSE, &prevTp, 0, nullptr, nullptr);
-        }
-    }
-
-    CloseHandle(hProcessToken);
-
-    return mem;
-
-    #endif
+    return windows_try_with_large_page_priviliges(
+      [&](size_t largePageSize) {
+          // Round up size to full pages and allocate
+          allocSize = (allocSize + largePageSize - 1) & ~size_t(largePageSize - 1);
+          return VirtualAlloc(nullptr, allocSize, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES,
+                              PAGE_READWRITE);
+      },
+      []() { return (void*) nullptr; });
 }
 
 void* aligned_large_pages_alloc(size_t allocSize) {

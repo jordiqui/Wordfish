@@ -22,12 +22,9 @@
 #define NNUE_ACCUMULATOR_H_INCLUDED
 
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <memory>
-#include <vector>
 
 #include "../types.h"
 #include "nnue_architecture.h"
@@ -50,7 +47,7 @@ template<IndexType Size>
 struct alignas(CacheLineSize) Accumulator {
     std::int16_t               accumulation[COLOR_NB][Size];
     std::int32_t               psqtAccumulation[COLOR_NB][PSQTBuckets];
-    std::array<bool, COLOR_NB> computed;
+    std::array<bool, COLOR_NB> computed = {};
 };
 
 
@@ -73,12 +70,12 @@ struct AccumulatorCaches {
         struct alignas(CacheLineSize) Entry {
             BiasType       accumulation[Size];
             PSQTWeightType psqtAccumulation[PSQTBuckets];
-            Bitboard       byColorBB[COLOR_NB];
-            Bitboard       byTypeBB[PIECE_TYPE_NB];
+            Piece          pieces[SQUARE_NB];
+            Bitboard       pieceBB;
 
             // To initialize a refresh entry, we set all its bitboards empty,
             // so we put the biases in the accumulation, without any weights on top
-            void reset(const BiasType* biases) {
+            void clear(const BiasType* biases) {
 
                 std::memcpy(accumulation, biases, sizeof(accumulation));
                 std::memset((uint8_t*) this + offsetof(Entry, psqtAccumulation), 0,
@@ -86,12 +83,11 @@ struct AccumulatorCaches {
             }
         };
 
-        void reset_from_biases(const BiasType* biases) {
-            assert(biases);
-
+        template<typename Network>
+        void clear(const Network& network) {
             for (auto& entries1D : entries)
                 for (auto& entry : entries1D)
-                    entry.reset(biases);
+                    entry.clear(network.featureTransformer.biases);
         }
 
         std::array<Entry, COLOR_NB>& operator[](Square sq) { return entries[sq]; }
@@ -99,97 +95,14 @@ struct AccumulatorCaches {
         std::array<std::array<Entry, COLOR_NB>, SQUARE_NB> entries;
     };
 
-    struct CacheBinding {
-        template<typename Network, IndexType Size>
-        void prime(const Network& network, Cache<Size>& cache) {
-            auto handle = network.weights_handle();
-            assert(handle);
-            auto alias = std::shared_ptr<void>(handle, static_cast<void*>(handle.get()));
-            cache.reset_from_biases(handle->featureTransformer->biases);
-            weights = alias;
-            version = network.version();
-        }
-
-        template<typename Network, IndexType Size>
-        bool ensure(const Network& network, Cache<Size>& cache) {
-            return ensure_internal(network, cache, false);
-        }
-
-        void invalidate() {
-            version = 0;
-            weights.reset();
-        }
-
-        template<typename Network, IndexType Size>
-        bool ensure_internal(const Network& network, Cache<Size>& cache, bool force) {
-            auto handle = network.weights_handle();
-            if (!handle)
-                return false;
-
-            auto alias = std::shared_ptr<void>(handle, static_cast<void*>(handle.get()));
-            auto locked = weights.lock();
-            bool refresh = force || !locked || locked.get() != alias.get()
-                           || version != network.version();
-
-            if (refresh)
-            {
-                cache.reset_from_biases(handle->featureTransformer->biases);
-                weights = alias;
-                version = network.version();
-            }
-
-            return true;
-        }
-
-        std::weak_ptr<void> weights;
-        std::uint64_t       version = 0;
-    };
-
     template<typename Networks>
     void clear(const Networks& networks) {
-        if (auto weights = networks.big.weights_handle())
-        {
-            bigCache.binding.prime(networks.big, bigCache.cache);
-        }
-        else
-            bigCache.binding.invalidate();
-
-        if (auto weights = networks.small.weights_handle())
-        {
-            smallCache.binding.prime(networks.small, smallCache.cache);
-        }
-        else
-            smallCache.binding.invalidate();
+        big.clear(networks.big);
+        small.clear(networks.small);
     }
 
-    template<typename Network>
-    Cache<TransformedFeatureDimensionsBig>& cache_for_big(const Network& network) {
-        bigCache.binding.ensure(network, bigCache.cache);
-        return bigCache.cache;
-    }
-
-    template<typename Network>
-    Cache<TransformedFeatureDimensionsSmall>& cache_for_small(const Network& network) {
-        smallCache.binding.ensure(network, smallCache.cache);
-        return smallCache.cache;
-    }
-
-    void invalidate_big() { bigCache.binding.invalidate(); }
-
-    void invalidate_small() { smallCache.binding.invalidate(); }
-
-    struct BigCacheState {
-        Cache<TransformedFeatureDimensionsBig> cache;
-        CacheBinding                           binding;
-    };
-
-    struct SmallCacheState {
-        Cache<TransformedFeatureDimensionsSmall> cache;
-        CacheBinding                             binding;
-    };
-
-    BigCacheState   bigCache;
-    SmallCacheState smallCache;
+    Cache<TransformedFeatureDimensionsBig>   big;
+    Cache<TransformedFeatureDimensionsSmall> small;
 };
 
 
@@ -228,10 +141,6 @@ struct AccumulatorState {
 
 class AccumulatorStack {
    public:
-    AccumulatorStack() :
-        accumulators(MAX_PLY + 1),
-        size{1} {}
-
     [[nodiscard]] const AccumulatorState& latest() const noexcept;
 
     void reset() noexcept;
@@ -264,8 +173,8 @@ class AccumulatorStack {
                                      const FeatureTransformer<Dimensions>& featureTransformer,
                                      const std::size_t                     end) noexcept;
 
-    std::vector<AccumulatorState> accumulators;
-    std::size_t                   size;
+    std::array<AccumulatorState, MAX_PLY + 1> accumulators;
+    std::size_t                               size = 1;
 };
 
 }  // namespace Stockfish::Eval::NNUE

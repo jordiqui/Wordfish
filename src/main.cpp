@@ -18,6 +18,8 @@
   Modifications Copyright (C) 2024 Jorge Ruiz Centelles
 */
 
+#include <memory>
+
 #include "misc.h"
 #include "uci.h"
 #include "tune.h"
@@ -48,10 +50,10 @@ int main(int argc, char* argv[]) {
     Bitboards::init();
     Position::init();
 
-    UCIEngine uci(argc, argv);
+    auto uci = std::make_unique<UCIEngine>(argc, argv);
 
-    Tune::init(uci.engine_options());
+    Tune::init(uci->engine_options());
 
-    uci.loop();
+    uci->loop();
     return 0;
 }
