@@ -81,7 +81,13 @@ SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
         misc.cpp movegen.cpp movepick.cpp polybook.cpp position.cpp \
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
         nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/features/half_ka_v2_hm.cpp nnue/network.cpp \
-        engine.cpp score.cpp memory.cpp experience.cpp
+        engine.cpp score.cpp memory.cpp experience.cpp \
+        livebook/BaseLivebook.cpp livebook/ChessDb.cpp livebook/ChessDBContributor.cpp \
+        livebook/LichessEndgame.cpp livebook/LichessGames.cpp livebook/LichessLivebook.cpp \
+        livebook/LichessMaster.cpp livebook/LichessOpening.cpp livebook/LichessPlayer.cpp \
+        livebook/LichessUsers.cpp livebook/Proxy.cpp \
+        livebook/analysis/Analysis.cpp livebook/analysis/Cp.cpp \
+        livebook/analysis/Mate.cpp livebook/analysis/Wdl.cpp
 
 HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
 		nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/layers/affine_transform.h \
@@ -90,11 +96,16 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.
 		nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h position.h \
                 search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
                 tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h \
-                experience.h
+                experience.h livebook/BaseLivebook.h livebook/ChessDb.h \
+                livebook/ChessDBContributor.h livebook/LichessEndgame.h \
+                livebook/LichessGames.h livebook/LichessLivebook.h livebook/LichessMaster.h \
+                livebook/LichessOpening.h livebook/LichessPlayer.h livebook/LichessUsers.h \
+                livebook/Proxy.h livebook/analysis/Analysis.h livebook/analysis/Cp.h \
+                livebook/analysis/Mate.h livebook/analysis/Wdl.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features
+VPATH = syzygy:nnue:nnue/features:livebook:livebook/analysis
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -475,8 +486,10 @@ ifeq ($(MAKELEVEL),0)
 endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
+CXXFLAGS += -DUSE_LIVEBOOK
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) -lz
+LDFLAGS += -lcurl
 
 ifeq ($(COMP),)
 	COMP=gcc

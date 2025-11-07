@@ -372,6 +372,23 @@ struct ConthistBonus {
     int weight;
 };
 
+#ifdef USE_LIVEBOOK
+void set_livebook_depth(int book_depth);
+void set_proxy_url(const std::string& proxy_url);
+void set_proxy_diversity(bool proxy_diversity);
+void set_use_lichess_games(bool lichess_games);
+void set_use_lichess_masters(bool lichess_masters);
+void set_lichess_player(const std::string& lichess_player);
+void set_lichess_player_color(const std::string& lichess_player_color);
+void set_use_chess_db(bool chess_db);
+void set_use_chess_db_tablebase(bool chess_db);
+void set_use_lichess_tablebase(bool lichess_tablebase);
+void update_livebooks();
+void update_online_tablebases();
+void set_chess_db_contribute(bool chess_db_contribute);
+#endif
+
+void set_variety(const std::string& varietyOption);
 
 }  // namespace Search
 

@@ -1,0 +1,17 @@
+#ifndef PROXY_H
+#define PROXY_H
+#ifdef USE_LIVEBOOK
+
+    #include "ChessDb.h"
+
+namespace Stockfish::Livebook {
+class Proxy final: public ChessDb {
+   public:
+    explicit Proxy(const std::string& endpoint_);
+    ~Proxy() override = default;
+};
+}  // namespace Stockfish::Livebook;
+
+
+#endif
+#endif  //PROXY_H

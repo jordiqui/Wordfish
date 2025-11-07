@@ -210,6 +210,65 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("MCTS Multi MinVisits", Option(5, 0, 1000));
     options.add("MCTS Explore", Option(false));
 
+#ifdef USE_LIVEBOOK
+    options.add("LiveBook Proxy Url", Option("", [](const Option& o) {
+                    Search::set_proxy_url(o.value());
+                    return std::nullopt;
+                }));
+
+    options.add("LiveBook Proxy Diversity", Option(false, [](const Option& o) {
+                    Search::set_proxy_diversity(bool(o));
+                    return std::nullopt;
+                }));
+
+    options.add("LiveBook Lichess Games", Option(false, [](const Option& o) {
+                    Search::set_use_lichess_games(bool(o));
+                    return std::nullopt;
+                }));
+
+    options.add("LiveBook Lichess Masters", Option(false, [](const Option& o) {
+                    Search::set_use_lichess_masters(bool(o));
+                    return std::nullopt;
+                }));
+
+    options.add("LiveBook Lichess Player", Option("", [](const Option& o) {
+                    Search::set_lichess_player(o.value());
+                    return std::nullopt;
+                }));
+
+    options.add("LiveBook Lichess Player Color",
+                Option("White var Black var Both", "White",
+                       [](const Option& o) {
+                           Search::set_lichess_player_color(o.value());
+                           return std::nullopt;
+                       }));
+
+    options.add("LiveBook ChessDB", Option(false, [](const Option& o) {
+                    Search::set_use_chess_db(bool(o));
+                    return std::nullopt;
+                }));
+
+    options.add("LiveBook Depth", Option(255, 1, 255, [](const Option& o) {
+                    Search::set_livebook_depth(int(o));
+                    return std::nullopt;
+                }));
+
+    options.add("ChessDB Tablebase", Option(false, [](const Option& o) {
+                    Search::set_use_chess_db_tablebase(bool(o));
+                    return std::nullopt;
+                }));
+
+    options.add("Lichess Tablebase", Option(false, [](const Option& o) {
+                    Search::set_use_lichess_tablebase(bool(o));
+                    return std::nullopt;
+                }));
+
+    options.add("ChessDB Contribute", Option(false, [](const Option& o) {
+                    Search::set_chess_db_contribute(bool(o));
+                    return std::nullopt;
+                }));
+#endif
+
     // Optional experimental evaluation tweak that adapts weights based on
     // simple positional cues. Disabled by default so it does not alter
     // standard play unless explicitly requested by the user.
@@ -229,6 +288,12 @@ Engine::Engine(std::optional<std::string> path) :
           load_small_network(o);
           return std::nullopt;
       }));
+
+    options.add("Variety", Option("Off var Standard var Psychological", "Off",
+                                   [](const Option& o) {
+                                       Search::set_variety(o.value());
+                                       return std::nullopt;
+                                   }));
 
     load_networks();
     resize_threads();

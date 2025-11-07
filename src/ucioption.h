@@ -49,6 +49,7 @@ class Option {
     Option& operator=(const std::string&);
     operator int() const;
     operator std::string() const;
+    const std::string& value() const;
     bool operator==(const char*) const;
     bool operator!=(const char*) const;
 
