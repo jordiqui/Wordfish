@@ -491,7 +491,11 @@ DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) -lz
 LDFLAGS += -lcurl
 ifeq ($(target_windows),yes)
-       LDFLAGS += -lws2_32 -lnghttp2 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lngtcp2_crypto_openssl -lngtcp2 -lwldap32 -lsecur32 -lbcrypt -lcrypt32
+       ifeq ($(shell pkg-config --exists libngtcp2_crypto_openssl libngtcp2 && echo yes),yes)
+               LDFLAGS += -lws2_32 -lnghttp2 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lngtcp2_crypto_openssl -lngtcp2 -lwldap32 -lsecur32 -lbcrypt -lcrypt32
+       else
+               LDFLAGS += -lws2_32 -lnghttp2 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lwldap32 -lsecur32 -lbcrypt -lcrypt32
+       endif
 endif
 
 ifeq ($(COMP),)
