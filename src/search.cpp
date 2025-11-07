@@ -46,6 +46,8 @@
 #include "nnue/nnue_accumulator.h"
 #include "polybook.h"
 #include "experience.h"
+#include "lichess_tablebase.h"
+#include "score.h"
 #ifdef USE_LIVEBOOK
 #    include "livebook/BaseLivebook.h"
 #    include "livebook/ChessDBContributor.h"
@@ -646,6 +648,40 @@ void Search::Worker::start_searching() {
         }
         else
         {
+            if ((bool) options["Lichess Tablebase"] && !tbConfig.rootInTB
+                && !rootPos.is_chess960() && rootPos.count<ALL_PIECES>() <= 7)
+            {
+                Value tbScore = VALUE_ZERO;
+                Move  tbMove  = Move::none();
+
+                if (LichessTB::probe(rootPos, tbScore, tbMove)
+                    && std::find(rootMoves.begin(), rootMoves.end(), tbMove) != rootMoves.end())
+                {
+                    static std::atomic_bool announced{false};
+
+                    if (!announced.exchange(true))
+                        sync_cout << "info string Lichess tablebase hit" << sync_endl;
+
+                    const std::string moveStr = UCIEngine::move(tbMove, rootPos.is_chess960());
+                    const Score       display(tbScore, rootPos);
+                    const std::string scoreStr = UCIEngine::format_score(display);
+
+                    sync_cout << "info depth 0 score " << scoreStr << " pv " << moveStr << sync_endl;
+
+                    threads.stop = true;
+
+                    if (auto* mainMgr = main_manager())
+                    {
+                        mainMgr->bestPreviousScore        = tbScore;
+                        mainMgr->bestPreviousAverageScore = tbScore;
+                        mainMgr->updates.onBestmove(moveStr, "");
+                    }
+                    else
+                        sync_cout << "bestmove " << moveStr << sync_endl;
+
+                    return;
+                }
+            }
             if ((bool) options["MCTS by Shashin"]) {
                 // Placeholder: Monte Carlo Tree Search integration point.
                 // Current build continues with standard alpha-beta search.
