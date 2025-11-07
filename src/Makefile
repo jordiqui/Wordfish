@@ -575,14 +575,25 @@ ifeq ($(COMP),icx)
 endif
 
 ifeq ($(COMP),clang)
-	comp=clang
-	CXX=clang++
-	ifeq ($(target_windows),yes)
-		CXX=x86_64-w64-mingw32-clang++
-	endif
-
-	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
-	            -Wconditional-uninitialized
+        comp=clang
+        ifeq ($(target_windows),yes)
+                CXX=x86_64-w64-mingw32-clang++
+        else
+                # Detect an available clang++ executable when the unversioned
+                # binary is not present on the system. This makes it possible
+                # to use environments that only provide versioned binaries
+                # such as clang++-20 without requiring the caller to set
+                # COMPCXX manually.
+                CLANGXX_CANDIDATE := $(shell sh -c 'for c in clang++ clang++-20 clang++-19 clang++-18 clang++-17 clang++-16 clang++-15 clang++-14 clang++-13 clang++-12 clang++-11 clang++-10; do command -v $$c >/dev/null 2>&1 && { echo $$c; exit 0; }; done')
+                ifneq ($(CLANGXX_CANDIDATE),)
+                        CXX=$(CLANGXX_CANDIDATE)
+                else
+                        $(error Unable to locate a clang++ compiler. Please install clang or set COMPCXX to a valid executable.)
+                endif
+        endif
+        
+        CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
+                    -Wconditional-uninitialized
 
 	ifeq ($(filter $(KERNEL),Darwin OpenBSD FreeBSD),)
 	ifeq ($(target_windows),)
