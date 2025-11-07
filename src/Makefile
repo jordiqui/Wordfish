@@ -81,7 +81,7 @@ SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
         misc.cpp movegen.cpp movepick.cpp polybook.cpp position.cpp \
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
         nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/features/half_ka_v2_hm.cpp nnue/network.cpp \
-        engine.cpp score.cpp memory.cpp experience.cpp \
+        engine.cpp score.cpp memory.cpp experience.cpp lichess_tablebase.cpp \
         livebook/BaseLivebook.cpp livebook/ChessDb.cpp livebook/ChessDBContributor.cpp \
         livebook/LichessEndgame.cpp livebook/LichessGames.cpp livebook/LichessLivebook.cpp \
         livebook/LichessMaster.cpp livebook/LichessOpening.cpp livebook/LichessPlayer.cpp \
@@ -101,7 +101,7 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.
                 livebook/LichessGames.h livebook/LichessLivebook.h livebook/LichessMaster.h \
                 livebook/LichessOpening.h livebook/LichessPlayer.h livebook/LichessUsers.h \
                 livebook/Proxy.h livebook/analysis/Analysis.h livebook/analysis/Cp.h \
-                livebook/analysis/Mate.h livebook/analysis/Wdl.h
+                livebook/analysis/Mate.h livebook/analysis/Wdl.h lichess_tablebase.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
