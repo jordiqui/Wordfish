@@ -1,17 +1,21 @@
 #ifndef LICHESS_ENDGAME_H
 #define LICHESS_ENDGAME_H
+
 #ifdef USE_LIVEBOOK
-    #include "LichessLivebook.h"
+
+#    include "LichessLivebook.h"
 
 namespace Stockfish::Livebook {
-class LichessEndgame final: public LichessLivebook {
+
+class LichessEndgame final : public LichessLivebook {
    public:
     std::string parse_uci(const nlohmann::json& move) override;
     Analysis*   parse_analysis(const nlohmann::json& move) override;
     std::string format_url(const Position& position) override;
 };
-}
 
+}  // namespace Stockfish::Livebook
 
-#endif  //LICHESS_ENDGAME_H
-#endif
+#endif  // USE_LIVEBOOK
+
+#endif  // LICHESS_ENDGAME_H
