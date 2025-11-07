@@ -149,6 +149,8 @@ Option::operator std::string() const {
     return currentValue;
 }
 
+const std::string& Option::value() const { return currentValue; }
+
 bool Option::operator==(const char* s) const {
     assert(type == "combo");
     return !CaseInsensitiveLess()(currentValue, s) && !CaseInsensitiveLess()(s, currentValue);

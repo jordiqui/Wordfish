@@ -26,10 +26,12 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cctype>
 #include <initializer_list>
 #include <iterator>
 #include <iostream>
 #include <list>
+#include <memory>
 #include <ratio>
 #include <string>
 #include <utility>
@@ -44,6 +46,16 @@
 #include "nnue/nnue_accumulator.h"
 #include "polybook.h"
 #include "experience.h"
+#ifdef USE_LIVEBOOK
+#    include "livebook/BaseLivebook.h"
+#    include "livebook/ChessDBContributor.h"
+#    include "livebook/ChessDb.h"
+#    include "livebook/LichessEndgame.h"
+#    include "livebook/LichessGames.h"
+#    include "livebook/LichessMaster.h"
+#    include "livebook/LichessPlayer.h"
+#    include "livebook/Proxy.h"
+#endif
 #include "position.h"
 #include "syzygy/tbprobe.h"
 #include "thread.h"
@@ -54,6 +66,33 @@
 
 namespace Stockfish {
 
+namespace Search {
+
+#ifdef USE_LIVEBOOK
+int livebook_depth_count = 0;
+int max_book_depth       = 255;
+
+std::vector<std::unique_ptr<Livebook::BaseLivebook>> opening_livebooks;
+std::vector<std::unique_ptr<Livebook::BaseLivebook>> endgame_livebooks;
+
+std::string _proxy_url;
+bool        _use_lichess_games   = false;
+bool        _use_lichess_masters = false;
+std::string _lichess_player;
+std::string _lichess_player_color;
+bool        _use_chess_db            = false;
+bool        _use_chess_db_tablebase  = false;
+bool        _use_lichess_tablebase   = false;
+bool        _chess_db_contribute     = false;
+bool        _proxy_diversity         = false;
+
+Livebook::ChessDBContributor contributor;
+#endif
+
+int variety = 0;
+
+}  // namespace Search
+
 namespace TB = Tablebases;
 
 void syzygy_extend_pv(const OptionsMap&            options,
@@ -63,6 +102,116 @@ void syzygy_extend_pv(const OptionsMap&            options,
                       Value&                       v);
 
 using namespace Search;
+
+#ifdef USE_LIVEBOOK
+void Search::set_livebook_depth(const int book_depth) {
+    max_book_depth = std::clamp(book_depth, 1, 255);
+}
+
+void Search::set_proxy_url(const std::string& proxy_url) {
+    _proxy_url = proxy_url;
+    update_livebooks();
+}
+
+void Search::set_proxy_diversity(const bool proxy_diversity) {
+    _proxy_diversity = proxy_diversity;
+    update_livebooks();
+}
+
+void Search::set_use_lichess_games(const bool lichess_games) {
+    _use_lichess_games = lichess_games;
+    update_livebooks();
+}
+
+void Search::set_use_lichess_masters(const bool lichess_masters) {
+    _use_lichess_masters = lichess_masters;
+    update_livebooks();
+}
+
+void Search::set_lichess_player(const std::string& lichess_player) {
+    _lichess_player = lichess_player;
+    update_livebooks();
+}
+
+void Search::set_lichess_player_color(const std::string& lichess_player_color) {
+    std::string normalized = lichess_player_color;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                   [](unsigned char c) { return char(std::tolower(c)); });
+
+    if (normalized != "white" && normalized != "black" && normalized != "both")
+        normalized = "white";
+
+    _lichess_player_color = normalized;
+    update_livebooks();
+}
+
+void Search::set_use_chess_db(const bool chess_db) {
+    _use_chess_db = chess_db;
+    update_livebooks();
+}
+
+void Search::set_use_chess_db_tablebase(const bool chess_db) {
+    _use_chess_db_tablebase = chess_db;
+    update_online_tablebases();
+}
+
+void Search::set_use_lichess_tablebase(const bool lichess_tablebase) {
+    _use_lichess_tablebase = lichess_tablebase;
+    update_online_tablebases();
+}
+
+void Search::update_livebooks() {
+    opening_livebooks.clear();
+
+    if (!_proxy_url.empty())
+    {
+        auto proxy = std::make_unique<Livebook::Proxy>(_proxy_url);
+        proxy->set_action(_proxy_diversity ? Livebook::Action::QUERY : Livebook::Action::QUERY_BEST);
+        opening_livebooks.emplace_back(std::move(proxy));
+    }
+
+    if (!_lichess_player.empty())
+    {
+        if (_lichess_player_color.empty())
+            _lichess_player_color = "white";
+
+        opening_livebooks.emplace_back(
+          std::make_unique<Livebook::LichessPlayer>(_lichess_player, _lichess_player_color));
+    }
+
+    if (_use_lichess_games)
+        opening_livebooks.emplace_back(std::make_unique<Livebook::LichessGames>());
+
+    if (_use_lichess_masters)
+        opening_livebooks.emplace_back(std::make_unique<Livebook::LichessMaster>());
+
+    if (_use_chess_db)
+        opening_livebooks.emplace_back(std::make_unique<Livebook::ChessDb>());
+}
+
+void Search::update_online_tablebases() {
+    endgame_livebooks.clear();
+
+    if (_use_chess_db_tablebase)
+        endgame_livebooks.emplace_back(std::make_unique<Livebook::ChessDb>());
+
+    if (_use_lichess_tablebase)
+        endgame_livebooks.emplace_back(std::make_unique<Livebook::LichessEndgame>());
+}
+
+void Search::set_chess_db_contribute(const bool chess_db_contribute) {
+    _chess_db_contribute = chess_db_contribute;
+}
+#endif
+
+void Search::set_variety(const std::string& varietyOption) {
+    if (varietyOption == "Off")
+        variety = 0;
+    else if (varietyOption == "Standard")
+        variety = 1;
+    else if (varietyOption == "Psychological")
+        variety = 2;
+}
 
 namespace {
 
@@ -328,6 +477,8 @@ void Search::Worker::start_searching() {
                             main_manager()->originalTimeAdjust);
     tt.new_search();
 
+    set_variety(options["Variety"].value());
+
     Move preferredMove   = Move::none();
     Move bookMove        = Move::none();
     bool experienceBook  = false;
@@ -380,6 +531,62 @@ void Search::Worker::start_searching() {
                 && rootPos.game_ply() / 2 < (int) options["Book2 Depth"])
                 bookMove = polybook[1].probe(rootPos, (bool) options["Book2 BestBookMove"],
                                              (int) options["Book2 Width"]);
+#ifdef USE_LIVEBOOK
+            if (bookMove == Move::none())
+            {
+                livebook_depth_count = rootPos.game_ply();
+
+                const auto syzygyPath = options["SyzygyPath"].value();
+                const int  totalUnits = rootPos.count<ALL_PIECES>();
+
+                const auto* livebooks = static_cast<const std::vector<std::unique_ptr<Livebook::BaseLivebook>>*>(nullptr);
+
+                if ((totalUnits <= 7)
+                    && (syzygyPath.empty()
+                        || (!syzygyPath.empty() && int(options["SyzygyProbeLimit"]) < totalUnits)))
+                    livebooks = &endgame_livebooks;
+                else if (livebook_depth_count < max_book_depth)
+                    livebooks = &opening_livebooks;
+
+                if (livebooks)
+                {
+                    for (const auto& livebookPtr : *livebooks)
+                    {
+                        if (!livebookPtr)
+                            continue;
+
+                        auto output = livebookPtr->lookup(rootPos);
+                        if (output.empty())
+                            continue;
+
+                        std::string       uci;
+                        const Analysis*   best = nullptr;
+
+                        for (auto& [moveStr, analysis] : output)
+                        {
+                            if (best == nullptr || analysis > *best)
+                            {
+                                best = &analysis;
+                                uci  = moveStr;
+                            }
+                        }
+
+                        if (best)
+                        {
+                            Move candidate = UCIEngine::to_move(rootPos, uci);
+                            if (candidate != Move::none())
+                            {
+                                bookMove = candidate;
+                                ++livebook_depth_count;
+                            }
+                        }
+
+                        if (bookMove != Move::none())
+                            break;
+                    }
+                }
+            }
+#endif
         }
 
         const bool experienceGuidance = experiencePrior || experienceBook;
@@ -466,6 +673,12 @@ void Search::Worker::start_searching() {
 
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);
+
+#ifdef USE_LIVEBOOK
+    if (_chess_db_contribute && !bestThread->rootMoves.empty()
+        && bestThread->rootMoves[0].pv[0] != Move::none())
+        contributor.contribute(rootPos, bestThread->rootMoves[0].pv[0]);
+#endif
 
     if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
         experience.update(rootPos, bestThread->rootMoves[0].pv[0], bestThread->rootMoves[0].score,
@@ -1975,6 +2188,29 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
                 else
                     break;  // Fail high
             }
+        }
+    }
+
+    if (std::abs(bestValue) == VALUE_INFINITE)
+        variety = 0;
+
+    if (variety != 0)
+    {
+        const int maxIncrement = variety == 1 ? 13 : 309;
+        static PRNG rng(now());
+
+        const int bestValueInt = int(bestValue);
+        const bool inPsychRange = bestValueInt <= 309 && bestValueInt >= -309;
+        const bool inStdRange   = bestValueInt <= 13 && bestValueInt >= -13;
+
+        if ((variety == 2 && inPsychRange) || (variety == 1 && inStdRange))
+        {
+            int maxValidIncrement = maxIncrement - std::abs(bestValueInt);
+            if (maxValidIncrement < 0)
+                maxValidIncrement = 0;
+
+            int increment = int(rng.rand<uint64_t>() % (static_cast<uint64_t>(maxValidIncrement) + 1));
+            bestValue     = Value(bestValueInt + increment);
         }
     }
 
