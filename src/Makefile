@@ -492,9 +492,9 @@ LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) -lz
 LDFLAGS += -lcurl
 ifeq ($(target_windows),yes)
        ifeq ($(shell pkg-config --exists libngtcp2_crypto_openssl libngtcp2 && echo yes),yes)
-               LDFLAGS += -lws2_32 -lnghttp2 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lngtcp2_crypto_openssl -lngtcp2 -lwldap32 -lsecur32 -lbcrypt -lcrypt32
+               LDFLAGS += -lws2_32 -lnghttp2 -lnghttp3 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lngtcp2_crypto_openssl -lngtcp2 -lbrotlidec -lbrotlicommon -lzstd -lwldap32 -lsecur32 -lbcrypt -lcrypt32
        else
-               LDFLAGS += -lws2_32 -lnghttp2 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lwldap32 -lsecur32 -lbcrypt -lcrypt32
+               LDFLAGS += -lws2_32 -lnghttp2 -lnghttp3 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lbrotlidec -lbrotlicommon -lzstd -lwldap32 -lsecur32 -lbcrypt -lcrypt32
        endif
 endif
 
