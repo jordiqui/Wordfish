@@ -68,10 +68,12 @@ struct AccumulatorCaches {
     struct alignas(CacheLineSize) Cache {
 
         struct alignas(CacheLineSize) Entry {
-            BiasType       accumulation[Size];
-            PSQTWeightType psqtAccumulation[PSQTBuckets];
-            Piece          pieces[SQUARE_NB];
-            Bitboard       pieceBB;
+            BiasType                      accumulation[Size];
+            PSQTWeightType                psqtAccumulation[PSQTBuckets];
+            Piece                         pieces[SQUARE_NB];
+            Bitboard                      pieceBB;
+            std::array<Bitboard, COLOR_NB>     byColorBB;
+            std::array<Bitboard, PIECE_TYPE_NB> byTypeBB;
 
             // To initialize a refresh entry, we set all its bitboards empty,
             // so we put the biases in the accumulation, without any weights on top
