@@ -490,6 +490,9 @@ CXXFLAGS += -DUSE_LIVEBOOK
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) -lz
 LDFLAGS += -lcurl
+ifeq ($(target_windows),yes)
+        LDFLAGS += -lws2_32 -lnghttp2
+endif
 
 ifeq ($(COMP),)
 	COMP=gcc
