@@ -48,8 +48,8 @@ class ExperienceFileTests(unittest.TestCase):
         search_dirs = [root, root / "build", root / "src"]
         for directory in search_dirs:
             if directory.is_dir():
-                candidates.extend(sorted(directory.glob("wordfish*")))
-                candidates.extend(sorted(directory.glob("stockfish*")))
+                candidates.extend(sorted(directory.glob("[Ww]ordfish*")))
+                candidates.extend(sorted(directory.glob("[Ss]tockfish*")))
 
         for candidate in candidates:
             if candidate and candidate.is_file() and os.access(candidate, os.X_OK):
