@@ -368,7 +368,9 @@ Move Experience::probe(Position& pos, int width, int evalImportance, int minDept
         return (a.score + evalImportance * a.depth) > (b.score + evalImportance * b.depth);
     });
 
-    vec.resize(std::min<int>({maxMoves, width, static_cast<int>(vec.size())}));
+    int limit = std::min<int>({maxMoves, width, static_cast<int>(vec.size())});
+    limit     = std::max(0, limit);
+    vec.resize(static_cast<std::size_t>(limit));
 
     if (vec.empty() || vec.front().depth < minDepth)
         return Move::none();
