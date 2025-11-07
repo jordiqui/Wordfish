@@ -202,6 +202,32 @@ void Search::update_online_tablebases() {
 void Search::set_chess_db_contribute(const bool chess_db_contribute) {
     _chess_db_contribute = chess_db_contribute;
 }
+#else
+void Search::set_livebook_depth(const int) {}
+
+void Search::set_proxy_url(const std::string&) {}
+
+void Search::set_proxy_diversity(const bool) {}
+
+void Search::set_use_lichess_games(const bool) {}
+
+void Search::set_use_lichess_masters(const bool) {}
+
+void Search::set_lichess_player(const std::string&) {}
+
+void Search::set_lichess_player_color(const std::string&) {}
+
+void Search::set_use_chess_db(const bool) {}
+
+void Search::set_use_chess_db_tablebase(const bool) {}
+
+void Search::set_use_lichess_tablebase(const bool) {}
+
+void Search::update_livebooks() {}
+
+void Search::update_online_tablebases() {}
+
+void Search::set_chess_db_contribute(const bool) {}
 #endif
 
 void Search::set_variety(const std::string& varietyOption) {

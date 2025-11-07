@@ -210,7 +210,6 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("MCTS Multi MinVisits", Option(5, 0, 1000));
     options.add("MCTS Explore", Option(false));
 
-#ifdef USE_LIVEBOOK
     options.add("LiveBook Proxy Url", Option("", [](const Option& o) {
                     Search::set_proxy_url(o.value());
                     return std::nullopt;
@@ -267,7 +266,6 @@ Engine::Engine(std::optional<std::string> path) :
                     Search::set_chess_db_contribute(bool(o));
                     return std::nullopt;
                 }));
-#endif
 
     // Optional experimental evaluation tweak that adapts weights based on
     // simple positional cues. Disabled by default so it does not alter
