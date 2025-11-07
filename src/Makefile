@@ -486,17 +486,30 @@ ifeq ($(MAKELEVEL),0)
 endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
-CXXFLAGS += -DUSE_LIVEBOOK
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) -lz
-LDFLAGS += -lcurl
-ifeq ($(target_windows),yes)
-       ifeq ($(shell pkg-config --exists libngtcp2_crypto_openssl libngtcp2 && echo yes),yes)
-               LDFLAGS += -lws2_32 -lnghttp2 -lnghttp3 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lngtcp2_crypto_openssl -lngtcp2 -lbrotlidec -lbrotlicommon -lzstd -lwldap32 -lsecur32 -lbcrypt -lcrypt32
-       else
-               LDFLAGS += -lws2_32 -lnghttp2 -lnghttp3 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lbrotlidec -lbrotlicommon -lzstd -lwldap32 -lsecur32 -lbcrypt -lcrypt32
-       endif
+
+USE_LIVEBOOK ?= yes
+
+ifeq ($(USE_LIVEBOOK),yes)
+        ifeq ($(target_windows),yes)
+                ifneq ($(shell pkg-config --exists libngtcp2_crypto_openssl libngtcp2 && echo yes),yes)
+                        $(warning Disabling livebook support: missing libngtcp2 dependencies for static libcurl)
+                        USE_LIVEBOOK := no
+                endif
+        endif
 endif
+
+ifeq ($(USE_LIVEBOOK),yes)
+        CXXFLAGS += -DUSE_LIVEBOOK
+        LDFLAGS += -lcurl
+        ifeq ($(target_windows),yes)
+                LDFLAGS += -lws2_32 -lnghttp2 -lnghttp3 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lngtcp2_crypto_openssl -lngtcp2 -lbrotlidec -lbrotlicommon -lzstd -lwldap32 -lsecur32 -lbcrypt -lcrypt32
+        endif
+else
+        $(info Building without livebook support (curl dependencies not available))
+endif
+
 
 ifeq ($(COMP),)
 	COMP=gcc
