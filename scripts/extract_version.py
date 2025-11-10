@@ -8,8 +8,8 @@ import re
 import sys
 
 HEADER_MACROS = {
-    "ENGINE_NAME": re.compile(r"#define\s+ENGINE_NAME\s+\"([^\"]+)\""),
-    "ENGINE_BUILD_DATE": re.compile(r"#define\s+ENGINE_BUILD_DATE\s+\"([^\"]+)\"")
+    "ENGINE_NAME": re.compile(r"#define\s+ENGINE_NAME\s+\"([^\"]*)\""),
+    "ENGINE_BUILD_DATE": re.compile(r"#define\s+ENGINE_BUILD_DATE\s+\"([^\"]*)\"")
 }
 
 
