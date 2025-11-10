@@ -21,7 +21,7 @@ def run_bench(engine, name, value):
 def main():
     p = argparse.ArgumentParser(description="SPSA tuning for Wordfish")
     p.add_argument("--param", nargs=4, metavar=("NAME", "START", "MIN", "MAX"), action='append', required=True)
-    p.add_argument("--engine", default="src/Wordfish-3.10-011125")
+    p.add_argument("--engine", default="src/Wordfish-3.20-101125")
     p.add_argument("--iterations", type=int, default=10)
     args = p.parse_args()
 
