@@ -40,6 +40,7 @@
 #include "misc.h"
 #include "movegen.h"
 #include "movepick.h"
+#include "mcts.h"
 #include "nnue/network.h"
 #include "nnue/nnue_accumulator.h"
 #include "position.h"
@@ -220,12 +221,17 @@ void Search::Worker::start_searching() {
                             main_manager()->originalTimeAdjust);
     tt.new_search();
 
+    const bool useMcts = options.count("Search Strategy")
+                         && options["Search Strategy"] == "MCTS";
+
     if (rootMoves.empty())
     {
         rootMoves.emplace_back(Move::none());
         main_manager()->updates.onUpdateNoMoves(
           {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
     }
+    else if (useMcts)
+        run_monte_carlo();
     else
     {
         threads.start_searching();  // start non-main threads
@@ -293,6 +299,129 @@ void Search::Worker::start_searching() {
 // Main iterative deepening loop. It calls search()
 // repeatedly with increasing depth until the allocated thinking time has been
 // consumed, the user stops the search, or the maximum search depth is reached.
+void Search::Worker::run_monte_carlo() {
+
+    auto stopRequested = [&]() { return threads.stop.load(std::memory_order_relaxed); };
+
+    const int depthHint = limits.depth ? std::clamp<int>(2 * limits.depth, 4, MAX_PLY - 1) : 12;
+
+    const auto result =
+      MCTS::analyze(rootPos, rootPos.side_to_move(), options, limits, stopRequested, depthHint);
+
+    nodes.store(result.simulations, std::memory_order_relaxed);
+    tbHits.store(0, std::memory_order_relaxed);
+
+    completedDepth = rootDepth = Depth(depthHint);
+    selDepth       = depthHint;
+
+    auto to_value = [](double pawns) {
+        const double limit   = double(VALUE_MATE) / PawnValue;
+        const double clamped = std::clamp(pawns, -limit, limit);
+        const int    scaled  = int(std::round(clamped * PawnValue));
+        return Value(std::clamp(scaled, -VALUE_MATE, VALUE_MATE));
+    };
+
+    for (auto& rm : rootMoves)
+    {
+        const Move move = rm.pv.empty() ? Move::none() : rm.pv[0];
+        const auto statIt = std::find_if(result.moveStats.begin(), result.moveStats.end(),
+                                         [&](const MCTS::MoveStats& s) { return s.move == move; });
+
+        const Value score = statIt != result.moveStats.end() ? to_value(statIt->averageValue)
+                                                             : -VALUE_INFINITE;
+
+        rm.score            = score;
+        rm.previousScore    = score;
+        rm.averageScore     = score;
+        rm.meanSquaredScore = (score == -VALUE_INFINITE) ? score : Value(int(score) * int(score));
+        rm.uciScore         = score;
+        rm.scoreLowerbound  = false;
+        rm.scoreUpperbound  = false;
+        rm.selDepth         = depthHint;
+        rm.tbRank           = 0;
+        rm.tbScore          = score;
+        rm.effort           = statIt != result.moveStats.end() ? statIt->visits : 0;
+        rm.pv.assign(1, move);
+    }
+
+    if (!result.principalVariation.empty() && result.principalVariation[0].is_ok())
+    {
+        auto bestIt = std::find_if(rootMoves.begin(), rootMoves.end(), [&](const RootMove& rm) {
+            return !rm.pv.empty() && rm.pv[0] == result.principalVariation[0];
+        });
+
+        if (bestIt != rootMoves.end())
+        {
+            bestIt->pv.clear();
+            for (Move m : result.principalVariation)
+            {
+                if (!m.is_ok())
+                    break;
+                bestIt->pv.push_back(m);
+            }
+        }
+    }
+
+    std::sort(rootMoves.begin(), rootMoves.end());
+
+    if (!rootMoves.empty())
+    {
+        if (rootMoves[0].score == -VALUE_INFINITE)
+        {
+            rootMoves[0].score        = VALUE_ZERO;
+            rootMoves[0].averageScore = VALUE_ZERO;
+            rootMoves[0].uciScore     = VALUE_ZERO;
+        }
+
+        main_manager()->bestPreviousScore        = rootMoves[0].score;
+        main_manager()->bestPreviousAverageScore = rootMoves[0].averageScore;
+    }
+
+    pvIdx  = 0;
+    pvLast = rootMoves.size();
+
+    const TimePoint elapsed = std::max<TimePoint>(TimePoint(1), result.elapsedMs);
+    const uint64_t  nps     = result.elapsedMs ? (result.simulations * 1000 / elapsed) : 0;
+    const bool      showWdl = bool(options["UCI_ShowWDL"]);
+
+    const size_t multiPV = std::min<size_t>(options["MultiPV"], rootMoves.size());
+
+    for (size_t i = 0; i < multiPV; ++i)
+    {
+        RootMove& rm = rootMoves[i];
+
+        std::string pv;
+        for (Move m : rm.pv)
+        {
+            if (!m.is_ok())
+                break;
+            pv += UCIEngine::move(m, rootPos.is_chess960()) + " ";
+        }
+        if (!pv.empty())
+            pv.pop_back();
+
+        std::string wdl;
+        if (showWdl && rm.score != -VALUE_INFINITE)
+            wdl = UCIEngine::wdl(rm.score, rootPos);
+
+        InfoFull info;
+        info.depth    = depthHint;
+        info.selDepth = depthHint;
+        info.multiPV  = i + 1;
+        info.score    = {rm.score, rootPos};
+        info.wdl      = wdl;
+        info.bound    = "";
+        info.timeMs   = elapsed;
+        info.nodes    = result.simulations;
+        info.nps      = nps;
+        info.tbHits   = 0;
+        info.pv       = pv;
+        info.hashfull = tt.hashfull();
+
+        main_manager()->updates.onUpdateFull(info);
+    }
+}
+
 void Search::Worker::iterative_deepening() {
 
     SearchManager* mainThread = (is_mainthread() ? main_manager() : nullptr);
