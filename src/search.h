@@ -272,7 +272,7 @@ class Worker {
 
     // Called when the program receives the UCI 'go' command.
     // It searches from the root position and outputs the "bestmove".
-    void start_searching();
+   void start_searching();
 
     bool is_mainthread() const { return threadIdx == 0; }
 
@@ -294,7 +294,8 @@ class Worker {
     TTMoveHistory ttMoveHistory;
 
    private:
-    void iterative_deepening();
+   void iterative_deepening();
+    void run_monte_carlo();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
