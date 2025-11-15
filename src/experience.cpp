@@ -73,8 +73,6 @@ Stats                                                 stats;
 std::string                                           lastStatus;
 bool                                                  settingsInitialized = false;
 
-void ensure_file_exists_unlocked();
-
 std::uint64_t compute_key(const Position& pos) {
     using namespace Experience::Zobrist;
 
@@ -240,18 +238,6 @@ void save_table_unlocked(const std::string& file) {
                 << int(e.eval) << ' ' << int(e.depth) << ' ' << unsigned(e.visits) << '\n';
         }
     }
-}
-
-void ensure_file_exists_unlocked() {
-    if (settings.readonly || settings.file.empty())
-        return;
-
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    if (fs::exists(settings.file, ec))
-        return;
-
-    save_table_unlocked(settings.file);
 }
 
 bool load_text_format(std::istream& in, Stats& loadStats) {
@@ -449,24 +435,15 @@ void load_table_unlocked(const std::string& file) {
 }
 
 void flush_unlocked() {
+    if (!dirty)
+        return;
+
     if (settings.readonly)
     {
         dirty        = false;
         pendingFlush = 0;
         return;
     }
-
-    bool shouldSave = dirty;
-
-    if (!shouldSave && !settings.file.empty())
-    {
-        namespace fs = std::filesystem;
-        std::error_code ec;
-        shouldSave = !fs::exists(settings.file, ec);
-    }
-
-    if (!shouldSave)
-        return;
 
     save_table_unlocked(settings.file);
     dirty        = false;
@@ -553,8 +530,6 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
         load_table_unlocked(settings.file);
     else
         lastStatus = format_status_unlocked();
-
-    ensure_file_exists_unlocked();
 
     settingsInitialized = true;
     return lastStatus;
@@ -714,12 +689,7 @@ void on_search_complete(const Position& pos,
 
     dirty = true;
 
-    bool shouldFlush = ++pendingFlush >= FlushInterval;
-
-    if (!shouldFlush && searchedDepth >= Depth(27))
-        shouldFlush = true;
-
-    if (shouldFlush)
+    if (++pendingFlush >= FlushInterval)
         flush_unlocked();
 
     lastStatus = format_status_unlocked();
