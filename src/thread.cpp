@@ -54,8 +54,8 @@ Thread::Thread(Search::SharedState&                    sharedState,
         // the Worker allocation. Ideally we would also allocate the SearchManager
         // here, but that's minor.
         this->numaAccessToken = binder();
-        this->worker =
-          make_unique_large_page<Search::Worker>(sharedState, std::move(sm), n, this->numaAccessToken);
+        this->worker = make_unique_large_page<Search::Worker>(sharedState, std::move(sm), n,
+                                                              this->numaAccessToken);
     });
 
     wait_for_search_finished();
@@ -103,11 +103,7 @@ void Thread::run_custom_job(std::function<void()> f) {
     cv.notify_one();
 }
 
-void Thread::ensure_network_replicated() {
-    assert(worker != nullptr);
-    run_custom_job([this]() { worker->ensure_network_replicated(); });
-    wait_for_search_finished();
-}
+void Thread::ensure_network_replicated() { worker->ensure_network_replicated(); }
 
 // Thread gets parked here, blocked on the condition variable
 // when the thread has no work to do.

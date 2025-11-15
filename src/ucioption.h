@@ -43,13 +43,12 @@ class Option {
     Option(OnChange = nullptr);
     Option(bool v, OnChange = nullptr);
     Option(const char* v, OnChange = nullptr);
-    Option(double v, int minv, int maxv, OnChange = nullptr);
+    Option(int v, int minv, int maxv, OnChange = nullptr);
     Option(const char* v, const char* cur, OnChange = nullptr);
 
     Option& operator=(const std::string&);
     operator int() const;
     operator std::string() const;
-    const std::string& value() const;
     bool operator==(const char*) const;
     bool operator!=(const char*) const;
 

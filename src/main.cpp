@@ -13,47 +13,33 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <iostream>
 #include <memory>
 
-#include "misc.h"
-#include "uci.h"
-#include "tune.h"
 #include "bitboard.h"
+#include "misc.h"
+#include "nnue/features/full_threats.h"
 #include "position.h"
-#include "version.h"
+#include "tune.h"
+#include "uci.h"
 
 using namespace Stockfish;
 
 int main(int argc, char* argv[]) {
-
-    // Some GUI front-ends interpret anything written to stderr as an engine
-    // failure.  To avoid spurious error dialogs, only print the banner and
-    // compiler information when command line arguments are supplied (typically
-    // when running from a terminal for testing or benchmarking).
-    if (argc > 1)
-    {
-        // Clear, consistent banner (many GUIs echo this to their logs).
-        // Send banner to stderr so it doesn't interfere with UCI handshake on
-        // stdout when run from a terminal.
-        std::cerr << Stockfish::Version::string()
-                  << " by Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)"
-                  << std::endl;
-
-        std::cerr << compiler_info() << std::endl;
-    }
+    std::cout << engine_info() << std::endl;
 
     Bitboards::init();
     Position::init();
+    Eval::NNUE::Features::init_threat_offsets();
 
     auto uci = std::make_unique<UCIEngine>(argc, argv);
 
     Tune::init(uci->engine_options());
 
     uci->loop();
+
     return 0;
 }
