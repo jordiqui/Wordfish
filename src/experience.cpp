@@ -713,7 +713,13 @@ void on_search_complete(const Position& pos,
     stats.totalPositions = table.size();
 
     dirty = true;
-    if (++pendingFlush >= FlushInterval)
+
+    bool shouldFlush = ++pendingFlush >= FlushInterval;
+
+    if (!shouldFlush && searchedDepth >= Depth(27))
+        shouldFlush = true;
+
+    if (shouldFlush)
         flush_unlocked();
 
     lastStatus = format_status_unlocked();
