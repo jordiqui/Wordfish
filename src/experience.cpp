@@ -693,6 +693,14 @@ void on_search_complete(const Position& pos,
         flush_unlocked();
 
     lastStatus = format_status_unlocked();
+
+    // Make sure the experience file is persisted after each completed search so
+    // external GUIs that immediately inspect the file (e.g. after the "go"
+    // command finishes) observe the freshly recorded moves.  DeepAlienist writes
+    // the updated data eagerly and Wordfish needs to match that behaviour so the
+    // experience file is kept in sync even when the engine is stopped before the
+    // periodic flush threshold is reached.
+    flush_unlocked();
 }
 
 void new_game() {
