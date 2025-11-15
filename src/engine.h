@@ -106,7 +106,6 @@ class Engine {
     std::string                            numa_config_information_as_string() const;
     std::string                            thread_allocation_information_as_string() const;
     std::string                            thread_binding_information_as_string() const;
-    const Position&                        position() const;
 
    private:
     const std::string binaryDirectory;
@@ -123,8 +122,6 @@ class Engine {
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetworks;
-
-    std::string concurrentExperienceFile;
 };
 
 }  // namespace Stockfish

@@ -13,9 +13,7 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "misc.h"
@@ -36,11 +34,13 @@
 #include <string_view>
 
 #include "types.h"
-#include "version.h"
 
 namespace Stockfish {
 
 namespace {
+
+// Version number or dev.
+constexpr std::string_view version = "dev";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -113,14 +113,54 @@ class Logger {
 }  // namespace
 
 
-// Returns the full name of the current Wordfish version.
-std::string engine_version_info() { return Version::string(); }
+// Returns the full name of the current Stockfish version.
+//
+// For local dev compiles we try to append the commit SHA and
+// commit date from git. If that fails only the local compilation
+// date is set and "nogit" is specified:
+//      Stockfish dev-YYYYMMDD-SHA
+//      or
+//      Stockfish dev-YYYYMMDD-nogit
+//
+// For releases (non-dev builds) we only include the version number:
+//      Stockfish version
+std::string engine_version_info() {
+    std::stringstream ss;
+    ss << "Stockfish " << version << std::setfill('0');
 
-// Update author information
+    if constexpr (version == "dev")
+    {
+        ss << "-";
+#ifdef GIT_DATE
+        ss << stringify(GIT_DATE);
+#else
+        constexpr std::string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
+
+        std::string       month, day, year;
+        std::stringstream date(__DATE__);  // From compiler, format is "Sep 21 2008"
+
+        date >> month >> day >> year;
+        ss << year << std::setw(2) << std::setfill('0') << (1 + months.find(month) / 4)
+           << std::setw(2) << std::setfill('0') << day;
+#endif
+
+        ss << "-";
+
+#ifdef GIT_SHA
+        ss << stringify(GIT_SHA);
+#else
+        ss << "nogit";
+#endif
+    }
+
+    return ss.str();
+}
+
 std::string engine_info(bool to_uci) {
     return engine_version_info() + (to_uci ? "\nid author " : " by ")
-         + "Jorge Ruiz Centelles and the Stockfish developers (see AUTHORS file)";
+         + "the Stockfish developers (see AUTHORS file)";
 }
+
 
 // Returns a string trying to describe the compiler we use
 std::string compiler_info() {
@@ -196,7 +236,7 @@ std::string compiler_info() {
 #endif
 
     compiler += "\nCompilation settings       : ";
-    compiler += (Stockfish::Is64Bit ? "64bit" : "32bit");
+    compiler += (Is64Bit ? "64bit" : "32bit");
 #if defined(USE_AVX512ICL)
     compiler += " AVX512ICL";
 #endif
@@ -206,7 +246,7 @@ std::string compiler_info() {
 #if defined(USE_AVX512)
     compiler += " AVX512";
 #endif
-    compiler += (Stockfish::HasPext ? " BMI2" : "");
+    compiler += (HasPext ? " BMI2" : "");
 #if defined(USE_AVX2)
     compiler += " AVX2";
 #endif
@@ -219,12 +259,12 @@ std::string compiler_info() {
 #if defined(USE_SSE2)
     compiler += " SSE2";
 #endif
-    compiler += (Stockfish::HasPopCnt ? " POPCNT" : "");
 #if defined(USE_NEON_DOTPROD)
     compiler += " NEON_DOTPROD";
 #elif defined(USE_NEON)
     compiler += " NEON";
 #endif
+    compiler += (HasPopCnt ? " POPCNT" : "");
 
 #if !defined(NDEBUG)
     compiler += " DEBUG";
@@ -376,17 +416,17 @@ std::ostream& operator<<(std::ostream& os, SyncCout sc) {
 
     static std::mutex m;
 
-    if (sc == Stockfish::IO_LOCK)
+    if (sc == IO_LOCK)
         m.lock();
 
-    if (sc == Stockfish::IO_UNLOCK)
+    if (sc == IO_UNLOCK)
         m.unlock();
 
     return os;
 }
 
-void sync_cout_start() { std::cout << Stockfish::IO_LOCK; }
-void sync_cout_end() { std::cout << Stockfish::IO_UNLOCK; }
+void sync_cout_start() { std::cout << IO_LOCK; }
+void sync_cout_end() { std::cout << IO_UNLOCK; }
 
 // Trampoline helper to avoid moving Logger to misc.h
 void start_logger(const std::string& fname) { Logger::start(fname); }
@@ -411,14 +451,9 @@ void prefetch(const void* addr) {
 
 #ifdef _WIN32
     #include <direct.h>
-    #include <windows.h>
     #define GETCWD _getcwd
 #else
     #include <unistd.h>
-    #include <limits.h>
-#    if defined(__APPLE__)
-        #include <mach-o/dyld.h>
-#    endif
     #define GETCWD getcwd
 #endif
 
@@ -456,32 +491,8 @@ std::string CommandLine::get_binary_directory(std::string argv0) {
     if (!_get_pgmptr(&pgmptr) && pgmptr != nullptr && *pgmptr)
         argv0 = pgmptr;
     #endif
-    if (argv0.find('\\') == std::string::npos && argv0.find('/') == std::string::npos)
-    {
-        char buffer[MAX_PATH];
-        if (GetModuleFileName(nullptr, buffer, MAX_PATH))
-            argv0 = buffer;
-    }
 #else
     pathSeparator = "/";
-    if (argv0.find('/') == std::string::npos)
-    {
-#if defined(__APPLE__)
-        uint32_t size = 0;
-        _NSGetExecutablePath(nullptr, &size);
-        std::string path(size, '\0');
-        if (_NSGetExecutablePath(path.data(), &size) == 0)
-            argv0 = path.c_str();
-#else
-        std::array<char, 4096> buffer{};
-        ssize_t len = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
-        if (len > 0)
-        {
-            buffer[len] = '\0';
-            argv0 = buffer.data();
-        }
-#endif
-    }
 #endif
 
     // Extract the working directory

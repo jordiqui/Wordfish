@@ -1,7 +1,0 @@
-#ifndef WORDFISH_SPARSEHASH_DENSE_HASH_MAP_H
-#define WORDFISH_SPARSEHASH_DENSE_HASH_MAP_H
-
-// Placeholder dense_hash_map for the Wordfish project.
-// Implementation intentionally minimal.
-
-#endif // WORDFISH_SPARSEHASH_DENSE_HASH_MAP_H

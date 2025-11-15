@@ -1,7 +1,0 @@
-#ifndef WORDFISH_SPARSEHASH_SPARSE_HASH_SET_H
-#define WORDFISH_SPARSEHASH_SPARSE_HASH_SET_H
-
-// Placeholder sparse_hash_set for the Wordfish project.
-// Implementation intentionally minimal.
-
-#endif // WORDFISH_SPARSEHASH_SPARSE_HASH_SET_H

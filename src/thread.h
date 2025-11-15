@@ -95,7 +95,7 @@ class Thread {
     size_t id() const { return idx; }
 
     LargePagePtr<Search::Worker> worker;
-    std::function<void()>         jobFunc;
+    std::function<void()>        jobFunc;
 
    private:
     std::mutex                mutex;
