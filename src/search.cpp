@@ -142,6 +142,42 @@ void update_all_stats(const Position& pos,
                       Move            TTMove,
                       int             moveCount);
 
+int king_zone_pressure(const Position& pos, Color c)
+{
+    Square   kingSquare  = pos.square<KING>(c);
+    Bitboard kingZone    = attacks_bb<KING>(kingSquare) | square_bb(kingSquare);
+    Bitboard occupancy   = pos.pieces();
+    Bitboard friendly    = pos.pieces(c);
+    Bitboard enemy       = pos.pieces(~c);
+    int      enemyHits   = 0;
+    int      friendlyHits = 0;
+
+    while (kingZone)
+    {
+        Square   sq        = pop_lsb(kingZone);
+        Bitboard attackers = pos.attackers_to(sq, occupancy);
+        enemyHits += popcount(attackers & enemy);
+        friendlyHits += popcount(attackers & friendly);
+    }
+
+    int net = enemyHits - friendlyHits;
+    return std::max(net, 0);
+}
+
+Value king_safety_adjustment(const Position& pos, int kingSafetySetting)
+{
+    if (kingSafetySetting == 100)
+        return VALUE_ZERO;
+
+    int delta       = kingSafetySetting - 100;
+    int whiteDanger = king_zone_pressure(pos, WHITE);
+    int blackDanger = king_zone_pressure(pos, BLACK);
+    int diff        = blackDanger - whiteDanger;
+    int base        = diff * 4;
+
+    return Value((base * delta) / 100);
+}
+
 }  // namespace
 
 Search::Worker::Worker(SharedState&                    sharedState,
@@ -167,6 +203,9 @@ void Search::Worker::ensure_network_replicated() {
 }
 
 void Search::Worker::start_searching() {
+
+    contemptValue     = Value(int(options["Contempt"]) * PawnValue / 100);
+    kingSafetySetting = int(options["King Safety"]);
 
     accumulatorStack.reset();
 
@@ -582,6 +621,9 @@ void Search::Worker::clear() {
     nonPawnCorrectionHistory.fill(0);
 
     ttMoveHistory = 0;
+
+    contemptValue     = VALUE_ZERO;
+    kingSafetySetting = 100;
 
     for (auto& to : continuationCorrectionHistory)
         for (auto& h : to)
@@ -1742,8 +1784,21 @@ TimePoint Search::Worker::elapsed() const {
 TimePoint Search::Worker::elapsed_time() const { return main_manager()->tm.elapsed_time(); }
 
 Value Search::Worker::evaluate(const Position& pos) {
-    return Eval::evaluate(networks[numaAccessToken], pos, accumulatorStack, refreshTable,
-                          optimism[pos.side_to_move()]);
+
+    Value v = Eval::evaluate(networks[numaAccessToken], pos, accumulatorStack, refreshTable,
+                             optimism[pos.side_to_move()]);
+
+    if (kingSafetySetting != 100)
+    {
+        Value ks = king_safety_adjustment(pos, kingSafetySetting);
+        if (ks != VALUE_ZERO)
+            v += (pos.side_to_move() == WHITE ? ks : -ks);
+    }
+
+    if (contemptValue != VALUE_ZERO)
+        v += (pos.side_to_move() == WHITE ? contemptValue : -contemptValue);
+
+    return std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 }
 
 namespace {

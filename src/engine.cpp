@@ -118,6 +118,10 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("UCI_LimitStrength", Option(false));
 
+    options.add("Contempt", Option(0, -200, 200));
+
+    options.add("King Safety", Option(100, 0, 200));
+
     options.add("UCI_Elo",
                 Option(Stockfish::Search::Skill::LowestElo, Stockfish::Search::Skill::LowestElo,
                        Stockfish::Search::Skill::HighestElo));

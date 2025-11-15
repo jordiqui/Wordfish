@@ -331,6 +331,8 @@ class Worker {
     int                   selDepth, nmpMinPly;
 
     Value optimism[COLOR_NB];
+    Value contemptValue;
+    int   kingSafetySetting;
 
     Position  rootPos;
     StateInfo rootState;
