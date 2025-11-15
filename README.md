@@ -104,6 +104,39 @@ Detailed compilation instructions for all platforms can be found in our
 [documentation][wiki-compile-link]. Our wiki also has information about
 the [UCI commands][wiki-uci-link] supported by Stockfish.
 
+## Self-learning
+
+Wordfish integra el sistema de experiencia `Deepalienist` para permitir que el
+motor aprenda de sus propias búsquedas y genere un libro personalizado. El
+módulo se controla mediante opciones UCI y trabaja sobre archivos `.exp` que
+almacenan las posiciones analizadas.
+
+### Configuración básica
+
+1. Active la opción **Experience Enabled** (true por defecto) para permitir el
+   autoaprendizaje y **Experience Book** si desea que el motor utilice las
+   jugadas almacenadas al ordenar los movimientos en la raíz.
+2. Ajuste **Experience File** con la ruta al archivo de experiencia que quiera
+   usar; por defecto se crea `Deepalienist.exp` en el directorio del motor.
+3. Si solo desea consultar la información sin modificar el archivo, habilite
+   **Experience Readonly**.
+
+### Ajustes del libro de experiencia
+
+* **Experience Book Width** controla cuántas jugadas candidatas se importan del
+  libro (1-32).
+* **Experience Book Eval Importance** equilibra la influencia de la evaluación
+  frente al número de visitas (0-10).
+* **Experience Book Min Depth** establece la profundidad mínima que debe tener
+  una entrada para ser considerada.
+* **Experience Book Max Moves** limita los movimientos totales jugados de una
+  partida antes de dejar de consultar la experiencia.
+
+Puede consultar el estado actual mediante el botón **Experience Status** y
+forzar un volcado inmediato del archivo con **Experience Sync**. El módulo
+guardará automáticamente los nuevos datos cada cierto número de posiciones y se
+sincronizará cuando reciba `ucinewgame`.
+
 ## Terms of use
 
 Stockfish is free and distributed under the

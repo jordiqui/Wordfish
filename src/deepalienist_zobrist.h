@@ -1,16 +1,16 @@
 /*
-  Woordfish experience hashing utilities
+  Deepalienist experience hashing utilities
   Copyright (C) 2025
 
-  This file defines helper routines used by the self learning subsystem to
+  This file defines helper routines used by the self-learning subsystem to
   generate stable pseudo-random numbers for hashing. The implementation is
   intentionally lightweight so it can be used in constexpr contexts when
   possible, but also keeps the interface header-only as in the upstream
   project.
 */
 
-#ifndef Wordfish_ZOBRIST_H_INCLUDED
-#define Wordfish_ZOBRIST_H_INCLUDED
+#ifndef DEEPALIENIST_ZOBRIST_H_INCLUDED
+#define DEEPALIENIST_ZOBRIST_H_INCLUDED
 
 #include <cstdint>
 
@@ -38,4 +38,4 @@ inline std::uint64_t mix(std::uint64_t value) { return splitmix64(value); }
 
 }  // namespace Stockfish::Experience::Zobrist
 
-#endif  // #ifndef Woordfish_ZOBRIST_H_INCLUDED
+#endif  // #ifndef DEEPALIENIST_ZOBRIST_H_INCLUDED
