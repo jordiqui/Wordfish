@@ -41,8 +41,9 @@ namespace {
 
 // Engine branding information.
 constexpr std::string_view engine_name = "Wordfish-3.30-151125";
-constexpr std::string_view engine_author =
-  "Developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
+constexpr std::string_view engine_author_name =
+  "Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
+constexpr std::string_view engine_author_prefix = "Developed by ";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -122,8 +123,19 @@ std::string engine_version_info() {
 
 std::string engine_info(bool to_uci) {
     std::string info = engine_version_info();
-    info += to_uci ? "\nid author " : " ";
-    info += engine_author;
+
+    if (to_uci)
+    {
+        info += "\nid author ";
+        info += engine_author_prefix;
+        info += engine_author_name;
+    }
+    else
+    {
+        info += " by ";
+        info += engine_author_name;
+    }
+
     return info;
 }
 
