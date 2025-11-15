@@ -1,460 +1,794 @@
 #include "experience.h"
 
 #include <algorithm>
-#include <cctype>
-#include <future>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <mutex>
-#include <iostream>
+#include <ios>
 #include <iterator>
-#include <memory>
+#include <limits>
+#include <list>
+#include <mutex>
+#include <optional>
 #include <sstream>
-#include <zlib.h>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+#include <cstdlib>
+#include <system_error>
 
+#include "Wordfish_zobrist.h"
+#include "experience_compat.h"
 #include "misc.h"
+#include "position.h"
+#include "search.h"
 #include "uci.h"
+#include "ucioption.h"
 
-namespace Stockfish {
+namespace Stockfish::Experience {
 
-Experience experience;
+namespace {
 
-void Experience::wait_until_loaded() const {
-    if (loader.valid())
-        loader.wait();
+struct Entry {
+    Move           bestMove        = Move::none();
+    Value          score           = VALUE_ZERO;
+    Value          eval            = VALUE_ZERO;
+    Depth          depth           = 0;
+    std::uint16_t  visits          = 0;
+};
+
+struct Settings {
+    bool        enabled            = true;
+    bool        readonly           = false;
+    bool        bookEnabled        = false;
+    int         bookWidth          = 1;
+    int         bookEvalImportance = 5;
+    Depth       bookMinDepth       = 27;
+    int         bookMaxMoves       = 16;
+    std::string file               = "Wordfish.exp";
+    std::size_t maxEntries         = 200000;
+    Value       minScore           = Value(20);
+};
+
+struct Stats {
+    std::size_t uniqueMoves    = 0;
+    std::size_t duplicateMoves = 0;
+    std::size_t totalPositions = 0;
+};
+
+Settings settings;
+std::unordered_map<std::uint64_t, std::vector<Entry>> table;
+std::list<std::uint64_t>                               lru;
+std::unordered_map<std::uint64_t, std::list<std::uint64_t>::iterator> lruIndex;
+std::mutex                                            mutex;
+bool                                                  dirty                = false;
+std::size_t                                           pendingFlush         = 0;
+constexpr std::size_t                                 FlushInterval        = 64;
+Stats                                                 stats;
+std::string                                           lastStatus;
+bool                                                  settingsInitialized = false;
+
+std::uint64_t compute_key(const Position& pos) {
+    using namespace Experience::Zobrist;
+
+    std::uint64_t key = pos.key();
+    key               = combine(key, std::uint64_t(pos.side_to_move()));
+    key               = combine(key, std::uint64_t(pos.game_ply()));
+    key               = combine(key, std::uint64_t(pos.rule50_count()));
+    return key;
 }
 
-bool Experience::is_ready() const {
-    return !loader.valid() || loader.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-}
-
-void Experience::clear() {
-    wait_until_loaded();
-    std::lock_guard<std::mutex> lock(tableMutex);
-    table.clear();
-}
-
-void Experience::load(const std::string& file) {
-    std::string path       = file;
-    bool        convertBin = false;
-    bool        compressed = false;
-    std::string display;
-
-    if (path.size() >= 4)
+void touch_lru(std::uint64_t key) {
+    auto it = lruIndex.find(key);
+    if (it != lruIndex.end())
     {
-        std::string ext = path.substr(path.size() - 4);
-        std::transform(ext.begin(), ext.end(), ext.begin(),
-                       [](unsigned char c) { return char(std::tolower(c)); });
-
-        if (ext == ".bin")
-        {
-            convertBin = true;
-            path       = path.substr(0, path.size() - 4) + ".exp";
-            sync_cout << "info string '.bin' experience files are deprecated; converting to '"
-                      << path << "'" << sync_endl;
-        }
-        else if (ext == ".ccz")
-            compressed = true;
-        else if (ext == ".exp")
-        {
-            // Default uncompressed experience format
-        }
-    }
-
-    display = path;
-    if (path != file)
-        display += " (from " + file + ")";
-
-    std::string buffer;
-    if (compressed)
-    {
-        gzFile gzin = gzopen(path.c_str(), "rb");
-        if (!gzin)
-        {
-            sync_cout << "info string Could not open " << display << sync_endl;
-            return;
-        }
-        char tmp[1 << 15];
-        int  bytes;
-        while ((bytes = gzread(gzin, tmp, sizeof(tmp))) > 0)
-            buffer.append(tmp, bytes);
-        gzclose(gzin);
+        lru.splice(lru.end(), lru, it->second);
+        it->second = std::prev(lru.end());
     }
     else
     {
-        std::ifstream f(convertBin ? file : path, std::ios::binary);
-        if (!f)
+        lru.push_back(key);
+        lruIndex[key] = std::prev(lru.end());
+    }
+}
+
+Entry* find_entry(std::vector<Entry>& entries, Move move) {
+    auto it = std::find_if(entries.begin(), entries.end(), [&](const Entry& e) {
+        return e.bestMove == move;
+    });
+
+    if (it == entries.end())
+        return nullptr;
+
+    return &*it;
+}
+
+[[maybe_unused]] const Entry* find_entry(const std::vector<Entry>& entries, Move move) {
+    auto it = std::find_if(entries.begin(), entries.end(), [&](const Entry& e) {
+        return e.bestMove == move;
+    });
+
+    if (it == entries.end())
+        return nullptr;
+
+    return &*it;
+}
+
+void merge_entry_for_load(std::uint64_t key, const Entry& entry, Stats& loadStats) {
+    auto& entries  = table[key];
+    bool  wasEmpty = entries.empty();
+    auto* existing = find_entry(entries, entry.bestMove);
+
+    if (existing)
+    {
+        ++loadStats.duplicateMoves;
+
+        if (entry.depth > existing->depth)
         {
-            sync_cout << "info string Could not open " << display << sync_endl;
-            return;
+            *existing = entry;
         }
-        buffer.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        else if (entry.depth == existing->depth)
+        {
+            existing->score = entry.score;
+            existing->eval  = entry.eval;
+        }
+
+        existing->visits = std::max(existing->visits, entry.visits);
+    }
+    else
+    {
+        entries.push_back(entry);
+        ++loadStats.uniqueMoves;
     }
 
-    std::istringstream in(buffer);
+    if (wasEmpty && !entries.empty())
+        ++loadStats.totalPositions;
 
-    const std::string sigV2 = "SugaR Experience version 2";
-    const std::string sigV1 = "SugaR";
-    std::string       header(sigV2.size(), '\0');
-    in.read(header.data(), header.size());
-    bool isV2 = header == sigV2;
-    bool isV1 = !isV2 && header.substr(0, sigV1.size()) == sigV1;
-    bool isBL = !isV1 && !isV2 && buffer.size() >= 24 && (buffer.size() % 24 == 0);
-    in.clear();
-    in.seekg(0, std::ios::beg);
+    touch_lru(key);
+}
 
-    std::size_t totalMoves     = 0;
-    std::size_t duplicateMoves = 0;
-    std::size_t totalPositions = 0;
-    double      frag           = 0.0;
+std::string format_status_unlocked() {
+    if (!settings.enabled)
+        return "Experience disabled";
 
+    const std::string fileName = settings.file.empty() ? "<none>" : settings.file;
+    const std::size_t totalMoves = stats.uniqueMoves + stats.duplicateMoves;
+
+    double fragmentation = totalMoves ? (100.0 * static_cast<double>(stats.duplicateMoves)
+                                          / static_cast<double>(totalMoves))
+                                      : 0.0;
+
+    std::ostringstream oss;
+    oss << fileName << " -> Total moves: " << totalMoves << ". Total positions: "
+        << stats.totalPositions << ". Duplicate moves: " << stats.duplicateMoves
+        << ". Fragmentation: " << std::fixed << std::setprecision(2) << fragmentation
+        << '%';
+
+    return oss.str();
+}
+
+void enforce_limit() {
+    if (settings.maxEntries == 0)
+        return;
+
+    while (table.size() > settings.maxEntries && !lru.empty())
     {
-        std::lock_guard<std::mutex> lock(tableMutex);
-        table.clear();
-        binaryFormat     = isV1 || isV2 || isBL;
-        brainLearnFormat = isBL;
+        auto key = lru.front();
+        lru.pop_front();
+        lruIndex.erase(key);
 
-        auto insert_entry = [&](uint64_t key, unsigned move, int score, int depth, int count) {
-            totalMoves++;
-            auto& vec = table[key];
-            bool  dup = false;
-            for (auto& e : vec)
-                if (e.move.raw() == move)
-                {
-                    dup = true;
-                    duplicateMoves++;
-                    e.score = score;
-                    e.depth = depth;
-                    e.count += count;
-                    break;
-                }
-            if (!dup)
-                vec.push_back({Move(static_cast<std::uint16_t>(move)), score, depth, count});
-        };
-
-        if (binaryFormat)
+        auto it = table.find(key);
+        if (it != table.end())
         {
-            if (isBL)
-            {
-                struct BinBL {
-                    uint64_t key;
-                    int32_t  depth;
-                    int32_t  value;
-                    uint16_t move;
-                    uint16_t pad;
-                    int32_t  perf;
-                };
-                BinBL e;
-                while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
-                    insert_entry(e.key, e.move, e.value, e.depth, 1);
-            }
+            if (stats.uniqueMoves >= it->second.size())
+                stats.uniqueMoves -= it->second.size();
             else
-            {
-                in.seekg(isV2 ? sigV2.size() : sigV1.size(), std::ios::beg);
+                stats.uniqueMoves = 0;
 
-                struct BinV1 {
-                    uint64_t key;
-                    uint32_t move;
-                    int32_t  value;
-                    int32_t  depth;
-                    uint8_t  pad[4];
-                };
-                struct BinV2 {
-                    uint64_t key;
-                    uint32_t move;
-                    int32_t  value;
-                    int32_t  depth;
-                    uint16_t count;
-                    uint8_t  pad[2];
-                };
+            if (stats.totalPositions > 0)
+                --stats.totalPositions;
 
-                if (isV2)
-                {
-                    BinV2 e;
-                    while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
-                        insert_entry(e.key, e.move, e.value, e.depth, e.count);
-                }
-                else
-                {
-                    BinV1 e;
-                    while (in.read(reinterpret_cast<char*>(&e), sizeof(e)))
-                        insert_entry(e.key, e.move, e.value, e.depth, 1);
-                }
-            }
+            table.erase(it);
+        }
+    }
+}
+
+void ensure_directory_exists(const std::string& file) {
+    namespace fs = std::filesystem;
+
+    if (file.empty())
+        return;
+
+    fs::path path(file);
+    if (!path.has_parent_path())
+        return;
+
+    std::error_code ec;
+    fs::create_directories(path.parent_path(), ec);
+}
+
+void save_table_unlocked(const std::string& file) {
+    if (settings.readonly || file.empty())
+        return;
+
+    ensure_directory_exists(file);
+
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    if (!out)
+        return;
+
+    out << "# Wordfish experience format v1\n";
+    for (const auto key : lru)
+    {
+        const auto it = table.find(key);
+        if (it == table.end())
+            continue;
+
+        for (const auto& e : it->second)
+        {
+            if (!e.bestMove)
+                continue;
+
+            out << key << ' ' << unsigned(e.bestMove.raw()) << ' ' << int(e.score) << ' '
+                << int(e.eval) << ' ' << int(e.depth) << ' ' << unsigned(e.visits) << '\n';
+        }
+    }
+}
+
+bool load_text_format(std::istream& in, Stats& loadStats) {
+    bool parsedAny = false;
+
+    std::string line;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#')
+            continue;
+
+        std::istringstream iss(line);
+        std::uint64_t      key;
+        unsigned           rawMove;
+        int                score, eval;
+        int                depth;
+        unsigned           visits = 0;
+
+        if (!(iss >> key >> rawMove >> score >> eval >> depth >> visits))
+            continue;
+
+        Entry entry;
+        entry.bestMove = Move(static_cast<std::uint16_t>(rawMove));
+        entry.score    = Value(score);
+        entry.eval     = Value(eval);
+        entry.depth    = Depth(depth);
+        entry.visits   = std::uint16_t(std::min<unsigned>(
+          visits, std::numeric_limits<std::uint16_t>::max()));
+
+        merge_entry_for_load(key, entry, loadStats);
+        parsedAny = true;
+    }
+
+    return parsedAny;
+}
+
+bool load_hypnos_binary(std::istream& in, Stats& loadStats) {
+    constexpr std::string_view SignaturePrefix = "SugaR Experience version";
+
+    auto startPos = in.tellg();
+
+    std::string header;
+    if (!std::getline(in, header))
+    {
+        in.clear();
+        in.seekg(startPos, std::ios::beg);
+        return false;
+    }
+
+    if (!header.empty() && header.back() == '\r')
+        header.pop_back();
+
+    if (header.compare(0, SignaturePrefix.size(), SignaturePrefix) != 0)
+    {
+        in.clear();
+        in.seekg(startPos, std::ios::beg);
+        return false;
+    }
+
+    int version = 0;
+    std::istringstream versionStream(header.substr(SignaturePrefix.size()));
+    versionStream >> version;
+    if (version <= 0)
+        version = 1;
+
+    struct RawEntryV1 {
+        std::uint64_t key;
+        std::uint32_t move;
+        std::int32_t  value;
+        std::int32_t  depth;
+        std::uint8_t  padding[4];
+    };
+
+    struct RawEntryV2 {
+        std::uint64_t key;
+        std::uint32_t move;
+        std::int32_t  value;
+        std::int32_t  depth;
+        std::uint16_t count;
+        std::uint8_t  padding[2];
+    };
+
+    bool parsedAny = false;
+
+    while (true)
+    {
+        if (version >= 2)
+        {
+            RawEntryV2 raw{};
+            if (!in.read(reinterpret_cast<char*>(&raw), sizeof(raw)))
+                break;
+
+            Entry entry;
+            entry.bestMove = Move(static_cast<std::uint16_t>(raw.move));
+            entry.score    = Value(raw.value);
+            entry.eval     = Value(raw.value);
+            entry.depth    = Depth(raw.depth);
+            entry.visits   = std::uint16_t(raw.count);
+
+            merge_entry_for_load(raw.key, entry, loadStats);
+            parsedAny = true;
         }
         else
         {
-            std::string line;
-            while (std::getline(in, line))
-            {
-                if (line.empty() || line[0] == '#')
-                    continue;
+            RawEntryV1 raw{};
+            if (!in.read(reinterpret_cast<char*>(&raw), sizeof(raw)))
+                break;
 
-                std::istringstream iss(line);
-                std::string        keyStr, moveStr;
-                int                score, depth, count;
+            Entry entry;
+            entry.bestMove = Move(static_cast<std::uint16_t>(raw.move));
+            entry.score    = Value(raw.value);
+            entry.eval     = Value(raw.value);
+            entry.depth    = Depth(raw.depth);
+            entry.visits   = 1;
 
-                if (!(iss >> keyStr >> moveStr >> score >> depth >> count))
-                    continue;
-
-                auto parse = [](const std::string& s, uint64_t& out) {
-                    std::istringstream ss(s);
-                    if (s.find_first_not_of("0123456789") == std::string::npos)
-                        ss >> out;
-                    else
-                        ss >> std::hex >> out;
-                    return !ss.fail();
-                };
-
-                uint64_t key64, move64;
-                if (!parse(keyStr, key64) || !parse(moveStr, move64))
-                    continue;
-                insert_entry(key64, static_cast<unsigned>(move64), score, depth, count);
-            }
+            merge_entry_for_load(raw.key, entry, loadStats);
+            parsedAny = true;
         }
-
-        totalPositions = table.size();
-        frag           = totalPositions ? 100.0 * duplicateMoves / totalPositions : 0.0;
-        binaryFormat   = true;
     }
 
-    sync_cout << "info string " << display << " -> Total moves: " << totalMoves
-              << ". Total positions: " << totalPositions << ". Duplicate moves: " << duplicateMoves
-              << ". Fragmentation: " << std::fixed << std::setprecision(2) << frag << "%)"
-              << sync_endl;
+    if (!parsedAny)
+    {
+        in.clear();
+        in.seekg(startPos, std::ios::beg);
+        return false;
+    }
 
-    if (convertBin)
-        save(path);
+    return true;
 }
 
-void Experience::load_async(const std::string& file) {
-    wait_until_loaded();
-    loader = std::async(std::launch::async, [this, file] { load(file); });
+void load_table_unlocked(const std::string& file) {
+    table.clear();
+    lru.clear();
+    lruIndex.clear();
+    dirty        = false;
+    pendingFlush = 0;
+    stats        = {};
+    lastStatus.clear();
+
+    if (file.empty())
+        return;
+
+    std::ifstream in(file, std::ios::binary);
+    if (!in)
+        return;
+
+    Stats loadStats;
+    bool  loaded = false;
+
+    if (load_hypnos_binary(in, loadStats))
+        loaded = true;
+    else
+    {
+        in.clear();
+        in.seekg(0, std::ios::beg);
+
+        if (load_text_format(in, loadStats))
+            loaded = true;
+        else
+        {
+            in.clear();
+            in.seekg(0, std::ios::beg);
+
+            if (Compat::load_legacy_binary(in,
+                                           [&](std::uint64_t key,
+                                               Move          move,
+                                               Value         score,
+                                               Value         eval,
+                                               Depth         depth,
+                                               std::uint16_t visits) {
+                                               Entry entry{move, score, eval, depth,
+                                                           std::uint16_t(std::min<std::uint32_t>(
+                                                             visits,
+                                                             std::numeric_limits<std::uint16_t>::max()))};
+                                               merge_entry_for_load(key, entry, loadStats);
+                                           }))
+                loaded = true;
+        }
+    }
+
+    if (!loaded)
+    {
+        table.clear();
+        lru.clear();
+        lruIndex.clear();
+        stats     = {};
+        lastStatus = format_status_unlocked();
+        return;
+    }
+
+    stats = loadStats;
+    enforce_limit();
+    stats.totalPositions = table.size();
+    lastStatus           = format_status_unlocked();
 }
 
-void Experience::save(const std::string& file) const {
-    wait_until_loaded();
-    std::string path       = file;
-    bool        compressed = false;
+void flush_unlocked() {
+    if (!dirty)
+        return;
 
-    if (path.size() >= 4)
+    if (settings.readonly)
     {
-        std::string ext = path.substr(path.size() - 4);
-        std::transform(ext.begin(), ext.end(), ext.begin(),
-                       [](unsigned char c) { return char(std::tolower(c)); });
-
-        if (ext == ".bin")
-        {
-            path = path.substr(0, path.size() - 4) + ".exp";
-            sync_cout << "info string '.bin' experience files are deprecated; saving to '" << path
-                      << "'" << sync_endl;
-        }
-        else if (ext == ".ccz")
-            compressed = true;
-        else if (ext == ".exp")
-        {
-            // Default uncompressed experience format
-        }
+        dirty        = false;
+        pendingFlush = 0;
+        return;
     }
 
-    std::unordered_map<Key, std::vector<ExperienceEntry>> tableCopy;
-    bool                                                  useBrainLearn = false;
+    save_table_unlocked(settings.file);
+    dirty        = false;
+    pendingFlush = 0;
+}
+
+}  // namespace
+
+std::optional<std::string> update_settings(const OptionsMap& options) {
+    Settings newSettings = settings;
+
+    if (options.count("Experience Enabled"))
+        newSettings.enabled = bool(int(options["Experience Enabled"]));
+    else
+        newSettings.enabled = true;
+
+    if (options.count("Experience File"))
+        newSettings.file = std::string(options["Experience File"]);
+    else if (newSettings.file.empty())
+        newSettings.file = "Wordfish.exp";
+
+    if (options.count("Experience Readonly"))
+        newSettings.readonly = bool(int(options["Experience Readonly"]));
+    else
+        newSettings.readonly = false;
+
+    if (options.count("Experience Book"))
+        newSettings.bookEnabled = bool(int(options["Experience Book"]));
+    else
+        newSettings.bookEnabled = false;
+
+    if (options.count("Experience Book Width"))
+        newSettings.bookWidth = std::max(1, int(options["Experience Book Width"]));
+    else
+        newSettings.bookWidth = 1;
+
+    if (options.count("Experience Book Eval Importance"))
+        newSettings.bookEvalImportance =
+          std::clamp(int(options["Experience Book Eval Importance"]), 0, 10);
+    else
+        newSettings.bookEvalImportance = 5;
+
+    if (options.count("Experience Book Min Depth"))
+        newSettings.bookMinDepth = Depth(std::max(0, int(options["Experience Book Min Depth"])));
+    else
+        newSettings.bookMinDepth = Depth(27);
+
+    if (options.count("Experience Book Max Moves"))
+        newSettings.bookMaxMoves = std::max(1, int(options["Experience Book Max Moves"]));
+    else
+        newSettings.bookMaxMoves = 16;
+
+    newSettings.minScore = Value(newSettings.bookEvalImportance * 4);
+
+    std::scoped_lock lock(mutex);
+
+    const bool wasEnabled         = settings.enabled;
+    const bool fileChanged        = settings.file != newSettings.file;
+    const bool readonlyActivated  = !settings.readonly && newSettings.readonly;
+
+    if (settings.enabled && dirty && !settings.readonly
+        && (!newSettings.enabled || fileChanged || readonlyActivated))
+        save_table_unlocked(settings.file);
+
+    settings = std::move(newSettings);
+
+    if (!settings.enabled)
     {
-        std::lock_guard<std::mutex> lock(tableMutex);
-        tableCopy      = table;
-        useBrainLearn  = brainLearnFormat;
+        table.clear();
+        lru.clear();
+        lruIndex.clear();
+        dirty        = false;
+        pendingFlush = 0;
+        stats        = {};
+        lastStatus   = format_status_unlocked();
+        settingsInitialized = true;
+        return lastStatus;
     }
 
-    std::string buffer;
-    std::size_t totalMoves = 0;
+    const bool shouldLoad = !settingsInitialized || fileChanged
+                             || (!wasEnabled && settings.enabled);
 
-    if (useBrainLearn)
+    if (shouldLoad)
+        load_table_unlocked(settings.file);
+    else
+        lastStatus = format_status_unlocked();
+
+    settingsInitialized = true;
+    return lastStatus;
+}
+
+bool is_enabled() {
+    std::scoped_lock lock(mutex);
+    return settings.enabled;
+}
+
+void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMoves) {
+    std::scoped_lock lock(mutex);
+
+    if (!settings.enabled || !settings.bookEnabled || rootMoves.empty())
+        return;
+
+    const int maxPliesFromBook = settings.bookMaxMoves > 0 ? settings.bookMaxMoves * 2 : 0;
+    if (maxPliesFromBook != 0 && pos.game_ply() >= maxPliesFromBook)
+        return;
+
+    const auto key = compute_key(pos);
+    auto       it  = table.find(key);
+    if (it == table.end())
+        return;
+
+    touch_lru(key);
+
+    const auto& entries = it->second;
+
+    std::vector<const Entry*> candidates;
+    candidates.reserve(entries.size());
+
+    for (const auto& entry : entries)
     {
-        struct BinBL {
-            uint64_t key;
-            int32_t  depth;
-            int32_t  value;
-            uint16_t move;
-            uint16_t pad;
-            int32_t  perf;
-        };
-        for (const auto& [key, vec] : tableCopy)
-            for (const auto& e : vec)
-            {
-                BinBL be{key, e.depth, e.score, static_cast<uint16_t>(e.move.raw()), 0, e.count};
-                buffer.append(reinterpret_cast<const char*>(&be), sizeof(be));
-                totalMoves++;
-            }
+        if (!entry.bestMove)
+            continue;
+
+        if (entry.depth < settings.bookMinDepth)
+            continue;
+
+        if (std::abs(entry.score) < settings.minScore)
+            continue;
+
+        candidates.push_back(&entry);
+    }
+
+    if (candidates.empty())
+        return;
+
+    const auto quality = [&](const Entry* entry) {
+        const int evalImportance   = settings.bookEvalImportance;
+        const int countImportance  = 10 - evalImportance;
+        const long long evalScore  = static_cast<long long>(entry->eval) * evalImportance;
+        const long long countScore = static_cast<long long>(entry->visits) * countImportance * 16LL;
+        const long long depthScore = static_cast<long long>(entry->depth) * 8LL;
+
+        return evalScore + countScore + depthScore;
+    };
+
+    std::stable_sort(candidates.begin(), candidates.end(), [&](const Entry* lhs, const Entry* rhs) {
+        return quality(lhs) > quality(rhs);
+    });
+
+    const std::size_t width = std::min<std::size_t>(settings.bookWidth, candidates.size());
+    const Entry*      best  = candidates.front();
+
+    auto bestIt = std::find_if(rootMoves.begin(), rootMoves.end(), [&](const Search::RootMove& rm) {
+        return !rm.pv.empty() && rm.pv[0] == best->bestMove;
+    });
+
+    if (bestIt == rootMoves.end())
+        return;
+
+    if (bestIt != rootMoves.begin())
+        std::rotate(rootMoves.begin(), bestIt, std::next(bestIt));
+
+    auto apply_entry = [](const Entry& entry, Search::RootMove& rm) {
+        rm.score            = std::max(rm.score, entry.score);
+        rm.previousScore    = std::max(rm.previousScore, entry.score);
+        rm.averageScore     = entry.score;
+        rm.meanSquaredScore = entry.score * entry.score;
+        rm.selDepth         = std::max<int>(rm.selDepth, entry.depth);
+    };
+
+    apply_entry(*best, rootMoves.front());
+
+    for (std::size_t i = 1; i < width; ++i)
+    {
+        const Entry* candidate = candidates[i];
+        auto         rmIt      = std::find_if(rootMoves.begin(), rootMoves.end(),
+                                       [&](const Search::RootMove& rm) {
+                                           return !rm.pv.empty() && rm.pv[0] == candidate->bestMove;
+                                       });
+
+        if (rmIt != rootMoves.end())
+            apply_entry(*candidate, *rmIt);
+    }
+}
+
+void on_search_complete(const Position& pos,
+                        const std::vector<Search::RootMove>& rootMoves,
+                        Value                                 bestScore,
+                        Value                                 evalScore,
+                        Depth                                 searchedDepth,
+                        const Search::LimitsType&) {
+    std::scoped_lock lock(mutex);
+
+    if (!settings.enabled || rootMoves.empty())
+        return;
+
+    if (rootMoves.front().pv.empty())
+        return;
+
+    if (searchedDepth < settings.bookMinDepth)
+        return;
+
+    if (std::abs(bestScore) < settings.minScore)
+        return;
+
+    if (settings.readonly)
+        return;
+
+    const auto key = compute_key(pos);
+    auto&       entries = table[key];
+    const bool  wasEmpty = entries.empty();
+
+    const Move move = rootMoves.front().pv[0];
+
+    Entry* existing = find_entry(entries, move);
+    if (existing)
+    {
+        existing->score = bestScore;
+        existing->eval  = evalScore;
+        existing->depth = std::max(existing->depth, searchedDepth);
+        if (existing->visits < std::numeric_limits<std::uint16_t>::max())
+            ++existing->visits;
     }
     else
     {
-        const std::string sig = "SugaR Experience version 2";
-        buffer.append(sig);
-        struct BinV2 {
-            uint64_t key;
-            uint32_t move;
-            int32_t  value;
-            int32_t  depth;
-            uint16_t count;
-            uint8_t  pad[2];
-        };
-        for (const auto& [key, vec] : tableCopy)
-            for (const auto& e : vec)
-            {
-                BinV2 be{key,
-                         static_cast<uint32_t>(e.move.raw()),
-                         e.score,
-                         e.depth,
-                         static_cast<uint16_t>(std::min(e.count, 0xFFFF)),
-                         {0, 0}};
-                buffer.append(reinterpret_cast<const char*>(&be), sizeof(be));
-                totalMoves++;
-            }
+        Entry entry;
+        entry.bestMove = move;
+        entry.score    = bestScore;
+        entry.eval     = evalScore;
+        entry.depth    = searchedDepth;
+        entry.visits   = 1;
+
+        entries.push_back(entry);
+        ++stats.uniqueMoves;
     }
 
-    bool ok = false;
-    if (compressed)
-    {
-        gzFile out = gzopen(path.c_str(), "wb9");
-        if (out)
-        {
-            if (gzwrite(out, buffer.data(), buffer.size()) == (int) buffer.size())
-                ok = true;
-            gzclose(out);
-        }
-    }
-    else
-    {
-        std::ofstream out(path, std::ios::binary);
-        if (out)
-        {
-            out.write(buffer.data(), buffer.size());
-            ok = bool(out);
-        }
-    }
+    if (wasEmpty && !entries.empty())
+        ++stats.totalPositions;
 
-    if (!ok)
-    {
-        sync_cout << "info string Could not open " << path << " for writing" << sync_endl;
-        return;
-    }
+    touch_lru(key);
+    enforce_limit();
+    stats.totalPositions = table.size();
 
-    std::size_t totalPositions = tableCopy.size();
+    dirty = true;
 
-    sync_cout << "info string " << path << " <- Total moves: " << totalMoves
-              << ". Total positions: " << totalPositions << sync_endl;
-}
-Move Experience::probe(Position& pos, int width, int evalImportance, int minDepth, int maxMoves) {
-    if (!is_ready())
-        return Move::none();
-    std::vector<ExperienceEntry> vec;
-    {
-        std::lock_guard<std::mutex> lock(tableMutex);
-        auto                        it = table.find(pos.key());
-        if (it == table.end())
-            return Move::none();
-        vec = it->second;
-    }
-    if (vec.empty())
-        return Move::none();
+    if (++pendingFlush >= FlushInterval)
+        flush_unlocked();
 
-    // Order moves by their historical evaluation and depth so that the most
-    // promising moves come first.  This allows the engine to "learn" from
-    // previous games by preferring moves with the best average score at the
-    // deepest search.
-    std::sort(vec.begin(), vec.end(), [&](const ExperienceEntry& a, const ExperienceEntry& b) {
-        return (a.score + evalImportance * a.depth) > (b.score + evalImportance * b.depth);
-    });
+    lastStatus = format_status_unlocked();
 
-    int limit = std::min<int>({maxMoves, width, static_cast<int>(vec.size())});
-    limit     = std::max(0, limit);
-    vec.resize(static_cast<std::size_t>(limit));
-
-    if (vec.empty() || vec.front().depth < minDepth)
-        return Move::none();
-
-    // Pick the best move deterministically instead of randomly.  The highest
-    // ranked move represents the one with the best historical evaluation.
-    return vec.front().move;
+    // Make sure the experience file is persisted after each completed search so
+    // external GUIs that immediately inspect the file (e.g. after the "go"
+    // command finishes) observe the freshly recorded moves.  DeepAlienist writes
+    // the updated data eagerly and Wordfish needs to match that behaviour so the
+    // experience file is kept in sync even when the engine is stopped before the
+    // periodic flush threshold is reached.
+    flush_unlocked();
 }
 
-void Experience::update(Position& pos, Move move, int score, int depth) {
-    if (!is_ready())
-        return;
-    std::lock_guard<std::mutex> lock(tableMutex);
-    auto&                        vec = table[pos.key()];
-    for (auto& e : vec)
-        if (e.move == move)
-        {
-            // Update the stored statistics with a running average of the
-            // evaluation.  This simple learning mechanism increases the score
-            // reliability over time and retains the deepest search depth seen.
-            e.score = (e.score * e.count + score) / (e.count + 1);
-            e.depth = std::max(e.depth, depth);
-            e.count++;
-            return;
-        }
-    // First encounter of this move in the current position.
-    vec.push_back({move, score, depth, 1});
+void new_game() {
+    std::scoped_lock lock(mutex);
+    flush_unlocked();
 }
 
-std::vector<std::pair<Key, std::vector<ExperienceEntry>>> Experience::dump_table() const {
-    wait_until_loaded();
-    std::lock_guard<std::mutex> lock(tableMutex);
-
-    std::vector<std::pair<Key, std::vector<ExperienceEntry>>> snapshot;
-    snapshot.reserve(table.size());
-
-    for (const auto& [key, entries] : table)
-    {
-        auto ordered = entries;
-        std::sort(ordered.begin(), ordered.end(), [](const ExperienceEntry& lhs, const ExperienceEntry& rhs) {
-            return lhs.move.raw() < rhs.move.raw();
-        });
-        snapshot.emplace_back(key, std::move(ordered));
-    }
-
-    std::sort(snapshot.begin(), snapshot.end(),
-              [](const std::pair<Key, std::vector<ExperienceEntry>>& lhs,
-                 const std::pair<Key, std::vector<ExperienceEntry>>& rhs) {
-                  return lhs.first < rhs.first;
-              });
-
-    return snapshot;
+void flush() {
+    std::scoped_lock lock(mutex);
+    flush_unlocked();
 }
 
-void Experience::show(const Position& pos, int evalImportance, int maxMoves) const {
-    if (!is_ready())
-        return;
-    std::vector<ExperienceEntry> vec;
-    bool                         found = false;
+std::string status_summary() {
+    std::scoped_lock lock(mutex);
+
+    if (lastStatus.empty())
+        lastStatus = format_status_unlocked();
+
+    return lastStatus;
+}
+
+}  // namespace Stockfish::Experience
+
+namespace Stockfish::Experience::Compat {
+
+namespace {
+
+// Very small helper struct mirroring the legacy format. The values and layout
+// are inferred from the historical Stockfish self-learning project where the
+// entries were stored in packed binary form using 32 bit little endian fields.
+struct LegacyEntry {
+    std::uint64_t key;
+    std::uint16_t move;
+    std::int16_t  score;
+    std::int16_t  eval;
+    std::int16_t  depth;
+    std::uint16_t visits;
+};
+
+constexpr char LegacyMagic[] = {'D', 'A', 'L', 'N'};
+
+bool read_legacy_entry(std::istream& in, LegacyEntry& entry) {
+    return static_cast<bool>(in.read(reinterpret_cast<char*>(&entry), sizeof(LegacyEntry)));
+}
+
+}  // namespace
+
+bool load_legacy_binary(std::istream& input, const EntryCallback& callback) {
+    if (!callback)
+        return false;
+
+    // Peek the first bytes to detect a known binary header. If the header does
+    // not match, bail out early so that the caller can attempt other formats.
+    char header[sizeof(LegacyMagic)] = {};
+    auto pos                         = input.tellg();
+
+    if (!input.read(header, sizeof(header)))
     {
-        std::lock_guard<std::mutex> lock(tableMutex);
-        auto                        it = table.find(pos.key());
-        if (it != table.end())
-        {
-            vec   = it->second;
-            found = true;
-        }
+        input.clear();
+        input.seekg(pos, std::ios::beg);
+        return false;
     }
-    if (!found)
+
+    if (!std::equal(std::begin(header), std::end(header), std::begin(LegacyMagic)))
     {
-        sync_cout << "info string No experience available" << sync_endl;
-        return;
+        input.clear();
+        input.seekg(pos, std::ios::beg);
+        return false;
     }
-    std::sort(vec.begin(), vec.end(), [&](const ExperienceEntry& a, const ExperienceEntry& b) {
-        return (a.score + evalImportance * a.depth) > (b.score + evalImportance * b.depth);
-    });
-    int shown = 0;
-    for (const auto& e : vec)
+
+    // Consume the remaining newline after the magic if present.
+    input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    while (true)
     {
-        if (shown++ >= maxMoves)
+        LegacyEntry raw{};
+        if (!read_legacy_entry(input, raw))
             break;
-        sync_cout << "info string " << UCIEngine::move(e.move, pos.is_chess960()) << " score "
-                  << e.score << " depth " << e.depth << " count " << e.count << sync_endl;
+
+        callback(raw.key,
+                 Move(raw.move),
+                 Value(raw.score),
+                 Value(raw.eval),
+                 Depth(raw.depth),
+                 raw.visits);
     }
+
+    return true;
 }
 
-}  // namespace Stockfish
+}  // namespace Stockfish::Experience::Compat

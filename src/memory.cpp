@@ -69,9 +69,8 @@ void* std_aligned_alloc(size_t alignment, size_t size) {
     return aligned_alloc(alignment, size);
 #elif defined(POSIXALIGNEDALLOC)
     void* mem = nullptr;
-    int err = posix_memalign(&mem, alignment, size);
-    if (err != 0)
-        return nullptr;
+    posix_memalign(&mem, alignment, size);
+    return mem;
 #elif defined(_WIN32) && !defined(_M_ARM) && !defined(_M_ARM64)
     return _mm_malloc(size, alignment);
 #elif defined(_WIN32)
@@ -100,6 +99,7 @@ void std_aligned_free(void* ptr) {
 #if defined(_WIN32)
 
 static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize) {
+
     return windows_try_with_large_page_priviliges(
       [&](size_t largePageSize) {
           // Round up size to full pages and allocate

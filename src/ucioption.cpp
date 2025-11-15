@@ -13,9 +13,7 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "ucioption.h"
@@ -27,10 +25,8 @@
 #include <iostream>
 #include <sstream>
 #include <utility>
-#include <charconv>
 
 #include "misc.h"
-#include "version.h"
 
 namespace Stockfish {
 
@@ -114,7 +110,7 @@ Option::Option(OnChange f) :
     max(0),
     on_change(std::move(f)) {}
 
-Option::Option(double v, int minv, int maxv, OnChange f) :
+Option::Option(int v, int minv, int maxv, OnChange f) :
     type("spin"),
     min(minv),
     max(maxv),
@@ -133,23 +129,13 @@ Option::Option(const char* v, const char* cur, OnChange f) :
 
 Option::operator int() const {
     assert(type == "check" || type == "spin");
-
-    if (type == "check")
-        return currentValue == "true";
-
-    int iv = 0;
-    const char* begin = currentValue.c_str();
-    const char* end   = begin + currentValue.size();
-    auto res          = std::from_chars(begin, end, iv);
-    return res.ec == std::errc() ? iv : 0;
+    return (type == "spin" ? std::stoi(currentValue) : currentValue == "true");
 }
 
 Option::operator std::string() const {
     assert(type == "string");
     return currentValue;
 }
-
-const std::string& Option::value() const { return currentValue; }
 
 bool Option::operator==(const char* s) const {
     assert(type == "combo");
@@ -167,18 +153,9 @@ Option& Option::operator=(const std::string& v) {
     assert(!type.empty());
 
     if ((type != "button" && type != "string" && v.empty())
-        || (type == "check" && v != "true" && v != "false"))
+        || (type == "check" && v != "true" && v != "false")
+        || (type == "spin" && (std::stoi(v) < min || std::stoi(v) > max)))
         return *this;
-
-    if (type == "spin")
-    {
-        int         iv    = 0;
-        const char* begin = v.c_str();
-        const char* end   = begin + v.size();
-        auto        res   = std::from_chars(begin, end, iv);
-        if (res.ec != std::errc() || res.ptr != end || iv < min || iv > max)
-            return *this;
-    }
 
     if (type == "combo")
     {
@@ -225,12 +202,8 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
                 }
 
                 else if (o.type == "spin")
-                {
-                    int dv = 0;
-                    std::from_chars(o.defaultValue.c_str(),
-                                     o.defaultValue.c_str() + o.defaultValue.size(), dv);
-                    os << " default " << dv << " min " << o.min << " max " << o.max;
-                }
+                    os << " default " << stoi(o.defaultValue) << " min " << o.min << " max "
+                       << o.max;
 
                 break;
             }

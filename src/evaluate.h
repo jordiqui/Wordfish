@@ -33,8 +33,8 @@ namespace Eval {
 // for the build process (profile-build and fishtest) to work. Do not change the
 // name of the macro or the location where this macro is defined, as it is used
 // in the Makefile/Fishtest.
-#define EvalFileDefaultNameBig "nn-1c0000000000.nnue"
-#define EvalFileDefaultNameSmall "nn-baff1ede1f90.nnue"
+#define EvalFileDefaultNameBig "nn-49c1193b131c.nnue"
+#define EvalFileDefaultNameSmall "nn-37f18f62d772.nnue"
 
 namespace NNUE {
 struct Networks;
@@ -50,15 +50,7 @@ Value evaluate(const NNUE::Networks&          networks,
                const Position&                pos,
                Eval::NNUE::AccumulatorStack&  accumulators,
                Eval::NNUE::AccumulatorCaches& caches,
-               int                            optimism,
-               Depth                          searchDepth);
-
-// Toggle for optional style-based evaluation adjustments.
-void set_adaptive_style(bool enabled);
-
-// Notify the evaluator that a new root FEN has been loaded so warm-up profiling
-// can cover the first few plies of the fresh position.
-void notify_new_fen(int gamePly);
+               int                            optimism);
 }  // namespace Eval
 
 }  // namespace Stockfish

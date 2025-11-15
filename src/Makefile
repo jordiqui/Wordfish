@@ -15,22 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-VERSION_MK := version.mk
-VERSION_HEADER := version.h
-VERSION_SCRIPT := ../scripts/extract_version.py
-
-$(VERSION_MK): $(VERSION_HEADER) $(VERSION_SCRIPT)
-	python3 $(VERSION_SCRIPT) --header $(VERSION_HEADER) --output $@
-
-.PHONY: version
-version: $(VERSION_MK)
-
-include $(VERSION_MK)
-
-empty :=
-space := $(empty) $(empty)
-ENGINE_NAME_SLUG := $(subst $(space),-,$(strip $(ENGINE_NAME)))
-
 ### ==========================================================================
 ### Section 1. General Configuration
 ### ==========================================================================
@@ -54,19 +38,10 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-EXE_BASE := $(ENGINE_NAME_SLUG)
-
-ifneq ($(strip $(ENGINE_BUILD_DATE)),)
-ifneq ($(findstring $(ENGINE_BUILD_DATE),$(EXE_BASE)),)
-else
-        EXE_BASE := $(EXE_BASE)-$(ENGINE_BUILD_DATE)
-endif
-endif
-
 ifeq ($(target_windows),yes)
-        EXE = $(EXE_BASE).exe
+        EXE = Wordfish-3.30-151125.exe
 else
-        EXE = $(EXE_BASE)
+        EXE = Wordfish-3.30-151125
 endif
 
 ### Installation dir definitions
@@ -77,35 +52,24 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
-SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
-        misc.cpp movegen.cpp movepick.cpp polybook.cpp position.cpp \
+SRCS = benchmark.cpp bitboard.cpp evaluate.cpp experience.cpp main.cpp \
+        misc.cpp movegen.cpp movepick.cpp mcts.cpp position.cpp \
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
-        nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/features/half_ka_v2_hm.cpp nnue/network.cpp \
-        engine.cpp score.cpp memory.cpp experience.cpp lichess_tablebase.cpp \
-        livebook/BaseLivebook.cpp livebook/ChessDb.cpp livebook/ChessDBContributor.cpp \
-        livebook/LichessEndgame.cpp livebook/LichessGames.cpp livebook/LichessLivebook.cpp \
-        livebook/LichessMaster.cpp livebook/LichessOpening.cpp livebook/LichessPlayer.cpp \
-        livebook/LichessUsers.cpp livebook/Proxy.cpp \
-        livebook/analysis/Analysis.cpp livebook/analysis/Cp.cpp \
-        livebook/analysis/Mate.cpp livebook/analysis/Wdl.cpp
+        nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/network.cpp \
+        nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp \
+        engine.cpp score.cpp memory.cpp
 
-HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
-		nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/layers/affine_transform.h \
-		nnue/layers/affine_transform_sparse_input.h nnue/layers/clipped_relu.h \
-		nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h nnue/nnue_architecture.h \
-		nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h position.h \
-                search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
-                tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h \
-                experience.h livebook/BaseLivebook.h livebook/ChessDb.h \
-                livebook/ChessDBContributor.h livebook/LichessEndgame.h \
-                livebook/LichessGames.h livebook/LichessLivebook.h livebook/LichessMaster.h \
-                livebook/LichessOpening.h livebook/LichessPlayer.h livebook/LichessUsers.h \
-                livebook/Proxy.h livebook/analysis/Analysis.h livebook/analysis/Cp.h \
-                livebook/analysis/Mate.h livebook/analysis/Wdl.h lichess_tablebase.h
+HEADERS = benchmark.h bitboard.h evaluate.h experience.h experience_compat.h Wordfish_zobrist.h misc.h movegen.h movepick.h mcts.h history.h \
+                nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/features/full_threats.h \
+                nnue/layers/affine_transform.h nnue/layers/affine_transform_sparse_input.h \
+                nnue/layers/clipped_relu.h nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h \
+                nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h \
+		position.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
+		tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features:livebook:livebook/analysis
+VPATH = syzygy:nnue:nnue/features
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -131,11 +95,9 @@ VPATH = syzygy:nnue:nnue/features:livebook:livebook/analysis
 # sse2 = yes/no       --- -msse2             --- Use Intel Streaming SIMD Extensions 2
 # ssse3 = yes/no      --- -mssse3            --- Use Intel Supplemental Streaming SIMD Extensions 3
 # sse41 = yes/no      --- -msse4.1           --- Use Intel Streaming SIMD Extensions 4.1
-# avx = yes/no        --- -mavx              --- Use Intel Advanced Vector Extensions
 # avx2 = yes/no       --- -mavx2             --- Use Intel Advanced Vector Extensions 2
 # avxvnni = yes/no    --- -mavxvnni          --- Use Intel Vector Neural Network Instructions AVX
 # avx512 = yes/no     --- -mavx512bw         --- Use Intel Advanced Vector Extensions 512
-# vnni256 = yes/no    --- -mavx256vnni       --- Use Intel Vector Neural Network Instructions 512 with 256bit operands
 # vnni512 = yes/no    --- -mavx512vnni       --- Use Intel Vector Neural Network Instructions 512
 # avx512icl = yes/no  --- ... multiple ...   --- Use All AVX-512 features available on both Intel Ice Lake and AMD Zen 4
 # altivec = yes/no    --- -maltivec          --- Use PowerPC Altivec SIMD extension
@@ -166,8 +128,8 @@ endif
 # explicitly check for the list of supported architectures (as listed with make help),
 # the user can override with `make ARCH=x86-64-avx512icl SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
-                 x86-64-avx512icl x86-64-vnni512 x86-64-vnni256 x86-64-avx512 x86-64-avxvnni \
-                 x86-64-bmi2 x86-64-avx2 x86-64-avx x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
+                 x86-64-avx512icl x86-64-vnni512 x86-64-avx512 x86-64-avxvnni \
+                 x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-64-altivec ppc-64-vsx ppc-32 e2k \
                  armv7 armv7-neon armv8 armv8-dotprod apple-silicon general-64 general-32 riscv64 \
                  loongarch64 loongarch64-lsx loongarch64-lasx))
@@ -188,11 +150,9 @@ mmx = no
 sse2 = no
 ssse3 = no
 sse41 = no
-avx = no
 avx2 = no
 avxvnni = no
 avx512 = no
-vnni256 = no
 vnni512 = no
 avx512icl = no
 altivec = no
@@ -267,22 +227,13 @@ ifeq ($(findstring -modern,$(ARCH)),-modern)
 	sse41 = yes
 endif
 
-ifeq ($(ARCH),x86-64-avx)
-        popcnt = yes
-        sse = yes
-        sse2 = yes
-        ssse3 = yes
-        sse41 = yes
-        avx = yes
-endif
-
 ifeq ($(findstring -avx2,$(ARCH)),-avx2)
-        popcnt = yes
-        sse = yes
-        sse2 = yes
-        ssse3 = yes
-        sse41 = yes
-        avx2 = yes
+	popcnt = yes
+	sse = yes
+	sse2 = yes
+	ssse3 = yes
+	sse41 = yes
+	avx2 = yes
 endif
 
 ifeq ($(findstring -avxvnni,$(ARCH)),-avxvnni)
@@ -315,17 +266,6 @@ ifeq ($(findstring -avx512,$(ARCH)),-avx512)
 	avx2 = yes
 	pext = yes
 	avx512 = yes
-endif
-
-ifeq ($(findstring -vnni256,$(ARCH)),-vnni256)
-	popcnt = yes
-	sse = yes
-	sse2 = yes
-	ssse3 = yes
-	sse41 = yes
-	avx2 = yes
-	pext = yes
-	vnni256 = yes
 endif
 
 ifeq ($(findstring -vnni512,$(ARCH)),-vnni512)
@@ -487,29 +427,7 @@ endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
-LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) -lz
-
-USE_LIVEBOOK ?= yes
-
-ifeq ($(USE_LIVEBOOK),yes)
-        ifeq ($(target_windows),yes)
-                ifneq ($(shell pkg-config --exists libngtcp2_crypto_openssl libngtcp2 && echo yes),yes)
-                        $(warning Disabling livebook support: missing libngtcp2 dependencies for static libcurl)
-                        USE_LIVEBOOK := no
-                endif
-        endif
-endif
-
-ifeq ($(USE_LIVEBOOK),yes)
-        CXXFLAGS += -DUSE_LIVEBOOK
-        LDFLAGS += -lcurl
-        ifeq ($(target_windows),yes)
-                LDFLAGS += -lws2_32 -lnghttp2 -lnghttp3 -lssl -lcrypto -lssh2 -lidn2 -lpsl -lngtcp2_crypto_openssl -lngtcp2 -lbrotlidec -lbrotlicommon -lzstd -lwldap32 -lsecur32 -lbcrypt -lcrypt32
-        endif
-else
-        $(info Building without livebook support (curl dependencies not available))
-endif
-
+LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
 ifeq ($(COMP),)
 	COMP=gcc
@@ -518,7 +436,7 @@ endif
 ifeq ($(COMP),gcc)
 	comp=gcc
 	CXX=g++
-       CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-declarations -Wstack-usage=128000
+	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-declarations -Wstack-usage=128000
 
 	ifeq ($(arch),$(filter $(arch),armv7 armv8 riscv64))
 		ifeq ($(OS),Android)
@@ -575,25 +493,14 @@ ifeq ($(COMP),icx)
 endif
 
 ifeq ($(COMP),clang)
-        comp=clang
-        ifeq ($(target_windows),yes)
-                CXX=x86_64-w64-mingw32-clang++
-        else
-                # Detect an available clang++ executable when the unversioned
-                # binary is not present on the system. This makes it possible
-                # to use environments that only provide versioned binaries
-                # such as clang++-20 without requiring the caller to set
-                # COMPCXX manually.
-                CLANGXX_CANDIDATE := $(shell sh -c 'for c in clang++ clang++-20 clang++-19 clang++-18 clang++-17 clang++-16 clang++-15 clang++-14 clang++-13 clang++-12 clang++-11 clang++-10; do command -v $$c >/dev/null 2>&1 && { echo $$c; exit 0; }; done')
-                ifneq ($(CLANGXX_CANDIDATE),)
-                        CXX=$(CLANGXX_CANDIDATE)
-                else
-                        $(error Unable to locate a clang++ compiler. Please install clang or set COMPCXX to a valid executable.)
-                endif
-        endif
-        
-        CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
-                    -Wconditional-uninitialized
+	comp=clang
+	CXX=clang++
+	ifeq ($(target_windows),yes)
+		CXX=x86_64-w64-mingw32-clang++
+	endif
+
+	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
+	            -Wconditional-uninitialized
 
 	ifeq ($(filter $(KERNEL),Darwin OpenBSD FreeBSD),)
 	ifeq ($(target_windows),)
@@ -711,20 +618,20 @@ ifneq ($(comp),mingw)
 		# Haiku has pthreads in its libroot, so only link it in on other platforms
 		ifneq ($(KERNEL),Haiku)
 			ifneq ($(COMP),ndk)
-                               LDFLAGS += -lpthread
+				LDFLAGS += -lpthread
 
-                               add_lrt = yes
-                               ifeq ($(target_windows),yes)
-                                       add_lrt = no
-                               endif
+				add_lrt = yes
+				ifeq ($(target_windows),yes)
+					add_lrt = no
+				endif
 
-                               ifeq ($(KERNEL),Darwin)
-                                       add_lrt = no
-                               endif
+				ifeq ($(KERNEL),Darwin)
+					add_lrt = no
+				endif
 
-                               ifeq ($(add_lrt),yes)
-                                       LDFLAGS += -lrt
-                               endif
+				ifeq ($(add_lrt),yes)
+					LDFLAGS += -lrt
+				endif
 			endif
 		endif
 	endif
@@ -734,8 +641,8 @@ endif
 ifeq ($(debug),no)
 	CXXFLAGS += -DNDEBUG
 else
-       CXXFLAGS += -g
-       CXXFLAGS += -D_GLIBCXX_ASSERTIONS -D_GLIBCXX_DEBUG
+	CXXFLAGS += -g
+	CXXFLAGS += -D_GLIBCXX_ASSERTIONS -D_GLIBCXX_DEBUG
 endif
 
 ### 3.2.2 Debugging with undefined behavior sanitizers
@@ -798,17 +705,11 @@ ifeq ($(popcnt),yes)
 endif
 
 ### 3.6 SIMD architectures
-ifeq ($(avx),yes)
-        ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-                CXXFLAGS += -mavx
-        endif
-endif
-
 ifeq ($(avx2),yes)
-        CXXFLAGS += -DUSE_AVX2
-        ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-                CXXFLAGS += -mavx2 -mbmi
-        endif
+	CXXFLAGS += -DUSE_AVX2
+	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
+		CXXFLAGS += -mavx2 -mbmi
+	endif
 endif
 
 ifeq ($(avxvnni),yes)
@@ -825,17 +726,10 @@ ifeq ($(avx512),yes)
 	endif
 endif
 
-ifeq ($(vnni256),yes)
-	CXXFLAGS += -DUSE_VNNI
-	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mavx512f -mavx512bw -mavx512vnni -mavx512dq -mavx512vl -mprefer-vector-width=256
-	endif
-endif
-
 ifeq ($(vnni512),yes)
 	CXXFLAGS += -DUSE_VNNI
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mavx512f -mavx512bw -mavx512vnni -mavx512dq -mavx512vl -mprefer-vector-width=512
+		CXXFLAGS += -mavx512f -mavx512bw -mavx512vnni -mavx512dq -mavx512vl
 	endif
 endif
 
@@ -939,17 +833,6 @@ ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
 endif
 
-### 3.8.4 Engine identity (UCI id name / build date)
-# UCI "id name" string shown in GUIs.
-# Defaults:
-#   - ENGINE_NAME: "Wordfish-3.20-101125"
-#   - ENGINE_BUILD_DATE: optional build identifier
-# You can override on the command line:
-#   make ENGINE_NAME="Wordfish-3.20-101125" ENGINE_BUILD_DATE=
-ENGINE_NAME        ?= Wordfish-3.20-101125
-ENGINE_BUILD_DATE  ?= 
-CXXFLAGS += -DENGINE_NAME='"$(ENGINE_NAME)"' -DENGINE_BUILD_DATE='"$(ENGINE_BUILD_DATE)"'
-
 ### 3.9 Link Time Optimization
 ### This is a mix of compile and link time options because the lto link phase
 ### needs access to the optimization flags.
@@ -968,22 +851,13 @@ ifeq ($(debug), no)
 # GCC and CLANG use different methods for parallelizing LTO and CLANG pretends to be
 # GCC on some systems.
 	else ifeq ($(comp),gcc)
-        ifeq ($(gccisclang),)
-                CXXFLAGS += -flto -flto-partition=one
-                ifeq ($(target_windows),yes)
-                        # Native Windows builds of GCC frequently fail when
-                        # lto-wrapper tries to delete temporary files that are
-                        # still locked by another process.  Avoid using the
-                        # jobserver-assisted parallel LTO mode on Windows to
-                        # prevent these race conditions.
-                        LDFLAGS += $(CXXFLAGS)
-                else
-                        LDFLAGS += $(CXXFLAGS) -flto=jobserver
-                endif
-        else
-                CXXFLAGS += -flto=full
-                LDFLAGS += $(CXXFLAGS)
-        endif
+	ifeq ($(gccisclang),)
+		CXXFLAGS += -flto -flto-partition=one
+		LDFLAGS += $(CXXFLAGS) -flto=jobserver
+	else
+		CXXFLAGS += -flto=full
+		LDFLAGS += $(CXXFLAGS)
+	endif
 
 # To use LTO and static linking on Windows,
 # the tool chain requires gcc version 10.1 or later.
@@ -1026,13 +900,11 @@ help:
 	echo "native                  > select the best architecture for the host processor (default)" && \
 	echo "x86-64-avx512icl        > x86 64-bit with minimum avx512 support of Intel Ice Lake or AMD Zen 4" && \
 	echo "x86-64-vnni512          > x86 64-bit with vnni 512bit support" && \
-	echo "x86-64-vnni256          > x86 64-bit with vnni 512bit support, limit operands to 256bit wide" && \
 	echo "x86-64-avx512           > x86 64-bit with avx512 support" && \
 	echo "x86-64-avxvnni          > x86 64-bit with vnni 256bit support" && \
-        echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
-        echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
-        echo "x86-64-avx              > x86 64-bit with avx support" && \
-        echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
+	echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
+	echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
+	echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
 	echo "x86-64-modern           > deprecated, currently x86-64-sse41-popcnt" && \
 	echo "x86-64-ssse3            > x86 64-bit with ssse3 support" && \
 	echo "x86-64-sse3-popcnt      > x86 64-bit with sse3 compile and popcnt support" && \
@@ -1065,12 +937,11 @@ help:
 	echo "icx                     > Intel oneAPI DPC++/C++ Compiler" && \
 	echo "ndk                     > Google NDK to cross-compile for Android" && \
 	echo "" && \
-        echo "Simple examples. If you don't know what to do, you likely want to run one of: " && \
-        echo "" && \
-        echo "make -j profile-build ARCH=x86-64-avx2    # typically a fast compile for common systems " && \
-        echo "make -j profile-build ARCH=x86-64-avx     # For systems with AVX but not AVX2" && \
-        echo "make -j profile-build ARCH=x86-64-sse41-popcnt  # A more portable compile for 64-bit systems " && \
-        echo "make -j profile-build ARCH=x86-64         # A portable compile for 64-bit systems " && \
+	echo "Simple examples. If you don't know what to do, you likely want to run one of: " && \
+	echo "" && \
+	echo "make -j profile-build ARCH=x86-64-avx2    # typically a fast compile for common systems " && \
+	echo "make -j profile-build ARCH=x86-64-sse41-popcnt  # A more portable compile for 64-bit systems " && \
+	echo "make -j profile-build ARCH=x86-64         # A portable compile for 64-bit systems " && \
 	echo "" && \
 	echo "Advanced examples, for experienced users: " && \
 	echo "" && \
@@ -1085,11 +956,11 @@ endif
 
 
 .PHONY: help analyze build profile-build strip install clean net \
-        objclean profileclean config-sanity version \
-        icx-profile-use icx-profile-make \
-        gcc-profile-use gcc-profile-make \
-        clang-profile-use clang-profile-make FORCE \
-        format analyze
+	objclean profileclean config-sanity \
+	icx-profile-use icx-profile-make \
+	gcc-profile-use gcc-profile-make \
+	clang-profile-use clang-profile-make FORCE \
+	format analyze
 
 analyze: net config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
@@ -1167,14 +1038,12 @@ config-sanity: net
 	echo "pext: '$(pext)'" && \
 	echo "sse: '$(sse)'" && \
 	echo "mmx: '$(mmx)'" && \
-        echo "sse2: '$(sse2)'" && \
-        echo "ssse3: '$(ssse3)'" && \
-        echo "sse41: '$(sse41)'" && \
-        echo "avx: '$(avx)'" && \
-        echo "avx2: '$(avx2)'" && \
-        echo "avxvnni: '$(avxvnni)'" && \
-        echo "avx512: '$(avx512)'" && \
-	echo "vnni256: '$(vnni256)'" && \
+	echo "sse2: '$(sse2)'" && \
+	echo "ssse3: '$(ssse3)'" && \
+	echo "sse41: '$(sse41)'" && \
+	echo "avx2: '$(avx2)'" && \
+	echo "avxvnni: '$(avxvnni)'" && \
+	echo "avx512: '$(avx512)'" && \
 	echo "vnni512: '$(vnni512)'" && \
 	echo "avx512icl: '$(avx512icl)'" && \
 	echo "altivec: '$(altivec)'" && \
@@ -1207,12 +1076,10 @@ config-sanity: net
 	(test "$(sse)" = "yes" || test "$(sse)" = "no") && \
 	(test "$(mmx)" = "yes" || test "$(mmx)" = "no") && \
 	(test "$(sse2)" = "yes" || test "$(sse2)" = "no") && \
-        (test "$(ssse3)" = "yes" || test "$(ssse3)" = "no") && \
-        (test "$(sse41)" = "yes" || test "$(sse41)" = "no") && \
-        (test "$(avx)" = "yes" || test "$(avx)" = "no") && \
-        (test "$(avx2)" = "yes" || test "$(avx2)" = "no") && \
-        (test "$(avx512)" = "yes" || test "$(avx512)" = "no") && \
-	(test "$(vnni256)" = "yes" || test "$(vnni256)" = "no") && \
+	(test "$(ssse3)" = "yes" || test "$(ssse3)" = "no") && \
+	(test "$(sse41)" = "yes" || test "$(sse41)" = "no") && \
+	(test "$(avx2)" = "yes" || test "$(avx2)" = "no") && \
+	(test "$(avx512)" = "yes" || test "$(avx512)" = "no") && \
 	(test "$(vnni512)" = "yes" || test "$(vnni512)" = "no") && \
 	(test "$(avx512icl)" = "yes" || test "$(avx512icl)" = "no") && \
 	(test "$(altivec)" = "yes" || test "$(altivec)" = "no") && \
@@ -1224,7 +1091,7 @@ config-sanity: net
 	 test "$(comp)" = "clang" || test "$(comp)" = "armv7a-linux-androideabi16-clang" || \
 	 test "$(comp)" = "aarch64-linux-android21-clang")
 
-$(EXE): $(OBJS) $(VERSION_MK)
+$(EXE): $(OBJS)
 	+$(CXX) -o $@ $(OBJS) $(LDFLAGS)
 
 # Force recompilation to ensure version info is up-to-date

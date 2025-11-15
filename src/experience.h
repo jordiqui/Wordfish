@@ -1,68 +1,60 @@
 /*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
-
-  Stockfish is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Stockfish is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-  Modifications Copyright (C) 2024 Jorge Ruiz Centelles
+  Wordfish self learning public interface
 */
 
 #ifndef EXPERIENCE_H_INCLUDED
 #define EXPERIENCE_H_INCLUDED
 
-#include <unordered_map>
-#include <vector>
+#include <optional>
 #include <string>
-#include <future>
-#include <mutex>
-#include <utility>
+#include <vector>
 
-#include "position.h"
 #include "types.h"
 
 namespace Stockfish {
 
-struct ExperienceEntry {
-    Move move;
-    int  score;
-    int  depth;
-    int  count;
-};
+class OptionsMap;
+class Position;
 
-class Experience {
-   public:
-    void clear();
-    void load(const std::string& file);
-    void load_async(const std::string& file);
-    void wait_until_loaded() const;
-    void save(const std::string& file) const;
-    Move probe(Position& pos, int width, int evalImportance, int minDepth, int maxMoves);
-    void update(Position& pos, Move move, int score, int depth);
-    void show(const Position& pos, int evalImportance, int maxMoves) const;
-    std::vector<std::pair<Key, std::vector<ExperienceEntry>>> dump_table() const;
+namespace Search {
+struct LimitsType;
+struct RootMove;
+}  // namespace Search
 
-   private:
-    bool                                                  is_ready() const;
-    std::unordered_map<Key, std::vector<ExperienceEntry>> table;
-    bool                                                  binaryFormat     = false;
-    bool                                                  brainLearnFormat = false;
-    std::future<void>                                     loader;
-    mutable std::mutex                                    tableMutex;
-};
+namespace Experience {
 
-extern Experience experience;
+// Read the relevant options and ensure the module is configured accordingly.
+std::optional<std::string> update_settings(const OptionsMap& options);
 
+// Returns true when self learning is currently enabled via the options.
+bool is_enabled();
+
+// Called at the beginning of a search to optionally reorder the root moves
+// using stored experience data.
+void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMoves);
+
+// Called once a search is finished. The module stores the best move together
+// with the achieved score when the search satisfies the configured thresholds.
+void on_search_complete(const Position&               pos,
+                        const std::vector<Search::RootMove>& rootMoves,
+                        Value                           bestScore,
+                        Value                           evalScore,
+                        Depth                           searchedDepth,
+                        const Search::LimitsType&       limits);
+
+// Called on ucinewgame/reset events to make sure the experience file is safely
+// written to disk.
+void new_game();
+
+// Flush any pending changes to disk.
+void flush();
+
+// Returns a human readable status string describing the currently loaded
+// experience file and its statistics. The string is suitable for printing as a
+// UCI "info string" message.
+std::string status_summary();
+
+}  // namespace Experience
 }  // namespace Stockfish
 
-#endif  // EXPERIENCE_H_INCLUDED
+#endif  // #ifndef EXPERIENCE_H_INCLUDED

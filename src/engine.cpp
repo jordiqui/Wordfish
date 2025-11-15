@@ -28,20 +28,16 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <iomanip>
-#include <random>
-#include <ctime>
 
 #include "evaluate.h"
+#include "experience.h"
 #include "misc.h"
 #include "nnue/network.h"
 #include "nnue/nnue_common.h"
 #include "nnue/nnue_misc.h"
 #include "numa.h"
 #include "perft.h"
-#include "polybook.h"
 #include "position.h"
-#include "experience.h"
 #include "search.h"
 #include "shm.h"
 #include "syzygy/tbprobe.h"
@@ -66,13 +62,12 @@ Engine::Engine(std::optional<std::string> path) :
       numaContext,
       // Heap-allocate because sizeof(NN::Networks) is large
       std::make_unique<NN::Networks>(
-        std::make_unique<NN::NetworkBig>(
-          NN::EvalFile{EvalFileDefaultNameBig, "None", ""}, NN::EmbeddedNNUEType::BIG),
-        std::make_unique<NN::NetworkSmall>(
-          NN::EvalFile{EvalFileDefaultNameSmall, "None", ""}, NN::EmbeddedNNUEType::SMALL))) {
+        std::make_unique<NN::NetworkBig>(NN::EvalFile{EvalFileDefaultNameBig, "None", ""},
+                                         NN::EmbeddedNNUEType::BIG),
+        std::make_unique<NN::NetworkSmall>(NN::EvalFile{EvalFileDefaultNameSmall, "None", ""},
+                                           NN::EmbeddedNNUEType::SMALL))) {
 
     pos.set(StartFEN, false, &states->back());
-
 
     options.add(  //
       "Debug Log File", Option("", [](const Option& o) {
@@ -111,19 +106,23 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "MultiPV", Option(1, 1, MAX_MOVES));
 
+    options.add("Search Strategy", Option("AlphaBeta MCTS", "AlphaBeta"));
+
     options.add("Skill Level", Option(20, 0, 20));
 
     options.add("Move Overhead", Option(10, 0, 5000));
-
+    options.add("Minimum Thinking Time", Option(100, 0, 5000));
     options.add("Slow Mover", Option(100, 10, 1000));
 
     options.add("nodestime", Option(0, 0, 10000));
 
-    options.add("Minimum Thinking Time", Option(20, 0, 5000));
-
     options.add("UCI_Chess960", Option(false));
 
     options.add("UCI_LimitStrength", Option(false));
+
+    options.add("Contempt", Option(0, -200, 200));
+
+    options.add("King Safety", Option(100, 0, 200));
 
     options.add("UCI_Elo",
                 Option(Stockfish::Search::Skill::LowestElo, Stockfish::Search::Skill::LowestElo,
@@ -132,148 +131,36 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("UCI_ShowWDL", Option(false));
 
     options.add(  //
-      "SyzygyPath", Option("", [this](const Option& o) {
-          Tablebases::init(o, bool(options["SyzygyPremap"]));
+      "SyzygyPath", Option("", [](const Option& o) {
+          Tablebases::init(o);
           return std::nullopt;
       }));
 
-    options.add("SyzygyPremap", Option(false, [this](const Option& o) {
-                    Tablebases::init(options["SyzygyPath"], bool(o));
-                    return std::nullopt;
-                }));
     options.add("SyzygyProbeDepth", Option(1, 1, 100));
 
     options.add("Syzygy50MoveRule", Option(true));
 
     options.add("SyzygyProbeLimit", Option(7, 0, 7));
 
-    options.add("Book1", Option(false));
+    const auto updateExperience = [this](const Option&) {
+        return Experience::update_settings(options);
+    };
 
-    options.add("Book1 File", Option("", [](const Option& o) {
-                    polybook[0].init(o);
-                    return std::nullopt;
-                }));
-
-    options.add("Book1 BestBookMove", Option(false));
-
-    options.add("Book1 Depth", Option(255, 1, 350));
-
-    options.add("Book1 Width", Option(1, 1, 10));
-
-    options.add("Book2", Option(false));
-
-    options.add("Book2 File", Option("", [](const Option& o) {
-                    polybook[1].init(o);
-                    return std::nullopt;
-                }));
-
-    options.add("Book2 BestBookMove", Option(false));
-
-    options.add("Book2 Depth", Option(255, 1, 350));
-
-    options.add("Book2 Width", Option(1, 1, 10));
-
-    options.add("Experience Enabled", Option(true, [this](const Option& o) {
-                    if (bool(o))
-                        experience.load_async(options["Experience File"]);
-                    else
-                        experience.clear();
-                    return std::nullopt;
-                }));
-
-    options.add("Experience File", Option("experience.exp", [this](const Option& o) {
-                    if ((bool) options["Experience Enabled"])
-                        experience.load_async(o);
-                    concurrentExperienceFile.clear();
-                    return std::nullopt;
-                }));
-
-    options.add("Experience Readonly", Option(false));
-    options.add("Experience Prior", Option(true));
-    options.add("Experience Width", Option(1, 1, 20));
-    options.add("Experience Eval Weight", Option(5, 0, 10));
-    options.add("Experience Min Depth", Option(27, 4, 64));
-    options.add("Experience Max Moves", Option(16, 1, 100));
-    options.add("Experience Book", Option(false));
-    options.add("Experience Book Max Moves", Option(100, 1, 100));
-    options.add("Experience Book Min Depth", Option(4, 1, 255));
-    options.add("Experience Concurrent", Option(false, [this](const Option&) {
-                    concurrentExperienceFile.clear();
-                    return std::nullopt;
-                }));
-
-    // MonteCarlo Tree Search section (experimental: thanks to original Stephan
-    // Nicolet work)
-    options.add("MCTS by Shashin", Option(false));
-    options.add("MCTSThreads", Option(0, 0, 512));
-    options.add("MCTS Multi Strategy", Option(20, 0, 100));
-    options.add("MCTS Multi MinVisits", Option(5, 0, 1000));
-    options.add("MCTS Explore", Option(false));
-
-    options.add("LiveBook Proxy Url", Option("", [](const Option& o) {
-                    Search::set_proxy_url(o.value());
-                    return std::nullopt;
-                }));
-
-    options.add("LiveBook Proxy Diversity", Option(false, [](const Option& o) {
-                    Search::set_proxy_diversity(bool(o));
-                    return std::nullopt;
-                }));
-
-    options.add("LiveBook Lichess Games", Option(false, [](const Option& o) {
-                    Search::set_use_lichess_games(bool(o));
-                    return std::nullopt;
-                }));
-
-    options.add("LiveBook Lichess Masters", Option(false, [](const Option& o) {
-                    Search::set_use_lichess_masters(bool(o));
-                    return std::nullopt;
-                }));
-
-    options.add("LiveBook Lichess Player", Option("", [](const Option& o) {
-                    Search::set_lichess_player(o.value());
-                    return std::nullopt;
-                }));
-
-    options.add("LiveBook Lichess Player Color",
-                Option("White var Black var Both", "White",
-                       [](const Option& o) {
-                           Search::set_lichess_player_color(o.value());
-                           return std::nullopt;
-                       }));
-
-    options.add("LiveBook ChessDB", Option(false, [](const Option& o) {
-                    Search::set_use_chess_db(bool(o));
-                    return std::nullopt;
-                }));
-
-    options.add("LiveBook Depth", Option(255, 1, 255, [](const Option& o) {
-                    Search::set_livebook_depth(int(o));
-                    return std::nullopt;
-                }));
-
-    options.add("ChessDB Tablebase", Option(false, [](const Option& o) {
-                    Search::set_use_chess_db_tablebase(bool(o));
-                    return std::nullopt;
-                }));
-
-    options.add("Lichess Tablebase", Option(false, [](const Option& o) {
-                    Search::set_use_lichess_tablebase(bool(o));
-                    return std::nullopt;
-                }));
-
-    options.add("ChessDB Contribute", Option(false, [](const Option& o) {
-                    Search::set_chess_db_contribute(bool(o));
-                    return std::nullopt;
-                }));
-
-    // Optional experimental evaluation tweak that adapts weights based on
-    // simple positional cues. Disabled by default so it does not alter
-    // standard play unless explicitly requested by the user.
-    options.add("Adaptive Style", Option(false, [](const Option& o) {
-                    Eval::set_adaptive_style(bool(o));
-                    return std::nullopt;
-                }));
+    options.add("Experience Enabled", Option(true, updateExperience));
+    options.add("Experience File", Option("Wordfish.exp", updateExperience));
+    options.add("Experience Readonly", Option(false, updateExperience));
+    options.add("Experience Book", Option(false, updateExperience));
+    options.add("Experience Book Width", Option(1, 1, 32, updateExperience));
+    options.add("Experience Book Eval Importance", Option(5, 0, 10, updateExperience));
+    options.add("Experience Book Min Depth", Option(27, 0, 128, updateExperience));
+    options.add("Experience Book Max Moves", Option(16, 1, 128, updateExperience));
+    options.add("Experience Status", Option([&](const Option&) {
+        return Experience::status_summary();
+    }));
+    options.add("Experience Sync", Option([&](const Option&) {
+        Experience::flush();
+        return Experience::status_summary();
+    }));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
@@ -287,13 +174,8 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
-    options.add("Variety", Option("Off var Standard var Psychological", "Off",
-                                   [](const Option& o) {
-                                       Search::set_variety(o.value());
-                                       return std::nullopt;
-                                   }));
-
     load_networks();
+    Experience::update_settings(options);
     resize_threads();
 }
 
@@ -305,11 +187,6 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
-
-    TimePoint minTime = TimePoint(options["Minimum Thinking Time"]);
-    if (limits.movetime && limits.movetime < minTime)
-        limits.movetime = minTime;
-
     verify_networks();
 
     threads.start_thinking(options, pos, states, limits);
@@ -322,32 +199,10 @@ void Engine::search_clear() {
     tt.clear(threads);
     threads.clear();
 
-    // Release our reference to the tablebases. Other engine instances
-    // keep their mappings alive until they also release.
-    Tablebases::release();
+    // @TODO wont work with multiple instances
+    Tablebases::init(options["SyzygyPath"]);  // Free mapped files
 
-    if ((bool) options["Experience Enabled"] && !(bool) options["Experience Readonly"])
-    {
-        std::string file = options["Experience File"];
-        if ((bool) options["Experience Concurrent"])
-        {
-            if (concurrentExperienceFile.empty())
-            {
-                std::random_device rd;
-                uint64_t           r = (uint64_t(rd()) << 32) ^ rd();
-                std::ostringstream oss;
-                oss << std::hex << std::setfill('0') << std::setw(16) << r;
-                std::string suffix = oss.str();
-                auto        p      = file.find_last_of('.');
-                if (p != std::string::npos)
-                    concurrentExperienceFile = file.substr(0, p) + "-" + suffix + file.substr(p);
-                else
-                    concurrentExperienceFile = file + "-" + suffix;
-            }
-            file = concurrentExperienceFile;
-        }
-        experience.save(file);
-    }
+    Experience::new_game();
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -387,8 +242,6 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
         states->emplace_back();
         pos.do_move(m, states->back());
     }
-
-    Eval::notify_new_fen(pos.game_ply());
 }
 
 // modifiers
@@ -583,6 +436,4 @@ std::string Engine::thread_allocation_information_as_string() const {
 
     return ss.str();
 }
-
-const Position& Engine::position() const { return pos; }
 }

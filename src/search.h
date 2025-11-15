@@ -75,8 +75,6 @@ struct Stack {
     bool                        ttHit;
     int                         cutoffCnt;
     int                         reduction;
-    int                         quietMoveStreak;
-    bool                        skipVerification;
 };
 
 
@@ -274,12 +272,11 @@ class Worker {
 
     // Called when the program receives the UCI 'go' command.
     // It searches from the root position and outputs the "bestmove".
-    void start_searching();
+   void start_searching();
 
     bool is_mainthread() const { return threadIdx == 0; }
 
     void ensure_network_replicated();
-    bool experience_guidance_available() const;
 
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;
@@ -297,12 +294,13 @@ class Worker {
     TTMoveHistory ttMoveHistory;
 
    private:
-    void iterative_deepening();
+   void iterative_deepening();
+    void run_monte_carlo();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
     do_move(Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss);
-    void do_null_move(Position& pos, StateInfo& st);
+    void do_null_move(Position& pos, StateInfo& st, Stack* const ss);
     void undo_move(Position& pos, const Move move);
     void undo_null_move(Position& pos);
 
@@ -325,7 +323,7 @@ class Worker {
     TimePoint elapsed() const;
     TimePoint elapsed_time() const;
 
-    Value evaluate(const Position&, Depth depth);
+    Value evaluate(const Position&);
 
     LimitsType limits;
 
@@ -334,6 +332,8 @@ class Worker {
     int                   selDepth, nmpMinPly;
 
     Value optimism[COLOR_NB];
+    Value contemptValue;
+    int   kingSafetySetting;
 
     Position  rootPos;
     StateInfo rootState;
@@ -361,8 +361,6 @@ class Worker {
     Eval::NNUE::AccumulatorStack  accumulatorStack;
     Eval::NNUE::AccumulatorCaches refreshTable;
 
-    bool experienceAvailable = false;
-
     friend class Stockfish::ThreadPool;
     friend class SearchManager;
 };
@@ -372,21 +370,6 @@ struct ConthistBonus {
     int weight;
 };
 
-void set_livebook_depth(int book_depth);
-void set_proxy_url(const std::string& proxy_url);
-void set_proxy_diversity(bool proxy_diversity);
-void set_use_lichess_games(bool lichess_games);
-void set_use_lichess_masters(bool lichess_masters);
-void set_lichess_player(const std::string& lichess_player);
-void set_lichess_player_color(const std::string& lichess_player_color);
-void set_use_chess_db(bool chess_db);
-void set_use_chess_db_tablebase(bool chess_db);
-void set_use_lichess_tablebase(bool lichess_tablebase);
-void update_livebooks();
-void update_online_tablebases();
-void set_chess_db_contribute(bool chess_db_contribute);
-
-void set_variety(const std::string& varietyOption);
 
 }  // namespace Search
 
