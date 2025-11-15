@@ -1,194 +1,120 @@
-<div align="center">
+# Wordfish
 
-  [![Stockfish][stockfish128-logo]][website-link]
+![Minimal Wordfish emblem](assets/wordfish-logo.svg)
 
-  <h3>Stockfish</h3>
+## Introduction
 
-  A free and strong UCI chess engine.
-  <br>
-  <strong>[Explore Stockfish docs »][wiki-link]</strong>
-  <br>
-  <br>
-  [Report bug][issue-link]
-  ·
-  [Open a discussion][discussions-link]
-  ·
-  [Discord][discord-link]
-  ·
-  [Blog][website-blog-link]
+Wordfish is a strong Universal Chess Interface (UCI) engine derived from Stockfish. It preserves the world-class search fundamentals of its predecessor while adding bespoke analysis tools, neural evaluation management, and an experience system tailored for long-term preparation and engine development.
 
-  [![Build][build-badge]][build-link]
-  [![License][license-badge]][license-link]
-  <br>
-  [![Release][release-badge]][release-link]
-  [![Commits][commits-badge]][commits-link]
-  <br>
-  [![Website][website-badge]][website-link]
-  [![Fishtest][fishtest-badge]][fishtest-link]
-  [![Discord][discord-badge]][discord-link]
+## Engine highlights
 
-</div>
+- **Dual-network NNUE evaluation** that keeps big and small networks synchronized for efficiency on heterogeneous hardware.
+- **Configurable search pipeline** with both classical alpha-beta and hybrid Monte Carlo Tree Search (MCTS) strategies.
+- **Persistent experience system** capable of learning from previous searches, storing results in `.exp` files, and serving tailored book moves.
+- **NUMA-aware threading** that adapts thread placement dynamically and reports topology changes to the user.
+- **Comprehensive diagnostics** including detailed info strings, evaluation tracing, benchmarking, and neural network export facilities.
 
-## Overview
+## Integrated modules and options
 
-[Stockfish][website-link] is a **free and strong UCI chess engine** derived from
-Glaurung 2.1 that analyzes chess positions and computes the optimal moves.
+Wordfish exposes its capabilities through UCI options. The following overview lists the primary configuration areas and their purposes.
 
-Stockfish **does not include a graphical user interface** (GUI) that is required
-to display a chessboard and to make it easy to input moves. These GUIs are
-developed independently from Stockfish and are available online. **Read the
-documentation for your GUI** of choice for information about how to use
-Stockfish with it.
+### Core configuration
 
-See also the Stockfish [documentation][wiki-usage-link] for further usage help.
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `Debug Log File` | *(empty)* | Enables verbose logging to the specified file and starts the logger immediately. |
+| `NumaPolicy` | `auto` | Chooses how Wordfish binds threads across NUMA nodes (`auto`, `system`, `hardware`, `none`, or a custom mask). |
+| `Threads` | `1` | Sets the number of parallel search threads. Changing the value rebalances the thread pool and shared networks. |
+| `Hash` | `16` | Allocates the transposition table size in megabytes. |
+| `Clear Hash` | button | Clears cached search data and resets experience buffers for a fresh session. |
+| `Ponder` | `false` | Allows the engine to think on the opponent's time. |
+| `MultiPV` | `1` | Requests multiple principal variations for analysis sessions. |
+| `Search Strategy` | `AlphaBeta` (from `AlphaBeta MCTS`) | Switches between the traditional alpha-beta searcher and the integrated MCTS driver. |
+| `Skill Level` | `20` | Limits playing strength by reducing tactical depth. |
+| `Move Overhead` | `10` | Reserves milliseconds per move to avoid time losses. |
+| `Minimum Thinking Time` | `100` | Guarantees a minimal allocation of milliseconds per move. |
+| `Slow Mover` | `100` | Adjusts how aggressively the engine spends remaining time. |
+| `nodestime` | `0` | Sets a node-based time limit for debugging scenarios. |
+| `UCI_Chess960` | `false` | Enables Chess960 (Fischer Random) support. |
+| `UCI_LimitStrength` | `false` | Activates Elo-limited play in conjunction with `UCI_Elo`. |
+| `Contempt` | `0` | Biases evaluations toward or against draws. |
+| `King Safety` | `100` | Tunes the relative importance of king safety heuristics. |
+| `UCI_Elo` | `1320` (range `1320` – `3190`) | Specifies the target Elo when strength limiting is enabled. |
+| `UCI_ShowWDL` | `false` | Adds win/draw/loss probabilities to info output. |
 
-## Files
+### Neural evaluation management
 
-This distribution of Stockfish consists of the following files:
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `EvalFile` | Embedded big network | Loads or swaps the primary NNUE network file and automatically reloads replicas on all threads. |
+| `EvalFileSmall` | Embedded small network | Controls the auxiliary lightweight network for low-latency tasks. |
 
-  * [README.md][readme-link], the file you are currently reading.
+The `export_net` console command saves both networks, while `trace_eval` prints a complete evaluation breakdown for the current position.
 
-  * [Copying.txt][license-link], a text file containing the GNU General Public
-    License version 3.
+### Experience system
 
-  * [AUTHORS][authors-link], a text file with the list of authors for the project.
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `Experience Enabled` | `true` | Activates writing and reading from the Wordfish experience file. |
+| `Experience File` | `Wordfish.exp` | Sets the storage path for accumulated search knowledge. |
+| `Experience Readonly` | `false` | Permits analysis without mutating the experience store. |
+| `Experience Book` | `false` | When enabled, consults the learned book during move ordering. |
+| `Experience Book Width` | `1` | Limits how many candidate moves are taken from the learned book (1–32). |
+| `Experience Book Eval Importance` | `5` | Balances evaluation score versus visit count when ranking book moves. |
+| `Experience Book Min Depth` | `27` | Minimum depth a position must reach before being persisted. |
+| `Experience Book Max Moves` | `16` | Stops consulting the learned book after this many plies in a single game. |
+| `Experience Status` | button | Prints a human-readable summary of the current experience database. |
+| `Experience Sync` | button | Forces an immediate flush of accumulated knowledge to disk. |
 
-  * [src][src-link], a subdirectory containing the full source code, including a
-    Makefile that can be used to compile Stockfish on Unix-like systems.
+### Tablebases, books, and specialized tooling
 
-  * a file with the .nnue extension, storing the neural network for the NNUE
-    evaluation. Binary distributions will have this file embedded.
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `SyzygyPath` | *(empty)* | Directory list for probing Syzygy tablebases. Reloads paths instantly when changed. |
+| `SyzygyProbeDepth` | `1` | Depth from which endgame tablebase probing begins. |
+| `Syzygy50MoveRule` | `true` | Toggles enforcement of the fifty-move rule when using tablebases. |
+| `SyzygyProbeLimit` | `7` | Maximum tablebase cardinality to consult during search. |
 
-## Contributing
+Additional console commands such as `bench`, `speedtest`, `d`, and `compiler` provide benchmarking, throughput diagnostics, board visualization, and compiler metadata respectively.
 
-__See [Contributing Guide](CONTRIBUTING.md).__
+## Testing and continuous improvement
 
-### Donating hardware
+Wordfish development relies on sequential probability ratio tests (SPRT) executed on FastChess infrastructure. Each candidate change is measured at two time controls—`10s + 0.1` and `60s + 0.1`—to validate both rapid analysis and longer strategic play. When a FastChess SPRT concludes with a result of `h = 1`, the tested patch is merged into the main branch together with the recorded Elo gain so that the improvement history remains auditable.
 
-Improving Stockfish requires a massive amount of testing. You can donate your
-hardware resources by installing the [Fishtest Worker][worker-link] and viewing
-the current tests on [Fishtest][fishtest-link].
+## Building from source
 
-### Improving the code
+The source code resides under `src/` together with a platform-aware `Makefile`.
 
-In the [chessprogramming wiki][programming-link], many techniques used in
-Stockfish are explained with a lot of background information.
-The [section on Stockfish][programmingsf-link] describes many features
-and techniques used by Stockfish. However, it is generic rather than
-focused on Stockfish's precise implementation.
-
-The engine testing is done on [Fishtest][fishtest-link].
-If you want to help improve Stockfish, please read this [guideline][guideline-link]
-first, where the basics of Stockfish development are explained.
-
-Discussions about Stockfish take place these days mainly in the Stockfish
-[Discord server][discord-link]. This is also the best place to ask questions
-about the codebase and how to improve it.
-
-## Compiling Stockfish
-
-Stockfish has support for 32 or 64-bit CPUs, certain hardware instructions,
-big-endian machines such as Power PC, and other platforms.
-
-On Unix-like systems, it should be easy to compile Stockfish directly from the
-source code with the included Makefile in the folder `src`. In general, it is
-recommended to run `make help` to see a list of make targets with corresponding
-descriptions. An example suitable for most Intel and AMD chips:
-
-```
+```bash
 cd src
 make -j profile-build
 ```
 
-Detailed compilation instructions for all platforms can be found in our
-[documentation][wiki-compile-link]. Our wiki also has information about
-the [UCI commands][wiki-uci-link] supported by Stockfish.
+Run `make help` to inspect targets optimized for specific CPU features or operating systems. Binaries embed the default NNUE networks; external network files placed alongside the executable override the embedded versions.
 
-## Self-learning
+## Running the engine
 
-Wordfish integra el sistema de experiencia `Wordfish` para permitir que el
-motor aprenda de sus propias búsquedas y genere un libro personalizado. El
-módulo se controla mediante opciones UCI y trabaja sobre archivos `.exp` que
-almacenan las posiciones analizadas.
+1. Launch Wordfish within your preferred UCI-compatible interface.
+2. Issue the `uci` command to receive the engine identification and supported options.
+3. Adjust options via `setoption name <Option> value <Value>`.
+4. Use `position` and `go` commands (or your GUI controls) to start analysis or gameplay.
 
-### Configuración básica
+During analysis, Wordfish emits periodic `info` updates that include depth, score, nodes per second, and—when enabled—WDL statistics. The `isready` and `ucinewgame` commands reset internal state and synchronize the experience system.
 
-1. Active la opción **Experience Enabled** (true por defecto) para permitir el
-   autoaprendizaje y **Experience Book** si desea que el motor utilice las
-   jugadas almacenadas al ordenar los movimientos en la raíz.
-2. Ajuste **Experience File** con la ruta al archivo de experiencia que quiera
-   usar; por defecto se crea `Wordfish.exp` en el directorio del motor.
-3. Si solo desea consultar la información sin modificar el archivo, habilite
-   **Experience Readonly**.
+## File layout
 
-### Ajustes del libro de experiencia
+- `src/` – C++ sources for the engine core, search, evaluation, and utilities.
+- `nnue/` – Embedded neural network assets for both evaluation sizes.
+- `tests/` – Regression tools for perft validation and instrumentation.
+- `scripts/` – Helper utilities used for packaging and benchmarking.
+- `assets/wordfish-logo.svg` – Minimal emblem representing the Wordfish identity.
+- `Copying.txt` and `LICENSE` – Licensing terms under the GNU General Public License v3.
 
-* **Experience Book Width** controla cuántas jugadas candidatas se importan del
-  libro (1-32).
-* **Experience Book Eval Importance** equilibra la influencia de la evaluación
-  frente al número de visitas (0-10).
-* **Experience Book Min Depth** establece la profundidad mínima que debe tener
-  una entrada para ser considerada.
-* **Experience Book Max Moves** limita los movimientos totales jugados de una
-  partida antes de dejar de consultar la experiencia.
+## Contributing
 
-Puede consultar el estado actual mediante el botón **Experience Status** y
-forzar un volcado inmediato del archivo con **Experience Sync**. El módulo
-guardará automáticamente los nuevos datos cada cierto número de posiciones y se
-sincronizará cuando reciba `ucinewgame`.
+Bug reports and enhancements are welcome through the repository issue tracker. When submitting engine changes, please include the associated FastChess SPRT results, tested time controls, and observed Elo gain to keep the main branch aligned with validated improvements.
 
-## Terms of use
+## License
 
-Stockfish is free and distributed under the
-[**GNU General Public License version 3**][license-link] (GPL v3). Essentially,
-this means you are free to do almost exactly what you want with the program,
-including distributing it among your friends, making it available for download
-from your website, selling it (either by itself or as part of some bigger
-software package), or using it as the starting point for a software project of
-your own.
+Wordfish is distributed under the GNU General Public License version 3, as provided in `Copying.txt`. Redistributions must include the corresponding source code and preserve this license.
 
-The only real limitation is that whenever you distribute Stockfish in some way,
-you MUST always include the license and the full source code (or a pointer to
-where the source code can be found) to generate the exact binary you are
-distributing. If you make any changes to the source code, these changes must
-also be made available under GPL v3.
-
-## Acknowledgements
-
-Stockfish uses neural networks trained on [data provided by the Leela Chess Zero
-project][lc0-data-link], which is made available under the [Open Database License][odbl-link] (ODbL).
-
-
-[authors-link]:       https://github.com/official-stockfish/Stockfish/blob/master/AUTHORS
-[build-link]:         https://github.com/official-stockfish/Stockfish/actions/workflows/stockfish.yml
-[commits-link]:       https://github.com/official-stockfish/Stockfish/commits/master
-[discord-link]:       https://discord.gg/GWDRS3kU6R
-[issue-link]:         https://github.com/official-stockfish/Stockfish/issues/new?assignees=&labels=&template=BUG-REPORT.yml
-[discussions-link]:   https://github.com/official-stockfish/Stockfish/discussions/new
-[fishtest-link]:      https://tests.stockfishchess.org/tests
-[guideline-link]:     https://github.com/official-stockfish/fishtest/wiki/Creating-my-first-test
-[license-link]:       https://github.com/official-stockfish/Stockfish/blob/master/Copying.txt
-[programming-link]:   https://www.chessprogramming.org/Main_Page
-[programmingsf-link]: https://www.chessprogramming.org/Stockfish
-[readme-link]:        https://github.com/official-stockfish/Stockfish/blob/master/README.md
-[release-link]:       https://github.com/official-stockfish/Stockfish/releases/latest
-[src-link]:           https://github.com/official-stockfish/Stockfish/tree/master/src
-[stockfish128-logo]:  https://stockfishchess.org/images/logo/icon_128x128.png
-[uci-link]:           https://backscattering.de/chess/uci/
-[website-link]:       https://stockfishchess.org
-[website-blog-link]:  https://stockfishchess.org/blog/
-[wiki-link]:          https://github.com/official-stockfish/Stockfish/wiki
-[wiki-compile-link]:  https://github.com/official-stockfish/Stockfish/wiki/Compiling-from-source
-[wiki-uci-link]:      https://github.com/official-stockfish/Stockfish/wiki/UCI-&-Commands
-[wiki-usage-link]:    https://github.com/official-stockfish/Stockfish/wiki/Download-and-usage
-[worker-link]:        https://github.com/official-stockfish/fishtest/wiki/Running-the-worker
-[lc0-data-link]:      https://storage.lczero.org/files/training_data
-[odbl-link]:          https://opendatacommons.org/licenses/odbl/odbl-10.txt
-
-[build-badge]:        https://img.shields.io/github/actions/workflow/status/official-stockfish/Stockfish/stockfish.yml?branch=master&style=for-the-badge&label=stockfish&logo=github
-[commits-badge]:      https://img.shields.io/github/commits-since/official-stockfish/Stockfish/latest?style=for-the-badge
-[discord-badge]:      https://img.shields.io/discord/435943710472011776?style=for-the-badge&label=discord&logo=Discord
-[fishtest-badge]:     https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=Fishtest&up_color=success&up_message=Online&url=https%3A%2F%2Ftests.stockfishchess.org%2Ftests%2Ffinished
-[license-badge]:      https://img.shields.io/github/license/official-stockfish/Stockfish?style=for-the-badge&label=license&color=success
-[release-badge]:      https://img.shields.io/github/v/release/official-stockfish/Stockfish?style=for-the-badge&label=official%20release
-[website-badge]:      https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=website&up_color=success&up_message=Online&url=https%3A%2F%2Fstockfishchess.org

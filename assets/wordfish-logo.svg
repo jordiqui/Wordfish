@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1b4b7a" />
+      <stop offset="100%" stop-color="#2f9dc6" />
+    </linearGradient>
+    <linearGradient id="tailGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#13344f" />
+      <stop offset="100%" stop-color="#1b83a5" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="22" fill="#0c1724" />
+  <g transform="translate(12 20)">
+    <path d="M44 8c18 0 34 16 34 36s-16 36-34 36c-14 0-27-10-31-24 4-14 17-24 31-24z" fill="url(#bodyGradient)" />
+    <polygon points="60,12 96,32 96,52" fill="url(#tailGradient)" />
+    <circle cx="43" cy="44" r="4" fill="#f5f7fa" />
+    <g fill="#0c1724" opacity="0.85">
+      <rect x="30" y="28" width="10" height="10" rx="2" />
+      <rect x="42" y="28" width="10" height="10" rx="2" fill="#1f2f46" />
+      <rect x="30" y="40" width="10" height="10" rx="2" fill="#1f2f46" />
+      <rect x="42" y="40" width="10" height="10" rx="2" />
+    </g>
+    <g stroke="#7fd9f1" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.9">
+      <path d="M18 54h8" />
+      <path d="M18 46h12" />
+      <path d="M18 38h6" />
+      <circle cx="16" cy="54" r="3" fill="#0c1724" />
+      <circle cx="14" cy="46" r="3" fill="#0c1724" />
+      <circle cx="20" cy="38" r="3" fill="#0c1724" />
+    </g>
+  </g>
+</svg>
