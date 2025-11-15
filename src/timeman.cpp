@@ -59,7 +59,9 @@ void TimeManagement::init(Search::LimitsType& limits,
     if (limits.time[us] == 0)
         return;
 
-    TimePoint moveOverhead = TimePoint(options["Move Overhead"]);
+    TimePoint moveOverhead      = TimePoint(options["Move Overhead"]);
+    const int slowMover         = options["Slow Mover"];
+    const TimePoint minimumTime = TimePoint(options["Minimum Thinking Time"]);
 
     // optScale is a percentage of available time to use for the current move.
     // maxScale is a multiplier applied to optimumTime.
@@ -85,6 +87,7 @@ void TimeManagement::init(Search::LimitsType& limits,
     // with constants are involved.
     const int64_t   scaleFactor = useNodesTime ? npmsec : 1;
     const TimePoint scaledTime  = limits.time[us] / scaleFactor;
+    const TimePoint scaledMinimumTime = minimumTime * scaleFactor;
 
     // Maximum move horizon
     int centiMTG = limits.movestogo ? std::min(limits.movestogo * 100, 5000) : 5051;
@@ -132,6 +135,9 @@ void TimeManagement::init(Search::LimitsType& limits,
     optimumTime = TimePoint(optScale * timeLeft);
     maximumTime =
       TimePoint(std::min(0.825179 * limits.time[us] - moveOverhead, maxScale * optimumTime)) - 10;
+
+    optimumTime = std::max(optimumTime * slowMover / 100, scaledMinimumTime);
+    maximumTime = std::max(maximumTime * slowMover / 100, optimumTime + scaledMinimumTime / 2);
 
     if (options["Ponder"])
         optimumTime += optimumTime / 4;
