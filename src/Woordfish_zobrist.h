@@ -1,5 +1,5 @@
 /*
-  Deepalienist experience hashing utilities
+  Woordfish experience hashing utilities
   Copyright (C) 2025
 
   This file defines helper routines used by the self learning subsystem to
@@ -9,8 +9,8 @@
   project.
 */
 
-#ifndef DEEPALIENIST_ZOBRIST_H_INCLUDED
-#define DEEPALIENIST_ZOBRIST_H_INCLUDED
+#ifndef Wordfish_ZOBRIST_H_INCLUDED
+#define Wordfish_ZOBRIST_H_INCLUDED
 
 #include <cstdint>
 
@@ -38,4 +38,4 @@ inline std::uint64_t mix(std::uint64_t value) { return splitmix64(value); }
 
 }  // namespace Stockfish::Experience::Zobrist
 
-#endif  // #ifndef DEEPALIENIST_ZOBRIST_H_INCLUDED
+#endif  // #ifndef Woordfish_ZOBRIST_H_INCLUDED
