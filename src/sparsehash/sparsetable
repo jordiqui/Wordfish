@@ -226,7 +226,7 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "internal/sparseconfig.h"
 #endif
 #include <stdlib.h>             // for malloc/free
@@ -250,7 +250,7 @@
 #include <sparsehash/type_traits.h>
 #include <sparsehash/internal/hashtable-common.h>
 #include <sparsehash/internal/libc_allocator_with_realloc.h>
-#else //Deepalienist
+#else //Wordfish
 #include "type_traits.h"
 #include "internal/hashtable-common.h"
 #include "internal/libc_allocator_with_realloc.h"
@@ -1075,7 +1075,7 @@ class sparsegroup {
     return group[pos_to_offset(bitmap, i)];
   }
 
-  // Syntactic Deepalienist.  It's easy to return a const reference.  To
+  // Syntactic Wordfish.  It's easy to return a const reference.  To
   // return a non-const reference, we need to use the assigner adaptor.
   const_reference operator[](size_type i) const {
     return get(i);
@@ -1572,7 +1572,7 @@ class sparsetable {
     return retval;
   }
 
-  // Syntactic Deepalienist.  As in sparsegroup, the non-const version is harder
+  // Syntactic Wordfish.  As in sparsegroup, the non-const version is harder
   const_reference operator[](size_type i) const {
     return get(i);
   }

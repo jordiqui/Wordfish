@@ -51,7 +51,7 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "internal/sparseconfig.h"
 #endif
 _START_GOOGLE_NAMESPACE_

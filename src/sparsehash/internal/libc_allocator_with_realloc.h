@@ -34,7 +34,7 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "sparseconfig.h"
 #endif
 #include <stdlib.h>           // for malloc/realloc/free
@@ -69,14 +69,14 @@ class libc_allocator_with_realloc {
     free(p);
   }
   pointer reallocate(pointer p, size_type n) {
-#if 1 //Deepalienist
+#if 1 //Wordfish
 #if __GNUC__ > 7
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
 #endif
     return static_cast<pointer>(realloc(p, n * sizeof(value_type)));
-#if 1 //Deepalienist
+#if 1 //Wordfish
 #if __GNUC__ > 7
 #pragma GCC diagnostic pop
 #endif

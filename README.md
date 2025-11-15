@@ -106,7 +106,7 @@ the [UCI commands][wiki-uci-link] supported by Stockfish.
 
 ## Self-learning
 
-Wordfish integra el sistema de experiencia `Deepalienist` para permitir que el
+Wordfish integra el sistema de experiencia `Wordfish` para permitir que el
 motor aprenda de sus propias búsquedas y genere un libro personalizado. El
 módulo se controla mediante opciones UCI y trabaja sobre archivos `.exp` que
 almacenan las posiciones analizadas.
@@ -117,7 +117,7 @@ almacenan las posiciones analizadas.
    autoaprendizaje y **Experience Book** si desea que el motor utilice las
    jugadas almacenadas al ordenar los movimientos en la raíz.
 2. Ajuste **Experience File** con la ruta al archivo de experiencia que quiera
-   usar; por defecto se crea `Deepalienist.exp` en el directorio del motor.
+   usar; por defecto se crea `Wordfish.exp` en el directorio del motor.
 3. Si solo desea consultar la información sin modificar el archivo, habilite
    **Experience Readonly**.
 

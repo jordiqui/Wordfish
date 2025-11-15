@@ -42,7 +42,7 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "sparseconfig.h"
 #endif
 #include <assert.h>
@@ -340,7 +340,7 @@ class sh_hashtable_settings : public HashFunc {
       if (static_cast<size_type>(sz * 2) < sz) {
 #if 0 //Original code
         throw std::length_error("resize overflow");  // protect against overflow
-#else //Deepalienist
+#else //Wordfish
         exit(EXIT_FAILURE);
 #endif
       }

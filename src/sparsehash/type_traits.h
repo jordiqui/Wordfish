@@ -59,14 +59,14 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "internal/sparseconfig.h"
 #endif
 #include <utility>                  // For pair
 
 #if 0 //Original code
 #include <sparsehash/template_util.h>     // For true_type and false_type
-#else //Deepalienist
+#else //Wordfish
 #include "template_util.h"          // For true_type and false_type
 #endif
 
