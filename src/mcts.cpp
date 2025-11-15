@@ -10,6 +10,7 @@
 #include "evaluate.h"
 #include "movegen.h"
 #include "position.h"
+#include "search.h"
 #include "ucioption.h"
 
 namespace Stockfish {
@@ -143,7 +144,8 @@ double rollout(Position& pos,
             return value_to_double(terminal);
         }
 
-        const Move move = legal[size_t(rng.rand<std::uint32_t>()) % legal.size()];
+        const size_t index = size_t(rng.rand<std::uint32_t>()) % legal.size();
+        const Move   move  = *(legal.begin() + index);
         StateInfo& st   = stateStack[depthOffset + depth];
         pos.do_move(move, st);
         played.push_back(move);
@@ -196,7 +198,7 @@ Result analyze(Position&                 rootPos,
 
     const int rolloutDepth = std::clamp(rolloutDepthHint, 4, 64);
 
-    Position pos = rootPos;
+    Position& pos = rootPos;
 
     Node root;
     root.move          = Move::none();
@@ -231,7 +233,7 @@ Result analyze(Position&                 rootPos,
         std::vector<Move> moveStack;
         moveStack.reserve(rolloutDepth + 1);
 
-        Position current = pos;
+        Position& current = pos;
         int      depth   = 0;
 
         while (true)
