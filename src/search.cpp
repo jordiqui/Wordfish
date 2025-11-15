@@ -35,6 +35,7 @@
 
 #include "bitboard.h"
 #include "evaluate.h"
+#include "experience.h"
 #include "history.h"
 #include "misc.h"
 #include "movegen.h"
@@ -233,6 +234,18 @@ void Search::Worker::start_searching() {
     if (bestThread->rootMoves[0].pv.size() > 1
         || bestThread->rootMoves[0].extract_ponder_from_tt(tt, rootPos))
         ponder = UCIEngine::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
+
+    const Value bestScore = bestThread->rootMoves[0].score;
+    const Value evalScore = bestThread->rootMoves[0].averageScore == -VALUE_INFINITE
+                              ? bestScore
+                              : bestThread->rootMoves[0].averageScore;
+
+    Experience::on_search_complete(bestThread->rootPos,
+                                   bestThread->rootMoves,
+                                   bestScore,
+                                   evalScore,
+                                   bestThread->completedDepth,
+                                   bestThread->limits);
 
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);

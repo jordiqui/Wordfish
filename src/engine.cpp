@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "evaluate.h"
+#include "experience.h"
 #include "misc.h"
 #include "nnue/network.h"
 #include "nnue/nnue_common.h"
@@ -135,6 +136,26 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("SyzygyProbeLimit", Option(7, 0, 7));
 
+    const auto updateExperience = [this](const Option&) {
+        return Experience::update_settings(options);
+    };
+
+    options.add("Experience Enabled", Option(true, updateExperience));
+    options.add("Experience File", Option("Deepalienist.exp", updateExperience));
+    options.add("Experience Readonly", Option(false, updateExperience));
+    options.add("Experience Book", Option(false, updateExperience));
+    options.add("Experience Book Width", Option(1, 1, 32, updateExperience));
+    options.add("Experience Book Eval Importance", Option(5, 0, 10, updateExperience));
+    options.add("Experience Book Min Depth", Option(27, 0, 128, updateExperience));
+    options.add("Experience Book Max Moves", Option(16, 1, 128, updateExperience));
+    options.add("Experience Status", Option([&](const Option&) {
+        return Experience::status_summary();
+    }));
+    options.add("Experience Sync", Option([&](const Option&) {
+        Experience::flush();
+        return Experience::status_summary();
+    }));
+
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
           load_big_network(o);
@@ -148,6 +169,7 @@ Engine::Engine(std::optional<std::string> path) :
       }));
 
     load_networks();
+    Experience::update_settings(options);
     resize_threads();
 }
 
@@ -173,6 +195,8 @@ void Engine::search_clear() {
 
     // @TODO wont work with multiple instances
     Tablebases::init(options["SyzygyPath"]);  // Free mapped files
+
+    Experience::new_game();
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
