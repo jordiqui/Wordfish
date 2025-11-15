@@ -86,7 +86,7 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "internal/sparseconfig.h"
 #endif
 #include <algorithm>                        // needed by stl_alloc
@@ -96,7 +96,7 @@
 #if 0 //Original code
 #include <sparsehash/internal/libc_allocator_with_realloc.h>
 #include <sparsehash/internal/sparsehashtable.h>       // IWYU pragma: export
-#else //Deepalienist
+#else //Wordfish
 #include "internal/libc_allocator_with_realloc.h"
 #include "internal/sparsehashtable.h"       // IWYU pragma: export
 #endif

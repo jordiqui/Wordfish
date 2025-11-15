@@ -97,7 +97,7 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "sparseconfig.h"
 #endif
 #include <assert.h>
@@ -109,7 +109,7 @@
 #include <sparsehash/type_traits.h>        // for remove_const
 #include <sparsehash/internal/hashtable-common.h>
 #include <sparsehash/sparsetable>    // IWYU pragma: export
-#else //Deepalienist
+#else //Wordfish
 #include "../type_traits.h"          // for remove_const
 #include "hashtable-common.h"
 #include "../sparsetable"    // IWYU pragma: export
@@ -627,7 +627,7 @@ class sparse_hashtable {
         (std::numeric_limits<size_type>::max)() - delta) {
 #if 0 //Original code
 	  throw std::length_error("resize overflow");
-#else //Deepalienist
+#else //Wordfish
       exit(EXIT_FAILURE);
 #endif
     }
@@ -941,7 +941,7 @@ class sparse_hashtable {
     if (size() >= max_size()) {
 #if 0 //Original code
 	  throw std::length_error("insert overflow");
-#else //Deepalienist
+#else //Wordfish
       exit(EXIT_FAILURE);
 #endif
     }
@@ -977,7 +977,7 @@ class sparse_hashtable {
     if (dist >= (std::numeric_limits<size_type>::max)()) {
 #if 0 //Original code
 	  throw std::length_error("insert-range overflow");
-#else //Deepalienist
+#else //Wordfish
       exit(EXIT_FAILURE);
 #endif
     }

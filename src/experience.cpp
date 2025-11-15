@@ -22,7 +22,7 @@
 #include <cstdlib>
 #include <system_error>
 
-#include "deepalienist_zobrist.h"
+#include "Wordfish_zobrist.h"
 #include "experience_compat.h"
 #include "misc.h"
 #include "position.h"
@@ -50,7 +50,7 @@ struct Settings {
     int         bookEvalImportance = 5;
     Depth       bookMinDepth       = 27;
     int         bookMaxMoves       = 16;
-    std::string file               = "Deepalienist.exp";
+    std::string file               = "Wordfish.exp";
     std::size_t maxEntries         = 200000;
     Value       minScore           = Value(20);
 };
@@ -72,6 +72,8 @@ constexpr std::size_t                                 FlushInterval        = 64;
 Stats                                                 stats;
 std::string                                           lastStatus;
 bool                                                  settingsInitialized = false;
+
+void ensure_file_exists_unlocked();
 
 std::uint64_t compute_key(const Position& pos) {
     using namespace Experience::Zobrist;
@@ -222,7 +224,7 @@ void save_table_unlocked(const std::string& file) {
     if (!out)
         return;
 
-    out << "# Deepalienist experience format v1\n";
+    out << "# Wordfish experience format v1\n";
     for (const auto key : lru)
     {
         const auto it = table.find(key);
@@ -238,6 +240,18 @@ void save_table_unlocked(const std::string& file) {
                 << int(e.eval) << ' ' << int(e.depth) << ' ' << unsigned(e.visits) << '\n';
         }
     }
+}
+
+void ensure_file_exists_unlocked() {
+    if (settings.readonly || settings.file.empty())
+        return;
+
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (fs::exists(settings.file, ec))
+        return;
+
+    save_table_unlocked(settings.file);
 }
 
 bool load_text_format(std::istream& in, Stats& loadStats) {
@@ -435,15 +449,24 @@ void load_table_unlocked(const std::string& file) {
 }
 
 void flush_unlocked() {
-    if (!dirty)
-        return;
-
     if (settings.readonly)
     {
         dirty        = false;
         pendingFlush = 0;
         return;
     }
+
+    bool shouldSave = dirty;
+
+    if (!shouldSave && !settings.file.empty())
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        shouldSave = !fs::exists(settings.file, ec);
+    }
+
+    if (!shouldSave)
+        return;
 
     save_table_unlocked(settings.file);
     dirty        = false;
@@ -463,7 +486,7 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
     if (options.count("Experience File"))
         newSettings.file = std::string(options["Experience File"]);
     else if (newSettings.file.empty())
-        newSettings.file = "Deepalienist.exp";
+        newSettings.file = "Wordfish.exp";
 
     if (options.count("Experience Readonly"))
         newSettings.readonly = bool(int(options["Experience Readonly"]));
@@ -530,6 +553,8 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
         load_table_unlocked(settings.file);
     else
         lastStatus = format_status_unlocked();
+
+    ensure_file_exists_unlocked();
 
     settingsInitialized = true;
     return lastStatus;

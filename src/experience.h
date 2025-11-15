@@ -1,5 +1,5 @@
 /*
-  Deepalienist self learning public interface
+  Wordfish self learning public interface
 */
 
 #ifndef EXPERIENCE_H_INCLUDED

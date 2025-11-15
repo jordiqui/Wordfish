@@ -147,7 +147,7 @@ Engine::Engine(std::optional<std::string> path) :
     };
 
     options.add("Experience Enabled", Option(true, updateExperience));
-    options.add("Experience File", Option("Deepalienist.exp", updateExperience));
+    options.add("Experience File", Option("Wordfish.exp", updateExperience));
     options.add("Experience Readonly", Option(false, updateExperience));
     options.add("Experience Book", Option(false, updateExperience));
     options.add("Experience Book Width", Option(1, 1, 32, updateExperience));

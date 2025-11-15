@@ -1,5 +1,5 @@
 /*
-  Deepalienist self learning compatibility helpers
+  Wordfish self learning compatibility helpers
   This header exposes helpers to import legacy experience book formats.
 */
 

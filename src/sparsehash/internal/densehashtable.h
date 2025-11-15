@@ -91,7 +91,7 @@
 
 #if 0 //Original code
 #include <sparsehash/internal/sparseconfig.h>
-#else //Deepalienist
+#else //Wordfish
 #include "sparseconfig.h"
 #endif
 #include <assert.h>
@@ -105,7 +105,7 @@
 #include <sparsehash/internal/hashtable-common.h>
 #include <sparsehash/internal/libc_allocator_with_realloc.h>
 #include <sparsehash/type_traits.h>
-#else //Deepalienist
+#else //Wordfish
 #include "hashtable-common.h"
 #include "libc_allocator_with_realloc.h"
 #include "../type_traits.h"
@@ -588,7 +588,7 @@ class dense_hashtable {
         (std::numeric_limits<size_type>::max)() - delta) {
 #if 0 //Original code
 	  throw std::length_error("resize overflow");
-#else //Deepalienist
+#else //Wordfish
       exit(EXIT_FAILURE);
 #endif
     }
@@ -929,7 +929,7 @@ class dense_hashtable {
     if (size() >= max_size()) {
 #if 0 //Original code
 	  throw std::length_error("insert overflow");
-#else //Deepalienist
+#else //Wordfish
       exit(EXIT_FAILURE);
 #endif
     }
@@ -972,7 +972,7 @@ class dense_hashtable {
     if (dist >= (std::numeric_limits<size_type>::max)()) {
 #if 0 //Original code
 	  throw std::length_error("insert-range overflow");
-#else //Deepalienist
+#else //Wordfish
       exit(EXIT_FAILURE);
 #endif
     }
