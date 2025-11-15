@@ -31,6 +31,7 @@
 
 #include "benchmark.h"
 #include "engine.h"
+#include "experience.h"
 #include "memory.h"
 #include "movegen.h"
 #include "position.h"
@@ -117,6 +118,7 @@ void UCIEngine::loop() {
             sync_cout << "id name " << engine_info(true) << "\n"
                       << engine.get_options() << sync_endl;
 
+            print_info_string(Experience::status_summary());
             sync_cout << "uciok" << sync_endl;
         }
 
