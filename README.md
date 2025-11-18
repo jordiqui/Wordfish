@@ -32,6 +32,7 @@ Wordfish exposes its capabilities through UCI options. The following overview li
 | `Search Strategy` | `AlphaBeta` (from `AlphaBeta MCTS Montecarlo`) | Switches between the traditional alpha-beta searcher and the integrated MCTS driver (the `Montecarlo` alias also selects MCTS). |
 | `MCTS Rollout Depth` | `12` | Preferred playout depth when running Monte Carlo mode without an explicit depth limit. |
 | `MCTS Simulations` | `5000` | Default number of MCTS playouts when no `nodes` limit is supplied (set `0` to rely entirely on time controls). |
+| `MCTS Explore` | `35` | Balances exploitation versus exploration in Monte Carlo mode; higher values widen the tree while lower values extend existing lines. |
 | `Skill Level` | `20` | Limits playing strength by reducing tactical depth. |
 | `Move Overhead` | `10` | Reserves milliseconds per move to avoid time losses. |
 | `Minimum Thinking Time` | `100` | Guarantees a minimal allocation of milliseconds per move. |
@@ -49,6 +50,9 @@ Wordfish exposes its capabilities through UCI options. The following overview li
 
 - The `Search Strategy` option toggles between `AlphaBeta`, `MCTS`, and the alias `Montecarlo`. Selecting either Monte Carlo mode routes move selection through the integrated tree searcher while preserving UCI output such as nodes, NPS, and PVs.
 - In Monte Carlo mode the engine reports simulated playouts as nodes, applies the `MultiPV` limit when formatting principal variations, and still honours UCI flags such as `ponder` and `infinite`.
+- The `MCTS Explore` parameter adjusts how aggressively the search alternates between widening the tree and deepening promising moves. The shipped default of `35` mirrors the engine's baseline exploration constant; increase the value to encourage broader coverage, or lower it to focus the playouts along the current best lines.
+- Because MCTS stores visit counts and averages for every root move, `MultiPV` output is inexpensive compared to alpha-beta search: the engine can emit multiple principal variations without restarting the root search for each line.
+- Unlike alpha-beta's iterative deepening, MCTS estimates depth from the number of playouts performed and typically performs better with time-based limits rather than fixed depths. Longer time controls and multiple threads give the search more room to build a useful Monte Carlo tree.
 - The `Contemp` and `Contempt` settings can bias the Monte Carlo evaluator towards or away from draws, while `King Safety` scales how aggressively the search protects each monarch across both strategies.
 
 ### Neural evaluation management

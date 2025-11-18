@@ -212,7 +212,9 @@ Result analyze(Position&                 rootPos,
 
     std::array<StateInfo, MAX_PLY> stateStack{};
 
-    const double exploration = 1.41421356237;
+    const int exploreSetting = options.count("MCTS Explore") ? int(options["MCTS Explore"]) : 35;
+    const double explorationBase = 1.41421356237;
+    const double exploration     = (std::max(1, exploreSetting) / 35.0) * explorationBase;
 
     std::uint64_t iterations = 0;
     const TimePoint start    = now();
