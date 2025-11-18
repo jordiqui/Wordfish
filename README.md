@@ -29,7 +29,7 @@ Wordfish exposes its capabilities through UCI options. The following overview li
 | `Clear Hash` | button | Clears cached search data and resets experience buffers for a fresh session. |
 | `Ponder` | `false` | Allows the engine to think on the opponent's time. |
 | `MultiPV` | `1` | Requests multiple principal variations for analysis sessions. |
-| `Search Strategy` | `AlphaBeta` (from `AlphaBeta MCTS`) | Switches between the traditional alpha-beta searcher and the integrated MCTS driver. |
+| `Search Strategy` | `AlphaBeta` (from `AlphaBeta MCTS Montecarlo`) | Switches between the traditional alpha-beta searcher and the integrated MCTS driver (the `Montecarlo` alias also selects MCTS). |
 | `Skill Level` | `20` | Limits playing strength by reducing tactical depth. |
 | `Move Overhead` | `10` | Reserves milliseconds per move to avoid time losses. |
 | `Minimum Thinking Time` | `100` | Guarantees a minimal allocation of milliseconds per move. |
@@ -37,8 +37,8 @@ Wordfish exposes its capabilities through UCI options. The following overview li
 | `nodestime` | `0` | Sets a node-based time limit for debugging scenarios. |
 | `UCI_Chess960` | `false` | Enables Chess960 (Fischer Random) support. |
 | `UCI_LimitStrength` | `false` | Activates Elo-limited play in conjunction with `UCI_Elo`. |
-| `Contempt` | `0` | Biases evaluations toward or against draws. |
-| `King Safety` | `100` | Tunes the relative importance of king safety heuristics. |
+| `Contempt` | `0` | Biases evaluations toward or against draws. Use `default` to reset to the shipped value. |
+| `King Safety` | `100` | Tunes the relative importance of king safety heuristics. Use `default` to reset to the shipped value. |
 | `UCI_Elo` | `1320` (range `1320` – `3190`) | Specifies the target Elo when strength limiting is enabled. |
 | `UCI_ShowWDL` | `false` | Adds win/draw/loss probabilities to info output. |
 

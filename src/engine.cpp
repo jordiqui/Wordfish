@@ -106,7 +106,7 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "MultiPV", Option(1, 1, MAX_MOVES));
 
-    options.add("Search Strategy", Option("AlphaBeta MCTS", "AlphaBeta"));
+    options.add("Search Strategy", Option("AlphaBeta MCTS Montecarlo", "AlphaBeta"));
 
     options.add("Skill Level", Option(20, 0, 20));
 

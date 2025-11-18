@@ -154,7 +154,8 @@ Option& Option::operator=(const std::string& v) {
 
     if ((type != "button" && type != "string" && v.empty())
         || (type == "check" && v != "true" && v != "false")
-        || (type == "spin" && (std::stoi(v) < min || std::stoi(v) > max)))
+        || (type == "spin" && v != "default"
+            && (std::stoi(v) < min || std::stoi(v) > max)))
         return *this;
 
     if (type == "combo")
@@ -170,6 +171,8 @@ Option& Option::operator=(const std::string& v) {
 
     if (type == "string")
         currentValue = v == "<empty>" ? "" : v;
+    else if (type == "spin" && v == "default")
+        currentValue = defaultValue;
     else if (type != "button")
         currentValue = v;
 
