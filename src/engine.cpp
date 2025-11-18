@@ -108,6 +108,9 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Search Strategy", Option("AlphaBeta MCTS Montecarlo", "AlphaBeta"));
 
+    options.add("MCTS Rollout Depth", Option(12, 4, 128));
+    options.add("MCTS Simulations", Option(5000, 0, 1000000));
+
     options.add("Skill Level", Option(20, 0, 20));
 
     options.add("Move Overhead", Option(10, 0, 5000));
