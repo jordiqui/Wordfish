@@ -37,10 +37,17 @@ Wordfish exposes its capabilities through UCI options. The following overview li
 | `nodestime` | `0` | Sets a node-based time limit for debugging scenarios. |
 | `UCI_Chess960` | `false` | Enables Chess960 (Fischer Random) support. |
 | `UCI_LimitStrength` | `false` | Activates Elo-limited play in conjunction with `UCI_Elo`. |
+| `Contemp` | `0` | Legacy-compatible draw bias that mirrors `Contempt` for existing GUI profiles. |
 | `Contempt` | `0` | Biases evaluations toward or against draws. Use `default` to reset to the shipped value. |
 | `King Safety` | `100` | Tunes the relative importance of king safety heuristics. Use `default` to reset to the shipped value. |
 | `UCI_Elo` | `1320` (range `1320` – `3190`) | Specifies the target Elo when strength limiting is enabled. |
 | `UCI_ShowWDL` | `false` | Adds win/draw/loss probabilities to info output. |
+
+### Search strategy and Monte Carlo mode
+
+- The `Search Strategy` option toggles between `AlphaBeta`, `MCTS`, and the alias `Montecarlo`. Selecting either Monte Carlo mode routes move selection through the integrated tree searcher while preserving UCI output such as nodes, NPS, and PVs.
+- In Monte Carlo mode the engine reports simulated playouts as nodes, applies the `MultiPV` limit when formatting principal variations, and still honours UCI flags such as `ponder` and `infinite`.
+- The `Contemp` and `Contempt` settings can bias the Monte Carlo evaluator towards or away from draws, while `King Safety` scales how aggressively the search protects each monarch across both strategies.
 
 ### Neural evaluation management
 

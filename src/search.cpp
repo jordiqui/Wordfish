@@ -205,7 +205,10 @@ void Search::Worker::ensure_network_replicated() {
 
 void Search::Worker::start_searching() {
 
-    contemptValue     = Value(int(options["Contempt"]) * PawnValue / 100);
+    const bool hasContempOption = options.count("Contemp");
+    const int  contemptSetting  = hasContempOption ? int(options["Contemp"]) : int(options["Contempt"]);
+
+    contemptValue     = Value(contemptSetting * PawnValue / 100);
     kingSafetySetting = int(options["King Safety"]);
 
     accumulatorStack.reset();
