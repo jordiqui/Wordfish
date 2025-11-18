@@ -138,6 +138,18 @@ void UCIEngine::loop() {
             engine.search_clear();
         else if (token == "isready")
             sync_cout << "readyok" << sync_endl;
+        else if (token == "experience")
+        {
+            std::string subcommand;
+            if (is >> subcommand && subcommand == "dump")
+            {
+                for (const auto& line : Experience::dump_entries())
+                    print_info_string(line);
+            }
+            else
+                sync_cout << "Unknown command: '" << cmd << "'. Type help for more information."
+                          << sync_endl;
+        }
 
         // Add custom non-UCI commands, mainly for debugging purposes.
         // These commands must not be used during a search!

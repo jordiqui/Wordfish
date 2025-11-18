@@ -21,6 +21,7 @@
 #include <vector>
 #include <cstdlib>
 #include <system_error>
+#include <zlib.h>
 
 #include "Wordfish_zobrist.h"
 #include "experience_compat.h"
@@ -72,6 +73,42 @@ constexpr std::size_t                                 FlushInterval        = 64;
 Stats                                                 stats;
 std::string                                           lastStatus;
 bool                                                  settingsInitialized = false;
+
+std::optional<std::string> decompress_gzip(const std::string& input) {
+    z_stream stream{};
+
+    stream.next_in   = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+    stream.avail_in  = static_cast<uInt>(input.size());
+    stream.total_out = 0;
+
+    if (inflateInit2(&stream, 16 + MAX_WBITS) != Z_OK)
+        return std::nullopt;
+
+    std::string output;
+    output.resize(std::max<std::size_t>(input.size() * 2, 1024));
+
+    int status = Z_OK;
+    while (status == Z_OK)
+    {
+        if (stream.total_out >= output.size())
+            output.resize(output.size() * 2);
+
+        stream.next_out = reinterpret_cast<Bytef*>(output.data() + stream.total_out);
+        stream.avail_out = static_cast<uInt>(output.size() - stream.total_out);
+
+        status = inflate(&stream, Z_NO_FLUSH);
+
+        if (status != Z_OK && status != Z_STREAM_END)
+        {
+            inflateEnd(&stream);
+            return std::nullopt;
+        }
+    }
+
+    output.resize(stream.total_out);
+    inflateEnd(&stream);
+    return output;
+}
 
 std::uint64_t compute_key(const Position& pos) {
     using namespace Experience::Zobrist;
@@ -279,16 +316,13 @@ bool load_hypnos_binary(std::istream& in, Stats& loadStats) {
 
     auto startPos = in.tellg();
 
-    std::string header;
-    if (!std::getline(in, header))
+    std::string header(SignaturePrefix.size(), '\0');
+    if (!in.read(header.data(), header.size()))
     {
         in.clear();
         in.seekg(startPos, std::ios::beg);
         return false;
     }
-
-    if (!header.empty() && header.back() == '\r')
-        header.pop_back();
 
     if (header.compare(0, SignaturePrefix.size(), SignaturePrefix) != 0)
     {
@@ -297,11 +331,18 @@ bool load_hypnos_binary(std::istream& in, Stats& loadStats) {
         return false;
     }
 
-    int version = 0;
-    std::istringstream versionStream(header.substr(SignaturePrefix.size()));
-    versionStream >> version;
-    if (version <= 0)
+    int version = 1;
+    if (!(in >> version) || version <= 0)
         version = 1;
+
+    if (in.peek() == '\n')
+        in.get();
+    else if (in.peek() == '\r')
+    {
+        in.get();
+        if (in.peek() == '\n')
+            in.get();
+    }
 
     struct RawEntryV1 {
         std::uint64_t key;
@@ -380,9 +421,28 @@ void load_table_unlocked(const std::string& file) {
     if (file.empty())
         return;
 
-    std::ifstream in(file, std::ios::binary);
-    if (!in)
+    std::ifstream fileStream(file, std::ios::binary);
+    if (!fileStream)
         return;
+
+    const std::string rawData{std::istreambuf_iterator<char>(fileStream),
+                              std::istreambuf_iterator<char>()};
+
+    std::string data = rawData;
+    const bool  isGzip = data.size() >= 2
+      && static_cast<unsigned char>(data[0]) == 0x1F
+      && static_cast<unsigned char>(data[1]) == 0x8B;
+
+    if (isGzip)
+    {
+        auto decompressed = decompress_gzip(data);
+        if (!decompressed)
+            return;
+
+        data = std::move(*decompressed);
+    }
+
+    std::istringstream in(data);
 
     Stats loadStats;
     bool  loaded = false;
@@ -720,6 +780,37 @@ std::string status_summary() {
         lastStatus = format_status_unlocked();
 
     return lastStatus;
+}
+
+std::vector<std::string> dump_entries() {
+    std::vector<std::string> lines;
+    std::scoped_lock lock(mutex);
+
+    lines.emplace_back("experience dump begin");
+
+    if (settings.enabled)
+    {
+        for (const auto key : lru)
+        {
+            const auto it = table.find(key);
+            if (it == table.end())
+                continue;
+
+            for (const auto& entry : it->second)
+            {
+                if (!entry.bestMove)
+                    continue;
+
+                std::ostringstream oss;
+                oss << "experience entry " << key << ' ' << unsigned(entry.bestMove.raw()) << ' '
+                    << int(entry.score) << ' ' << int(entry.depth) << ' ' << unsigned(entry.visits);
+                lines.push_back(oss.str());
+            }
+        }
+    }
+
+    lines.emplace_back("experience dump end");
+    return lines;
 }
 
 }  // namespace Stockfish::Experience
