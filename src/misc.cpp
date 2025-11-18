@@ -40,7 +40,7 @@ namespace Stockfish {
 namespace {
 
 // Engine branding information.
-constexpr std::string_view engine_name = "Wordfish-3.30-151125";
+constexpr std::string_view engine_name = "Wordfish-3.40-181125";
 constexpr std::string_view engine_author_name =
   "Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
 constexpr std::string_view engine_author_prefix = "Developed by ";
@@ -126,7 +126,7 @@ std::string engine_info(bool to_uci) {
 
     if (to_uci)
     {
-        info += "\nid author ";
+        info += " ";
         info += engine_author_prefix;
         info += engine_author_name;
     }
@@ -136,6 +136,12 @@ std::string engine_info(bool to_uci) {
         info += engine_author_name;
     }
 
+    return info;
+}
+
+std::string engine_author_info() {
+    std::string info = std::string(engine_author_prefix);
+    info += engine_author_name;
     return info;
 }
 
