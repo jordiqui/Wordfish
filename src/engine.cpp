@@ -110,6 +110,7 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("MCTS Rollout Depth", Option(12, 4, 128));
     options.add("MCTS Simulations", Option(5000, 0, 1000000));
+    options.add("MCTS Explore", Option(35, 1, 200));
 
     options.add("Skill Level", Option(20, 0, 20));
 
