@@ -30,6 +30,8 @@ Wordfish exposes its capabilities through UCI options. The following overview li
 | `Ponder` | `false` | Allows the engine to think on the opponent's time. |
 | `MultiPV` | `1` | Requests multiple principal variations for analysis sessions. |
 | `Search Strategy` | `AlphaBeta` (from `AlphaBeta MCTS Montecarlo`) | Switches between the traditional alpha-beta searcher and the integrated MCTS driver (the `Montecarlo` alias also selects MCTS). |
+| `MCTS Rollout Depth` | `12` | Preferred playout depth when running Monte Carlo mode without an explicit depth limit. |
+| `MCTS Simulations` | `5000` | Default number of MCTS playouts when no `nodes` limit is supplied (set `0` to rely entirely on time controls). |
 | `Skill Level` | `20` | Limits playing strength by reducing tactical depth. |
 | `Move Overhead` | `10` | Reserves milliseconds per move to avoid time losses. |
 | `Minimum Thinking Time` | `100` | Guarantees a minimal allocation of milliseconds per move. |

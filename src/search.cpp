@@ -307,7 +307,9 @@ void Search::Worker::run_monte_carlo() {
 
     auto stopRequested = [&]() { return threads.stop.load(std::memory_order_relaxed); };
 
-    const int depthHint = limits.depth ? std::clamp<int>(2 * limits.depth, 4, MAX_PLY - 1) : 12;
+    const int defaultDepth = options.count("MCTS Rollout Depth") ? int(options["MCTS Rollout Depth"]) : 12;
+    const int depthHint = limits.depth ? std::clamp<int>(2 * limits.depth, 4, MAX_PLY - 1)
+                                       : std::clamp<int>(defaultDepth, 4, MAX_PLY - 1);
 
     const auto result =
       MCTS::analyze(rootPos, rootPos.side_to_move(), options, limits, stopRequested, depthHint);

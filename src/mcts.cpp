@@ -73,7 +73,9 @@ Budget compute_budget(const OptionsMap& options,
                       Color rootColor) {
     Budget budget{};
 
-    budget.maxIterations = limits.nodes ? limits.nodes : 5000;
+    const int defaultPlayouts = options.count("MCTS Simulations") ? int(options["MCTS Simulations"]) : 5000;
+
+    budget.maxIterations = limits.nodes ? limits.nodes : defaultPlayouts;
     budget.useTime       = false;
     budget.endTime       = 0;
 
