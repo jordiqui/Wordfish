@@ -517,44 +517,28 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
 
     if (options.count("Experience Enabled"))
         newSettings.enabled = bool(int(options["Experience Enabled"]));
-    else
-        newSettings.enabled = true;
 
     if (options.count("Experience File"))
         newSettings.file = std::string(options["Experience File"]);
-    else if (newSettings.file.empty())
-        newSettings.file = "Wordfish.exp";
 
     if (options.count("Experience Readonly"))
         newSettings.readonly = bool(int(options["Experience Readonly"]));
-    else
-        newSettings.readonly = false;
 
     if (options.count("Experience Book"))
         newSettings.bookEnabled = bool(int(options["Experience Book"]));
-    else
-        newSettings.bookEnabled = false;
 
     if (options.count("Experience Book Width"))
         newSettings.bookWidth = std::max(1, int(options["Experience Book Width"]));
-    else
-        newSettings.bookWidth = 1;
 
     if (options.count("Experience Book Eval Importance"))
         newSettings.bookEvalImportance =
           std::clamp(int(options["Experience Book Eval Importance"]), 0, 10);
-    else
-        newSettings.bookEvalImportance = 5;
 
     if (options.count("Experience Book Min Depth"))
         newSettings.bookMinDepth = Depth(std::max(0, int(options["Experience Book Min Depth"])));
-    else
-        newSettings.bookMinDepth = Depth(27);
 
     if (options.count("Experience Book Max Moves"))
         newSettings.bookMaxMoves = std::max(1, int(options["Experience Book Max Moves"]));
-    else
-        newSettings.bookMaxMoves = 16;
 
     newSettings.minScore = Value(newSettings.bookEvalImportance * 4);
 
