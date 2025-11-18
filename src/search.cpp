@@ -222,7 +222,8 @@ void Search::Worker::start_searching() {
     tt.new_search();
 
     const bool useMcts = options.count("Search Strategy")
-                         && options["Search Strategy"] == "MCTS";
+                         && (options["Search Strategy"] == "MCTS"
+                             || options["Search Strategy"] == "Montecarlo");
 
     if (rootMoves.empty())
     {
