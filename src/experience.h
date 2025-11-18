@@ -54,6 +54,10 @@ void flush();
 // UCI "info string" message.
 std::string status_summary();
 
+// Dump the cached experience entries as human-readable lines suitable for
+// emitting via UCI "info string" messages.
+std::vector<std::string> dump_entries();
+
 }  // namespace Experience
 }  // namespace Stockfish
 
