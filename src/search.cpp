@@ -224,7 +224,8 @@ void Search::Worker::start_searching() {
                             main_manager()->originalTimeAdjust);
     tt.new_search();
 
-    const bool useMcts = options.count("Search Strategy")
+    const bool mctsEnabled = options.count("MCTS Enabled") ? int(options["MCTS Enabled"]) : false;
+    const bool useMcts = mctsEnabled && options.count("Search Strategy")
                          && (options["Search Strategy"] == "MCTS"
                              || options["Search Strategy"] == "Montecarlo");
 
