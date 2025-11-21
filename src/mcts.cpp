@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "evaluate.h"
@@ -120,16 +121,32 @@ Budget compute_budget(const OptionsMap& options,
     return budget;
 }
 
-double rollout(Position& pos,
-               PRNG& rng,
-               std::array<StateInfo, MAX_PLY>& stateStack,
-               int depthOffset,
-               int maxDepth) {
+std::optional<double> rollout(Position& pos,
+                              PRNG& rng,
+                              std::array<StateInfo, MAX_PLY>& stateStack,
+                              int depthOffset,
+                              int maxDepth,
+                              const Budget& budget,
+                              const std::function<bool()>& stopRequested) {
     std::vector<Move> played;
     played.reserve(maxDepth);
 
     for (int depth = 0; depth < maxDepth; ++depth)
     {
+        if (stopRequested())
+        {
+            for (int i = depth - 1; i >= 0; --i)
+                pos.undo_move(played[i]);
+            return std::nullopt;
+        }
+
+        if (budget.useTime && now() >= budget.endTime)
+        {
+            for (int i = depth - 1; i >= 0; --i)
+                pos.undo_move(played[i]);
+            return std::nullopt;
+        }
+
         if (pos.is_draw(0))
         {
             for (int i = depth - 1; i >= 0; --i)
@@ -307,10 +324,25 @@ Result analyze(Position&                 rootPos,
         Node* leaf = nodeStack.back();
 
         double evaluation;
+        bool   aborted = false;
         if (leaf->terminal)
             evaluation = value_to_double(leaf->terminalValue);
         else
-            evaluation = rollout(current, rng, stateStack, depth, rolloutDepth - depth);
+        {
+            std::optional<double> rolloutEval = rollout(current, rng, stateStack, depth,
+                                                        rolloutDepth - depth, budget, stopRequested);
+            if (!rolloutEval)
+                aborted = true;
+            else
+                evaluation = *rolloutEval;
+        }
+
+        if (aborted)
+        {
+            for (int i = int(moveStack.size()) - 1; i >= 0; --i)
+                current.undo_move(moveStack[size_t(i)]);
+            break;
+        }
 
         for (int i = int(nodeStack.size()) - 1; i >= 0; --i)
         {
