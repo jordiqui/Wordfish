@@ -103,8 +103,13 @@ Budget compute_budget(const OptionsMap& options,
 
     if (limits.movetime)
     {
-        budget.useTime = true;
-        budget.endTime = start + limits.movetime;
+        TimePoint available = std::max(TimePoint(0), limits.movetime - overhead);
+
+        if (available)
+        {
+            budget.useTime = true;
+            budget.endTime = start + available;
+        }
     }
     else if (limits.time[rootColor])
     {
