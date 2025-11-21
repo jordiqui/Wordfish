@@ -122,27 +122,11 @@ std::string engine_version_info() {
 }
 
 std::string engine_info(bool to_uci) {
-    std::string info = engine_version_info();
-
-    if (to_uci)
-    {
-        info += " ";
-        info += engine_author_prefix;
-        info += engine_author_name;
-    }
-    else
-    {
-        info += " by ";
-        info += engine_author_name;
-    }
-
-    return info;
+    return engine_version_info();
 }
 
 std::string engine_author_info() {
-    std::string info = std::string(engine_author_prefix);
-    info += engine_author_name;
-    return info;
+    return engine_version_info();
 }
 
 
