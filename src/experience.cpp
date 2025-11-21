@@ -453,7 +453,7 @@ void load_table_unlocked(const std::string& file) {
 
     std::istringstream in(data);
 
-    Stats loadStats;
+    Stats loadStats{};
     bool  loaded = false;
 
     if (load_hypnos_binary(in, loadStats))
