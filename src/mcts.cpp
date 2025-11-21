@@ -328,7 +328,7 @@ Result analyze(Position&                 rootPos,
 
         Node* leaf = nodeStack.back();
 
-        double evaluation;
+        double evaluation = 0.0;
         bool   aborted = false;
         if (leaf->terminal)
             evaluation = value_to_double(leaf->terminalValue);
