@@ -381,6 +381,13 @@ void Search::Worker::run_monte_carlo() {
 
         main_manager()->bestPreviousScore        = rootMoves[0].score;
         main_manager()->bestPreviousAverageScore = rootMoves[0].averageScore;
+
+        Experience::on_search_complete(rootPos,
+                                       rootMoves,
+                                       rootMoves.front().score,
+                                       rootMoves.front().averageScore,
+                                       Depth(depthHint),
+                                       limits);
     }
 
     pvIdx  = 0;
