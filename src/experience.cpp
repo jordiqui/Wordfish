@@ -419,11 +419,17 @@ void load_table_unlocked(const std::string& file) {
     lastStatus.clear();
 
     if (file.empty())
+    {
+        lastStatus = format_status_unlocked();
         return;
+    }
 
     std::ifstream fileStream(file, std::ios::binary);
     if (!fileStream)
+    {
+        lastStatus = format_status_unlocked();
         return;
+    }
 
     const std::string rawData{std::istreambuf_iterator<char>(fileStream),
                               std::istreambuf_iterator<char>()};
@@ -437,7 +443,10 @@ void load_table_unlocked(const std::string& file) {
     {
         auto decompressed = decompress_gzip(data);
         if (!decompressed)
+        {
+            lastStatus = format_status_unlocked();
             return;
+        }
 
         data = std::move(*decompressed);
     }
