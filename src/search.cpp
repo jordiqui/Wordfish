@@ -225,18 +225,38 @@ void Search::Worker::start_searching() {
     tt.new_search();
 
     const bool mctsEnabled = options.count("MCTS Enabled") ? int(options["MCTS Enabled"]) : false;
-    const bool useMcts = mctsEnabled && options.count("Search Strategy")
-                         && (options["Search Strategy"] == "MCTS"
-                             || options["Search Strategy"] == "Montecarlo");
+    const bool strategyRequestsMcts = options.count("Search Strategy")
+                                      && (options["Search Strategy"] == "MCTS"
+                                          || options["Search Strategy"] == "Montecarlo");
+    const bool useMcts = strategyRequestsMcts || mctsEnabled;
 
-    if (rootMoves.empty())
+    auto ensure_root_moves = [&]() {
+        if (!rootMoves.empty())
+            return true;
+
+        for (const Move m : MoveList<LEGAL>(rootPos))
+            rootMoves.emplace_back(m);
+
+        return !rootMoves.empty();
+    };
+
+    if (useMcts)
+    {
+        if (!ensure_root_moves())
+        {
+            rootMoves.emplace_back(Move::none());
+            main_manager()->updates.onUpdateNoMoves(
+              {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
+        }
+        else
+            run_monte_carlo();
+    }
+    else if (rootMoves.empty())
     {
         rootMoves.emplace_back(Move::none());
         main_manager()->updates.onUpdateNoMoves(
           {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
     }
-    else if (useMcts)
-        run_monte_carlo();
     else
     {
         threads.start_searching();  // start non-main threads
