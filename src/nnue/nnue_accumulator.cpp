@@ -488,7 +488,7 @@ void double_inc_update(const FeatureTransformer<TransformedFeatureDimensions>& f
     assert(!middle_state.acc<TransformedFeatureDimensions>().computed[Perspective]);
     assert(!target_state.acc<TransformedFeatureDimensions>().computed[Perspective]);
 
-    PSQFeatureSet::IndexList removed, added;
+    PSQFeatureSet::IndexList removed{}, added{};
     PSQFeatureSet::append_changed_indices<Perspective>(ksq, middle_state.diff, removed, added);
     // you can't capture a piece that was just involved in castling since the rook ends up
     // in a square that the king passed
@@ -536,7 +536,7 @@ void double_inc_update(const FeatureTransformer<TransformedFeatureDimensions>& f
 
     fusedData.dp2removed = dp2.remove_sq;
 
-    ThreatFeatureSet::IndexList removed, added;
+    ThreatFeatureSet::IndexList removed{}, added{};
     ThreatFeatureSet::append_changed_indices<Perspective>(ksq, middle_state.diff, removed, added,
                                                           &fusedData, true);
     ThreatFeatureSet::append_changed_indices<Perspective>(ksq, target_state.diff, removed, added,
@@ -569,7 +569,7 @@ void update_accumulator_incremental(
     // updates with more added/removed features than MaxActiveDimensions.
     // In this case, the maximum size of both feature addition and removal
     // is 2, since we are incrementally updating one move at a time.
-    typename FeatureSet::IndexList removed, added;
+    typename FeatureSet::IndexList removed{}, added{};
     if constexpr (Forward)
         FeatureSet::template append_changed_indices<Perspective>(ksq, target_state.diff, removed,
                                                                  added);
@@ -670,7 +670,7 @@ void update_accumulator_refresh_cache(const FeatureTransformer<Dimensions>& feat
 
     const Square             ksq   = pos.square<KING>(Perspective);
     auto&                    entry = cache[ksq][Perspective];
-    PSQFeatureSet::IndexList removed, added;
+    PSQFeatureSet::IndexList removed{}, added{};
 
     const Bitboard changedBB = get_changed_pieces(entry.pieces, pos.piece_array().data());
     Bitboard       removedBB = changedBB & entry.pieceBB;
