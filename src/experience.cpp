@@ -714,6 +714,8 @@ void on_search_complete(const Position& pos,
     Entry* existing = find_entry(entries, move);
     if (existing)
     {
+        ++stats.duplicateMoves;
+
         existing->score = bestScore;
         existing->eval  = evalScore;
         existing->depth = std::max(existing->depth, searchedDepth);
