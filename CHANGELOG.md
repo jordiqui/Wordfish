@@ -8,6 +8,7 @@
 - Tightened king-safety heuristics for open files, rook lifts, and dark-square weaknesses.
 - Reduced aggressive pruning in sharp positions and added verification search for large evaluation swings.
 - Rewarded connected rooks while penalizing premature flank pawn storms in the handcrafted evaluation.
+- Updated the main NNUE network to `nn-2962dca31855.nnue` from Stockfish dev 20251130.
 
 ## [3.50]
 ### Changed
