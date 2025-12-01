@@ -39,9 +39,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-        EXE = Wordfish-3.50.exe
+        EXE = Wordfish-3.60-021225.exe
 else
-        EXE = Wordfish-3.50
+        EXE = Wordfish-3.60-021225
 endif
 
 ### Installation dir definitions
