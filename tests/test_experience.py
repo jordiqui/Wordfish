@@ -151,6 +151,19 @@ class ExperienceFileTests(unittest.TestCase):
         entries = self._dump_entries()
         self.assertEqual(entries, [(self.KEY, self.MOVE, self.SCORE, self.DEPTH, self.COUNT)])
 
+    def test_duplicate_entries_accumulate_visit_count(self):
+        header = "# Wordfish experience format v1\n".encode()
+        first  = f"{self.KEY} {self.MOVE} {self.SCORE} {self.SCORE} {self.DEPTH} 2\n".encode()
+        second = f"{self.KEY} {self.MOVE} {self.SCORE} {self.SCORE} {self.DEPTH} 5\n".encode()
+
+        exp_path = self._write_experience_file(".exp", lambda handle: handle.write(header + first + second))
+        self.addCleanup(lambda: os.remove(exp_path))
+
+        self._load_experience(exp_path)
+
+        entries = self._dump_entries()
+        self.assertEqual(entries, [(self.KEY, self.MOVE, self.SCORE, self.DEPTH, 7)])
+
 
 if __name__ == "__main__":
     unittest.main()

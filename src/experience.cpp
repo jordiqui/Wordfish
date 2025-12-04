@@ -175,7 +175,11 @@ void merge_entry_for_load(std::uint64_t key, const Entry& entry, Stats& loadStat
             existing->eval  = entry.eval;
         }
 
-        existing->visits = std::max(existing->visits, entry.visits);
+        const auto combinedVisits = static_cast<std::uint32_t>(existing->visits)
+                                   + static_cast<std::uint32_t>(entry.visits);
+
+        existing->visits = static_cast<std::uint16_t>(std::min<std::uint32_t>(
+          combinedVisits, std::numeric_limits<std::uint16_t>::max()));
     }
     else
     {
