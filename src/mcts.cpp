@@ -104,13 +104,13 @@ Budget compute_budget(const OptionsMap& options,
 
     if (limits.movetime)
     {
-        TimePoint available = std::max(TimePoint(0), limits.movetime - overhead);
+        budget.useTime = true;
 
-        if (available)
-        {
-            budget.useTime = true;
-            budget.endTime = start + available;
-        }
+        // Honor Move Overhead even under fixed time controls. If the overhead
+        // exceeds movetime we still arm the timer so the search exits
+        // immediately instead of running a full batch of simulations.
+        const TimePoint available = std::max(TimePoint(0), limits.movetime - overhead);
+        budget.endTime            = start + available;
     }
     else if (limits.time[rootColor])
     {
