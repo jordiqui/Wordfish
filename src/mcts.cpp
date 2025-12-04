@@ -232,7 +232,7 @@ Result analyze(Position&                 rootPos,
 
     Budget budget = compute_budget(options, limits, rootColor);
 
-    const int rolloutDepth = std::clamp(rolloutDepthHint, 4, 64);
+    const int rolloutDepth = std::clamp(rolloutDepthHint, 4, 128);
 
     Position& pos = rootPos;
 
