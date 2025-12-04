@@ -49,6 +49,26 @@ Use `make help` for platform-specific targets. Bundled binaries embed default NN
 3. Provide a position via `position` (FEN or move list) and start calculation with `go` plus the desired limits.
 4. During analysis, monitor `info` strings for depth, score, nodes per second, and—when enabled—win/draw/loss figures.
 
+## Suggested MCTS evaluation profile
+
+For Monte Carlo analysis sessions, start from the following balanced configuration and adjust to taste:
+
+- `Search Strategy`: `MCTS`
+- `MCTS Rollout Depth`: `20` (keeps playouts tactical without drifting too far from the frontier)
+- `MCTS Simulations`: `8000` (set to `0` to let the clock dictate stopping conditions)
+- `MCTS Explore`: `40` (slightly more exploratory than the default for broader coverage)
+- `Move Overhead`: `30` (ms buffer on fixed `movetime` runs to avoid time forfeits)
+
+Example commands:
+
+```bash
+setoption name Search Strategy value MCTS
+setoption name MCTS Rollout Depth value 20
+setoption name MCTS Simulations value 8000
+setoption name MCTS Explore value 40
+setoption name Move Overhead value 30
+```
+
 ## Validation and release discipline
 
 Candidate changes are measured with Sequential Probability Ratio Tests (SPRT) on FastChess at short (`10s + 0.1`) and longer (`60s + 0.1`) controls. Patches that return `h = 1` are merged with their recorded Elo gains so that the performance history remains auditable.
