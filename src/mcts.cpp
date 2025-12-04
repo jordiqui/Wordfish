@@ -142,6 +142,7 @@ std::optional<double> rollout(Position& pos,
                               int depthOffset,
                               int maxDepth,
                               const Budget& budget,
+                              std::uint64_t& nodesVisited,
                               const std::function<bool()>& stopRequested) {
     std::vector<Move> played;
     played.reserve(maxDepth);
@@ -182,6 +183,7 @@ std::optional<double> rollout(Position& pos,
         const Move   move  = *(legal.begin() + index);
         StateInfo& st   = stateStack[depthOffset + depth];
         pos.do_move(move, st);
+        ++nodesVisited;
         played.push_back(move);
     }
 
@@ -248,8 +250,9 @@ Result analyze(Position&                 rootPos,
     const double explorationBase = 1.41421356237;
     const double exploration     = (std::max(1, exploreSetting) / 35.0) * explorationBase;
 
-    std::uint64_t iterations = 0;
-    const TimePoint start    = now();
+    std::uint64_t iterations   = 0;
+    std::uint64_t nodesVisited = 0;
+    const TimePoint start      = now();
 
     while (!root.terminal)
     {
@@ -286,6 +289,7 @@ Result analyze(Position&                 rootPos,
 
                 StateInfo& st = stateStack[depth];
                 current.do_move(move, st);
+                ++nodesVisited;
                 moveStack.push_back(move);
                 depth++;
 
@@ -331,6 +335,7 @@ Result analyze(Position&                 rootPos,
 
             StateInfo& st = stateStack[depth];
             current.do_move(bestChild->move, st);
+            ++nodesVisited;
             moveStack.push_back(bestChild->move);
             depth++;
             nodeStack.push_back(bestChild);
@@ -344,8 +349,14 @@ Result analyze(Position&                 rootPos,
             evaluation = value_to_double(leaf->terminalValue);
         else
         {
-            std::optional<double> rolloutEval = rollout(current, rng, stateStack, depth,
-                                                        rolloutDepth - depth, budget, stopRequested);
+            std::optional<double> rolloutEval = rollout(current,
+                                                        rng,
+                                                        stateStack,
+                                                        depth,
+                                                        rolloutDepth - depth,
+                                                        budget,
+                                                        nodesVisited,
+                                                        stopRequested);
             if (!rolloutEval)
                 aborted = true;
             else
@@ -373,8 +384,9 @@ Result analyze(Position&                 rootPos,
         ++iterations;
     }
 
-    result.simulations = iterations;
-    result.elapsedMs   = now() - start;
+    result.simulations  = iterations;
+    result.nodesVisited = nodesVisited;
+    result.elapsedMs    = now() - start;
 
     if (root.visits)
     {

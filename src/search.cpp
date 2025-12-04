@@ -335,7 +335,8 @@ void Search::Worker::run_monte_carlo() {
     const auto result =
       MCTS::analyze(rootPos, rootPos.side_to_move(), options, limits, stopRequested, depthHint);
 
-    nodes.store(result.simulations, std::memory_order_relaxed);
+    nodes.store(result.nodesVisited ? result.nodesVisited : result.simulations,
+               std::memory_order_relaxed);
     tbHits.store(0, std::memory_order_relaxed);
 
     completedDepth = rootDepth = Depth(depthHint);
@@ -407,8 +408,9 @@ void Search::Worker::run_monte_carlo() {
     pvIdx  = 0;
     pvLast = rootMoves.size();
 
-    const TimePoint elapsed = std::max<TimePoint>(TimePoint(1), result.elapsedMs);
-    const uint64_t  nps     = result.elapsedMs ? (result.simulations * 1000 / elapsed) : 0;
+    const TimePoint elapsed   = std::max<TimePoint>(TimePoint(1), result.elapsedMs);
+    const uint64_t  nodeCount = result.nodesVisited ? result.nodesVisited : result.simulations;
+    const uint64_t  nps       = result.elapsedMs ? (nodeCount * 1000 / elapsed) : 0;
     const bool      showWdl = bool(options["UCI_ShowWDL"]);
 
     const size_t multiPV = std::min<size_t>(options["MultiPV"], rootMoves.size());
@@ -439,7 +441,7 @@ void Search::Worker::run_monte_carlo() {
         info.wdl      = wdl;
         info.bound    = "";
         info.timeMs   = elapsed;
-        info.nodes    = result.simulations;
+        info.nodes    = result.nodesVisited ? result.nodesVisited : result.simulations;
         info.nps      = nps;
         info.tbHits   = 0;
         info.pv       = pv;

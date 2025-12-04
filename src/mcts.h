@@ -31,6 +31,7 @@ struct Result {
     Value                         evaluation;
     std::vector<MoveStats>        moveStats;
     std::uint64_t                 simulations;
+    std::uint64_t                 nodesVisited;
     TimePoint                     elapsedMs;
 };
 
