@@ -1,6 +1,6 @@
 # Wordfish
 
-![Minimal Wordfish emblem](assets/wordfish-logo.svg)
+<img src="assets/wordfish-logo.svg" alt="Minimal Wordfish emblem" style="max-width: 240px; height: auto;">
 
 ## Overview
 
@@ -26,7 +26,12 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
 
 - **Session control**: `uci` announces identity and options; `isready` synchronises threads; `ucinewgame` clears experience buffers; `stop` halts search; `ponderhit` resumes after pondering; `quit` exits cleanly.
 - **Core options**: `Hash` (MB for the transposition table), `Clear Hash` (button), `Ponder`, `MultiPV`, `Skill Level`, `Move Overhead`, `Minimum Thinking Time`, `Slow Mover`, `nodestime`, `UCI_Chess960`, `UCI_LimitStrength` and `UCI_Elo`, `Contempt`/`Contemp`, and `King Safety`.
-- **Monte Carlo tuning**: `Search Strategy` accepts `AlphaBeta`, `MCTS`, or the alias `Montecarlo`. Monte Carlo mode exposes `MCTS Rollout Depth`, `MCTS Simulations` (use `0` to rely solely on time controls), and `MCTS Explore` (explore–exploit balance). When a clock-based limit is provided (`wtime`, `btime`, or `movetime`), the MCTS driver now prioritises that timer over the default simulation cap unless `nodes` is explicitly requested.
+- **Monte Carlo tuning**: `Search Strategy` accepts `AlphaBeta`, `MCTS`, or the alias `Montecarlo`. When a clock-based limit is provided (`wtime`, `btime`, or `movetime`), the MCTS driver prioritises that timer over the default simulation cap unless `nodes` is explicitly requested.
+- **MCTS configuration**: Enable the MCTS driver with `MCTS Enabled` or by selecting it via `Search Strategy`. Fine-tune behaviour with:
+  - `MCTS Rollout Depth`: Maximum plies explored during each rollout (default 12, range 4–128).
+  - `MCTS Simulations`: Target number of playouts; set to `0` to run until search limits expire (default 5000, up to 1,000,000).
+  - `MCTS Explore`: Exploration constant that balances exploitation of strong moves against broader sampling (default 35, range 1–200).
+  - Existing time controls (`wtime`, `btime`, `movetime`) and node limits still apply when provided.
 - **Experience controls**: `Experience Enabled`, `Experience File`, `Experience Readonly`, `Experience Book`, `Experience Book Width`, `Experience Book Eval Importance`, `Experience Book Min Depth`, `Experience Book Max Moves`, `Experience Status`, and `Experience Sync`.
 - **Neural networks**: `EvalFile` and `EvalFileSmall` accept external NNUE files and reload replicas on all threads.
 - **Tablebases**: `SyzygyPath`, `SyzygyProbeDepth`, `Syzygy50MoveRule`, and `SyzygyProbeLimit` configure probing depth, scope, and rule enforcement.
