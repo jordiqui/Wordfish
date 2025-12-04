@@ -106,6 +106,14 @@ Budget compute_budget(const OptionsMap& options,
     {
         budget.useTime = true;
 
+        // When the caller sets a time control we let the timer dictate the
+        // search horizon instead of the default simulation cap unless nodes
+        // were explicitly requested. This keeps MCTS responsive for long
+        // analysis sessions without requiring manual tuning of
+        // "MCTS Simulations".
+        if (!limits.nodes)
+            budget.maxIterations = 0;
+
         // Honor Move Overhead even under fixed time controls. If the overhead
         // exceeds movetime we still arm the timer so the search exits
         // immediately instead of running a full batch of simulations.
@@ -119,6 +127,8 @@ Budget compute_budget(const OptionsMap& options,
         if (available)
         {
             budget.useTime = true;
+            if (!limits.nodes)
+                budget.maxIterations = 0;
             budget.endTime = start + available;
         }
     }
