@@ -372,6 +372,10 @@ void Search::Worker::run_monte_carlo() {
         rm.pv.assign(1, move);
     }
 
+    // Bring the highest scoring moves to the front so the reported best move
+    // matches the MCTS evaluation instead of the generator's default order.
+    std::stable_sort(rootMoves.begin(), rootMoves.end());
+
     if (!result.principalVariation.empty() && result.principalVariation[0].is_ok())
     {
         auto bestIt = std::find_if(rootMoves.begin(), rootMoves.end(), [&](const RootMove& rm) {
