@@ -37,6 +37,7 @@
 #include "nnue/nnue_misc.h"
 #include "numa.h"
 #include "perft.h"
+#include "polybook.h"
 #include "position.h"
 #include "search.h"
 #include "shm.h"
@@ -153,6 +154,11 @@ Engine::Engine(std::optional<std::string> path) :
         return Experience::update_settings(options);
     };
 
+    const auto updatePolyBook = [this](const Option&) {
+        PolyBook::init(options);
+        return std::nullopt;
+    };
+
     options.add("Experience Enabled", Option(true, updateExperience));
     options.add("Experience File", Option("Wordfish.exp", updateExperience));
     options.add("Experience Readonly", Option(false, updateExperience));
@@ -168,6 +174,9 @@ Engine::Engine(std::optional<std::string> path) :
         Experience::flush();
         return Experience::status_summary();
     }));
+
+    options.add("Book1 File", Option("", updatePolyBook));
+    options.add("Book2 File", Option("", updatePolyBook));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {

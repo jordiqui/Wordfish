@@ -35,6 +35,7 @@
 #include "memory.h"
 #include "movegen.h"
 #include "position.h"
+#include "polybook.h"
 #include "score.h"
 #include "search.h"
 #include "types.h"
@@ -153,6 +154,24 @@ void UCIEngine::loop() {
 
         // Add custom non-UCI commands, mainly for debugging purposes.
         // These commands must not be used during a search!
+        else if (token == "book")
+        {
+            std::string bookCommand;
+
+            if (is >> bookCommand && bookCommand == "key")
+                sync_cout << "info string polyglot key "
+                          << polybook[0].current_key(engine.access_position()) << sync_endl;
+            else
+            {
+                Move bookMove = polybook[0].probe(engine.access_position(), true);
+
+                if (bookMove == Move::none())
+                    sync_cout << "nobook" << sync_endl;
+                else
+                    sync_cout << "bestmove "
+                              << move(bookMove, engine.get_options()["UCI_Chess960"]) << sync_endl;
+            }
+        }
         else if (token == "flip")
             engine.flip();
         else if (token == "bench")

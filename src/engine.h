@@ -106,6 +106,7 @@ class Engine {
     std::string                            numa_config_information_as_string() const;
     std::string                            thread_allocation_information_as_string() const;
     std::string                            thread_binding_information_as_string() const;
+    Position&                              access_position() { return pos; }
 
    private:
     const std::string binaryDirectory;
