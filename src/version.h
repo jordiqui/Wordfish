@@ -4,7 +4,7 @@
 #include <string_view>
 
 #ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish-3.60-021225"
+    #define ENGINE_NAME "Wordfish-3.60-181225"
 #endif
 
 #ifndef ENGINE_BUILD_DATE
@@ -45,4 +45,3 @@ inline std::string string() {
 }
 
 }  // namespace Stockfish::Version
-

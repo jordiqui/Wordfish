@@ -34,13 +34,20 @@
 #include <string_view>
 
 #include "types.h"
+#include "version.h"
 
 namespace Stockfish {
 
 namespace {
 
 // Engine branding information.
-constexpr std::string_view engine_name = "Wordfish-3.60-021225";
+#if defined(ENGINE_ARCH_SUFFIX)
+constexpr std::string_view engine_arch_suffix = ENGINE_ARCH_SUFFIX;
+#else
+constexpr std::string_view engine_arch_suffix = "";
+#endif
+
+constexpr std::string_view engine_name = Version::Name;
 constexpr std::string_view engine_author_name =
   "Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
 constexpr std::string_view engine_author_prefix = "Developed by ";
@@ -118,14 +125,21 @@ class Logger {
 
 // Returns the branding string that identifies the current Wordfish build.
 std::string engine_version_info() {
-    return std::string(engine_name);
+    std::string version(engine_name);
+
+    if (!engine_arch_suffix.empty() && version.find(engine_arch_suffix) == std::string::npos)
+        version.append(engine_arch_suffix);
+
+    return version;
 }
 
 std::string engine_info(bool to_uci) {
-    if (to_uci)
-        return engine_version_info();
+    const std::string version = engine_version_info();
 
-    return std::string(engine_name) + "\n" + std::string(engine_author_prefix) +
+    if (to_uci)
+        return version;
+
+    return version + "\n" + std::string(engine_author_prefix) +
            std::string(engine_author_name);
 }
 
