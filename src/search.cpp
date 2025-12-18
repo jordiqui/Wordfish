@@ -2164,8 +2164,15 @@ void SearchManager::check_time(Search::Worker& worker) {
     const TimePoint timeToMoveTime  = remaining_or_max(worker.limits.movetime);
     const TimePoint timeToMaxBudget = worker.limits.use_time_management() ? remaining_or_max(tm.maximum())
                                                                           : std::numeric_limits<TimePoint>::max();
-    const TimePoint timeToPanic     = worker.limits.use_time_management() ? remaining_or_max(tm.panic())
-                                                                          : std::numeric_limits<TimePoint>::max();
+
+    TimePoint panicLimit = TimePoint(0);
+    if (worker.limits.use_time_management() && tm.panic())
+        panicLimit = std::max(TimePoint(0), tm.available_time() - tm.panic_reserve());
+
+    const TimePoint timeToPanic =
+      panicLimit ? std::max<TimePoint>(TimePoint(0), panicLimit - elapsed)
+                 : std::numeric_limits<TimePoint>::max();
+
     const TimePoint nearestDeadline = std::min({timeToMoveTime, timeToMaxBudget, timeToPanic});
     constexpr TimePoint urgentWindow = 50;
 
@@ -2203,7 +2210,6 @@ void SearchManager::check_time(Search::Worker& worker) {
     if (ponder)
         return;
 
-codex/add-panic-mode-for-low-time-management
     if (worker.limits.use_time_management() && tm.panic())
     {
         TimePoint remaining = std::max(TimePoint(0), tm.available_time() - elapsed);
@@ -2212,30 +2218,19 @@ codex/add-panic-mode-for-low-time-management
             worker.threads.stop = worker.threads.abortedSearch = true;
     }
 
-    if (
-      // Later we rely on the fact that we can at least use the mainthread previous
-      // root-search score and PV in a multithreaded environment to prove mated-in scores.
-      worker.completedDepth >= 1
-      && ((worker.limits.use_time_management() && (elapsed > tm.maximum() || stopOnPonderhit))
-          || (worker.limits.movetime && elapsed >= worker.limits.movetime)
-          || (worker.limits.nodes && worker.threads.nodes_searched() >= worker.limits.nodes)))
-=======
     const bool timeLimit =
       worker.limits.use_time_management() && (elapsed > tm.maximum() || stopOnPonderhit);
     const bool moveTimeLimit = worker.limits.movetime && elapsed >= worker.limits.movetime;
     const bool nodeLimit     =
       worker.limits.nodes && worker.threads.nodes_searched() >= worker.limits.nodes;
-    const bool panicTime =
-      worker.limits.use_time_management() && elapsed >= tm.panic() && worker.completedDepth == 0;
 
     // Later we rely on the fact that we can at least use the mainthread previous
     // root-search score and PV in a multithreaded environment to prove mated-in scores.
     const bool completedIteration = worker.completedDepth >= 1;
     const bool exceededTimeBudget = timeLimit || moveTimeLimit || nodeLimit;
-    const bool exceededHardBudget = moveTimeLimit || nodeLimit || panicTime;
+    const bool exceededHardBudget = moveTimeLimit || nodeLimit;
 
     if ((completedIteration && exceededTimeBudget) || (!completedIteration && exceededHardBudget))
- main
         worker.threads.stop = worker.threads.abortedSearch = true;
 }
 
