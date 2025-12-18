@@ -2162,13 +2162,21 @@ void SearchManager::check_time(Search::Worker& worker) {
     if (ponder)
         return;
 
-    if (
-      // Later we rely on the fact that we can at least use the mainthread previous
-      // root-search score and PV in a multithreaded environment to prove mated-in scores.
-      worker.completedDepth >= 1
-      && ((worker.limits.use_time_management() && (elapsed > tm.maximum() || stopOnPonderhit))
-          || (worker.limits.movetime && elapsed >= worker.limits.movetime)
-          || (worker.limits.nodes && worker.threads.nodes_searched() >= worker.limits.nodes)))
+    const bool timeLimit =
+      worker.limits.use_time_management() && (elapsed > tm.maximum() || stopOnPonderhit);
+    const bool moveTimeLimit = worker.limits.movetime && elapsed >= worker.limits.movetime;
+    const bool nodeLimit     =
+      worker.limits.nodes && worker.threads.nodes_searched() >= worker.limits.nodes;
+    const bool panicTime =
+      worker.limits.use_time_management() && elapsed >= tm.panic() && worker.completedDepth == 0;
+
+    // Later we rely on the fact that we can at least use the mainthread previous
+    // root-search score and PV in a multithreaded environment to prove mated-in scores.
+    const bool completedIteration = worker.completedDepth >= 1;
+    const bool exceededTimeBudget = timeLimit || moveTimeLimit || nodeLimit;
+    const bool exceededHardBudget = moveTimeLimit || nodeLimit || panicTime;
+
+    if ((completedIteration && exceededTimeBudget) || (!completedIteration && exceededHardBudget))
         worker.threads.stop = worker.threads.abortedSearch = true;
 }
 
