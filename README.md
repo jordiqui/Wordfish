@@ -25,7 +25,8 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
 ## UCI surface and principal options
 
 - **Session control**: `uci` announces identity and options; `isready` synchronises threads; `ucinewgame` clears experience buffers; `stop` halts search; `ponderhit` resumes after pondering; `quit` exits cleanly.
-- **Core options**: `Hash` (MB for the transposition table), `Clear Hash` (button), `Ponder`, `MultiPV`, `Skill Level`, `Move Overhead`, `Minimum Thinking Time`, `Slow Mover`, `nodestime`, `UCI_Chess960`, `UCI_LimitStrength` and `UCI_Elo`, `Contempt`/`Contemp`, and `King Safety`.
+- **Core options**: `Hash` (MB for the transposition table), `Clear Hash` (button), `Ponder`, `MultiPV`, `Skill Level`, `Move Overhead`, `Minimum Thinking Time`, `Panic Time Buffer`, `Slow Mover`, `nodestime`, `UCI_Chess960`, `UCI_LimitStrength` and `UCI_Elo`, `Contempt`/`Contemp`, and `King Safety`.
+- **Short-clock safety**: when the active clock drops under a second, the engine enters a panic regime that boosts `Move Overhead`, clamps thinking time to a fraction of the remaining clock, and caps it by `Panic Time Buffer` (default 200 ms). Raising `Minimum Thinking Time` or `Panic Time Buffer` increases the cushion for sudden disconnections or lag.
 - **Monte Carlo tuning**: `Search Strategy` accepts `AlphaBeta`, `MCTS`, or the alias `Montecarlo`. When a clock-based limit is provided (`wtime`, `btime`, or `movetime`), the MCTS driver prioritises that timer over the default simulation cap unless `nodes` is explicitly requested.
 - **MCTS configuration**: Enable the MCTS driver with `MCTS Enabled` or by selecting it via `Search Strategy`. Fine-tune behaviour with:
   - `MCTS Rollout Depth`: Maximum plies explored during each rollout (default 12, range 4–128).

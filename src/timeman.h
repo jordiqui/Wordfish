@@ -44,6 +44,10 @@ class TimeManagement {
 
     TimePoint optimum() const;
     TimePoint maximum() const;
+    TimePoint available_time() const;
+    TimePoint panic_buffer() const;
+    TimePoint panic_reserve() const;
+    bool      panic() const;
     template<typename FUNC>
     TimePoint elapsed(FUNC nodes) const {
         return useNodesTime ? TimePoint(nodes()) : elapsed_time();
@@ -57,9 +61,13 @@ class TimeManagement {
     TimePoint startTime;
     TimePoint optimumTime;
     TimePoint maximumTime;
+    TimePoint availableTime   = 0;
+    TimePoint panicTimeBuffer = 0;
+    TimePoint panicReserve    = 0;
 
     std::int64_t availableNodes = -1;     // When in 'nodes as time' mode
     bool         useNodesTime   = false;  // True if we are in 'nodes as time' mode
+    bool         panicMode      = false;
 };
 
 }  // namespace Stockfish
