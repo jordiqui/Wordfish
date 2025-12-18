@@ -21,6 +21,10 @@
 #include "movegen.h"
 #include "thread.h"
 #include <iostream>
+#include <algorithm>
+#include <cstdio>
+#include <limits>
+#include <vector>
 #include "misc.h"
 #include <sys/timeb.h>
 #include <cmath>
@@ -298,6 +302,28 @@ void byteswap_polyhash(PolyHash* ph) {
 }
 }
 
+uint16_t PolyBook::sf_move_to_pg_move(const Position& pos, Move move) {
+    if (move == Move::none())
+        return 0;
+
+    for (const auto& legal : MoveList<LEGAL>(pos))
+    {
+        if (legal == move)
+        {
+            uint16_t from      = move.from_sq();
+            uint16_t to        = move.to_sq();
+            uint16_t promotion = 0;
+
+            if (move.type_of() == PROMOTION)
+                promotion = static_cast<uint16_t>(move.promotion_type() - 1);
+
+            return static_cast<uint16_t>((promotion << 12) | (from << 6) | to);
+        }
+    }
+
+    return 0;
+}
+
 PolyBook::PolyBook() {
     keycount = 0;
     polyhash = NULL;
@@ -318,6 +344,49 @@ PolyBook::~PolyBook() {
 void PolyBook::init(const OptionsMap& options) {
     polybook[0].init(options["Book1 File"]);
     polybook[1].init(options["Book2 File"]);
+}
+
+bool PolyBook::generate(const std::string& bookfile, const Position& pos,
+                        const std::vector<Move>& moves, uint16_t weight, uint32_t learn) {
+    if (bookfile.empty() || moves.empty())
+        return false;
+
+    std::vector<PolyHash> entries;
+    entries.reserve(moves.size());
+
+    Key key = polyglot_key(pos);
+
+    uint16_t clampedWeight = static_cast<uint16_t>(
+      std::clamp<uint32_t>(weight, 1u, static_cast<uint32_t>(std::numeric_limits<uint16_t>::max())));
+
+    for (Move move : moves)
+    {
+        uint16_t pgMove = sf_move_to_pg_move(pos, move);
+        if (!pgMove)
+            return false;
+
+        entries.push_back({key, pgMove, clampedWeight, learn});
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const PolyHash& lhs, const PolyHash& rhs) {
+        if (lhs.key != rhs.key)
+            return lhs.key < rhs.key;
+        if (lhs.weight != rhs.weight)
+            return lhs.weight > rhs.weight;
+        return lhs.move < rhs.move;
+    });
+
+    for (auto& entry : entries)
+        byteswap_polyhash(&entry);
+
+    FILE* fpt = fopen(bookfile.c_str(), "wb");
+    if (!fpt)
+        return false;
+
+    size_t written = fwrite(entries.data(), sizeof(PolyHash), entries.size(), fpt);
+    fclose(fpt);
+
+    return written == entries.size();
 }
 
 void PolyBook::init(const std::string& bookfile) {

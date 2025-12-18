@@ -221,6 +221,25 @@ class PolyglotBookTests(EngineTestCase):
         self.engine.send_command("book")
         self.engine.starts_with("bestmove e2e4")
 
+    def test_polyglot_book_generated_by_engine(self):
+        self.engine.send_command("position startpos")
+
+        with tempfile.NamedTemporaryFile("wb", suffix=".bin", delete=False) as handle:
+            book_path = handle.name
+
+        self.addCleanup(lambda: os.path.exists(book_path) and os.remove(book_path))
+
+        os.remove(book_path)
+        self.engine.send_command(f"book generate {book_path} e2e4")
+        self.engine.starts_with(f"info string Generated polyglot book at {book_path}")
+
+        info_lines = self._load_book(book_path)
+        self.assertTrue(any(f"Book loaded: {book_path}" in line for line in info_lines))
+
+        self.engine.send_command("position startpos")
+        self.engine.send_command("book")
+        self.engine.starts_with("bestmove e2e4")
+
 
 if __name__ == "__main__":
     unittest.main()
