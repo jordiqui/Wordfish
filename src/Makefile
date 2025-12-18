@@ -20,7 +20,8 @@
 ### ==========================================================================
 
 ### Establish the operating system name
-KERNEL := $(shell uname -s)
+KERNEL  := $(shell uname -s)
+MACHINE := $(shell uname -m)
 ifeq ($(KERNEL),Linux)
 	OS := $(shell uname -o)
 endif
@@ -119,7 +120,11 @@ VPATH = syzygy:nnue:nnue/features
 ### 2.1. General and architecture defaults
 
 ifeq ($(ARCH),)
-   ARCH = native
+	ifneq (,$(filter x86_64,$(MACHINE)))
+	   ARCH = x86-64-sse41-popcnt
+	else
+	   ARCH = native
+	endif
 endif
 
 ifeq ($(ARCH), native)
