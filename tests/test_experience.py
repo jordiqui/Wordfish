@@ -166,6 +166,18 @@ class ExperienceFileTests(EngineTestCase):
         entries = self._dump_entries()
         self.assertEqual(entries, [(self.KEY, self.MOVE, self.SCORE, self.DEPTH, 7)])
 
+    def test_text_experience_without_visits_defaults_to_single_visit(self):
+        header = "# Wordfish experience format v1\n".encode()
+        entry  = f"{self.KEY} {self.MOVE} {self.SCORE} {self.SCORE} {self.DEPTH}\n".encode()
+
+        exp_path = self._write_experience_file(".exp", lambda handle: handle.write(header + entry))
+        self.addCleanup(lambda: os.remove(exp_path))
+
+        self._load_experience(exp_path)
+
+        entries = self._dump_entries()
+        self.assertEqual(entries, [(self.KEY, self.MOVE, self.SCORE, self.DEPTH, 1)])
+
 
 class PolyglotBookTests(EngineTestCase):
     STARTPOS_MOVE = (12 << 6) + 28  # e2e4 in Polyglot encoding
