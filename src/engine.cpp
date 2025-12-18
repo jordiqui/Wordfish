@@ -175,8 +175,19 @@ Engine::Engine(std::optional<std::string> path) :
         return Experience::status_summary();
     }));
 
+    options.add("Book1", Option(false, updatePolyBook));
     options.add("Book1 File", Option("", updatePolyBook));
+    options.add("Book1 BestBookMove", Option(false, updatePolyBook));
+    options.add("Book1 Depth", Option(255, 1, 350, updatePolyBook));
+    options.add("Book1 Width", Option(1, 1, 10, updatePolyBook));
+
+    options.add("Book2", Option(false, updatePolyBook));
     options.add("Book2 File", Option("", updatePolyBook));
+    options.add("Book2 BestBookMove", Option(false, updatePolyBook));
+    options.add("Book2 Depth", Option(255, 1, 350, updatePolyBook));
+    options.add("Book2 Width", Option(1, 1, 10, updatePolyBook));
+
+    PolyBook::init(options);
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
@@ -204,6 +215,27 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
     verify_networks();
+
+    const bool searchRequested = limits.depth || limits.nodes || limits.mate || limits.infinite
+                                 || limits.ponderMode || !limits.searchmoves.empty();
+
+    if (!searchRequested)
+    {
+        Move bookMove = polybook[0].probe(pos);
+
+        if (bookMove == Move::none())
+            bookMove = polybook[1].probe(pos);
+
+        if (bookMove != Move::none())
+        {
+            const auto bestmove = UCIEngine::move(bookMove, options["UCI_Chess960"]);
+
+            if (updateContext.onBestmove)
+                updateContext.onBestmove(bestmove, std::string_view{});
+
+            return;
+        }
+    }
 
     threads.start_thinking(options, pos, states, limits);
 }

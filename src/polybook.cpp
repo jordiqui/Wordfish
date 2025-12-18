@@ -328,22 +328,69 @@ PolyBook::PolyBook() {
     keycount = 0;
     polyhash = NULL;
     enabled  = false;
+    active   = false;
+    bestOnly = false;
+    maxDepth = 255;
+    width    = 1;
+    bookPath = "";
 
     index_first = index_best = index_rand = 0;
     index_count = index_weight_count = 0;
 }
 
 PolyBook::~PolyBook() {
+    unload();
+}
+
+void PolyBook::unload() {
+    keycount = 0;
+
     if (polyhash != NULL)
     {
         free(polyhash);
         polyhash = nullptr;
     }
+
+    enabled = false;
 }
 
 void PolyBook::init(const OptionsMap& options) {
-    polybook[0].init(options["Book1 File"]);
-    polybook[1].init(options["Book2 File"]);
+    auto configure = [](PolyBook& slot,
+                        const std::string& file,
+                        bool               slotEnabled,
+                        bool               bestBookMove,
+                        int                depthLimit,
+                        int                widthSetting) {
+        const std::string previousPath = slot.bookPath;
+
+        slot.active   = slotEnabled;
+        slot.bestOnly = bestBookMove;
+        slot.maxDepth = depthLimit;
+        slot.width    = widthSetting;
+
+        if (file.empty())
+        {
+            slot.init(file);
+            return;
+        }
+
+        if (!slot.enabled || file != previousPath)
+            slot.init(file);
+    };
+
+    configure(polybook[0],
+              options["Book1 File"],
+              static_cast<bool>(options["Book1"]),
+              static_cast<bool>(options["Book1 BestBookMove"]),
+              int(options["Book1 Depth"]),
+              int(options["Book1 Width"]));
+
+    configure(polybook[1],
+              options["Book2 File"],
+              static_cast<bool>(options["Book2"]),
+              static_cast<bool>(options["Book2 BestBookMove"]),
+              int(options["Book2 Depth"]),
+              int(options["Book2 Width"]));
 }
 
 bool PolyBook::generate(const std::string& bookfile, const Position& pos,
@@ -391,20 +438,27 @@ bool PolyBook::generate(const std::string& bookfile, const Position& pos,
 
 void PolyBook::init(const std::string& bookfile) {
     enabled = false;
+
     if (bookfile.empty())
+    {
+        unload();
+        bookPath.clear();
         return;
+    }
+
+    if (bookfile == bookPath && polyhash != nullptr)
+    {
+        enabled = true;
+        return;
+    }
+
+    unload();
 
     FILE* fpt = fopen(bookfile.c_str(), "rb");
     if (fpt == NULL)
     {
         sync_cout << "info string Could not open " << bookfile << sync_endl;
         return;
-    }
-
-    if (polyhash)
-    {
-        free(polyhash);
-        polyhash = NULL;
     }
 
     fseek(fpt, 0L, SEEK_END);
@@ -415,7 +469,7 @@ void PolyBook::init(const std::string& bookfile) {
     polyhash = (PolyHash*) malloc(filesize);
     if (!polyhash)
     {
-        sync_cout << "info string Memory allocation failed" << bookfile << sync_endl;
+        sync_cout << "info string Memory allocation failed " << bookfile << sync_endl;
         return;
     }
 
@@ -424,8 +478,7 @@ void PolyBook::init(const std::string& bookfile) {
 
     if (readSize != filesize)
     {
-        free(polyhash);
-        polyhash = NULL;
+        unload();
 
         sync_cout << "info string Could not read " << bookfile << sync_endl;
         return;
@@ -436,11 +489,16 @@ void PolyBook::init(const std::string& bookfile) {
 
     sync_cout << "info string Book loaded: " << bookfile << sync_endl;
 
-    enabled = true;
+    bookPath = bookfile;
+    enabled  = true;
 }
 
-Move PolyBook::probe(Position& pos, bool bestBookMove, int width) {
-    if (!enabled)
+Move PolyBook::probe(Position& pos, bool forceEnabled) {
+    if (!enabled || (!active && !forceEnabled))
+        return Move::none();
+
+    const int depthLimit = std::max(1, maxDepth);
+    if (pos.game_ply() >= depthLimit)
         return Move::none();
 
     Key key = polyglot_key(pos);
@@ -450,7 +508,7 @@ Move PolyBook::probe(Position& pos, bool bestBookMove, int width) {
 
     Move m;
 
-    if (bestBookMove || n == 1)
+    if (bestOnly || n == 1)
     {
         int idx = index_best;
         m = pg_move_to_sf_move(pos, polyhash[idx].move);
@@ -458,22 +516,23 @@ Move PolyBook::probe(Position& pos, bool bestBookMove, int width) {
     else
     {
         // Smooth mapping: from width=1 (free/random) to width=10 (selective/strict)
-        double exponent = 1.0 + (std::clamp(width, 1, 10) - 1) * 0.5;
+        const int bookWidth = std::clamp(width, 1, 10);
+        double     exponent = 1.0 + (bookWidth - 1) * 0.5;
 
         std::vector<double> scores(n);
-        double total = 0.0;
+        double              total = 0.0;
 
         for (int i = 0; i < n; ++i)
         {
-            int w = polyhash[index_first + i].weight;
-            double s = std::pow(static_cast<double>(w), exponent);
-            scores[i] = s;
+            int w      = polyhash[index_first + i].weight;
+            double s   = std::pow(static_cast<double>(w), exponent);
+            scores[i]  = s;
             total += s;
         }
 
-        double r = (double)(rng.rand<uint32_t>() % 1000000) / 1000000.0 * total;
+        double r   = (double)(rng.rand<uint32_t>() % 1000000) / 1000000.0 * total;
         double sum = 0.0;
-        int idx = index_first;
+        int    idx = index_first;
 
         for (int i = 0; i < n; ++i)
         {
