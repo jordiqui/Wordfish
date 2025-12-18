@@ -295,10 +295,15 @@ bool load_text_format(std::istream& in, Stats& loadStats) {
         unsigned           rawMove;
         int                score, eval;
         int                depth;
-        unsigned           visits = 0;
+        unsigned           visits = 1;
 
-        if (!(iss >> key >> rawMove >> score >> eval >> depth >> visits))
+        if (!(iss >> key >> rawMove >> score >> eval >> depth))
             continue;
+
+        // Older text experience files did not include an explicit visit count.
+        // Treat missing values as a single visit so those files remain usable.
+        if (!(iss >> visits))
+            visits = 1;
 
         Entry entry;
         entry.bestMove = Move(static_cast<std::uint16_t>(rawMove));
