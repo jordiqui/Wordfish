@@ -158,9 +158,82 @@ void UCIEngine::loop() {
         {
             std::string bookCommand;
 
-            if (is >> bookCommand && bookCommand == "key")
+            if (!(is >> bookCommand))
+            {
+                Move bookMove = polybook[0].probe(engine.access_position(), true);
+
+                if (bookMove == Move::none())
+                    sync_cout << "nobook" << sync_endl;
+                else
+                    sync_cout << "bestmove "
+                              << move(bookMove, engine.get_options()["UCI_Chess960"]) << sync_endl;
+            }
+            else if (bookCommand == "key")
                 sync_cout << "info string polyglot key "
                           << polybook[0].current_key(engine.access_position()) << sync_endl;
+            else if (bookCommand == "generate")
+            {
+                std::string       bookPath;
+                std::vector<Move> moves;
+                std::string       tokenMove;
+                uint16_t          weight = 1;
+                uint32_t          learn  = 0;
+
+                if (!(is >> bookPath))
+                {
+                    sync_cout << "info string Usage: book generate <path> <moves...> [weight <n>] "
+                              << "[learn <n>]" << sync_endl;
+                    continue;
+                }
+
+                const Position& pos = engine.access_position();
+
+                while (is >> tokenMove)
+                {
+                    if (tokenMove == "weight")
+                    {
+                        int parsedWeight = 0;
+                        if (is >> parsedWeight)
+                            weight = static_cast<uint16_t>(std::max(parsedWeight, 0));
+                        continue;
+                    }
+
+                    if (tokenMove == "learn")
+                    {
+                        uint32_t parsedLearn = 0;
+                        if (is >> parsedLearn)
+                            learn = parsedLearn;
+                        continue;
+                    }
+
+                    Move parsedMove = to_move(pos, tokenMove);
+                    if (parsedMove == Move::none())
+                    {
+                        sync_cout << "info string Invalid book move: " << tokenMove << sync_endl;
+                        moves.clear();
+                        break;
+                    }
+
+                    moves.push_back(parsedMove);
+                }
+
+                if (moves.empty())
+                {
+                    sync_cout << "info string No valid moves provided for book generation"
+                              << sync_endl;
+                    continue;
+                }
+
+                if (PolyBook::generate(bookPath, pos, moves, weight, learn))
+                {
+                    polybook[0].init(bookPath);
+                    sync_cout << "info string Generated polyglot book at " << bookPath
+                              << sync_endl;
+                }
+                else
+                    sync_cout << "info string Failed to generate polyglot book at " << bookPath
+                              << sync_endl;
+            }
             else
             {
                 Move bookMove = polybook[0].probe(engine.access_position(), true);

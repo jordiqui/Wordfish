@@ -23,6 +23,7 @@
 #include "position.h"
 #include "string.h"
 #include "ucioption.h"
+#include <vector>
 
 namespace Stockfish {
 
@@ -41,11 +42,15 @@ class PolyBook {
     static void     init(const OptionsMap&);
     void            init(const std::string& bookfile);
     Stockfish::Key  current_key(const Stockfish::Position& pos);
+    static bool     generate(const std::string& bookfile, const Stockfish::Position& pos,
+                             const std::vector<Stockfish::Move>& moves, uint16_t weight = 1,
+                             uint32_t learn = 0);
     Stockfish::Move probe(Stockfish::Position& pos, bool bestBookMove, int width = 10);
 
    private:
-    Stockfish::Key  polyglot_key(const Stockfish::Position& pos);
-    Stockfish::Move pg_move_to_sf_move(const Stockfish::Position& pos, unsigned short pg_move);
+    static Stockfish::Key  polyglot_key(const Stockfish::Position& pos);
+    static uint16_t        sf_move_to_pg_move(const Stockfish::Position& pos, Stockfish::Move move);
+    Stockfish::Move        pg_move_to_sf_move(const Stockfish::Position& pos, unsigned short pg_move);
 
     int find_first_key(uint64_t key);
     int get_key_data();
