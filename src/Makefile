@@ -39,11 +39,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ifeq ($(target_windows),yes)
-        EXE = Wordfish-3.60-021225.exe
-else
-        EXE = Wordfish-3.60-021225
-endif
+ENGINE_BASE_NAME := Wordfish-3.60-181225
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -148,6 +144,25 @@ ifeq ($(ARCH), $(filter $(ARCH), \
 else
    SUPPORTED_ARCH=false
 endif
+
+ENGINE_ARCH_SUFFIX :=
+ifneq (,$(findstring avx2,$(ARCH)))
+	ENGINE_ARCH_SUFFIX := -avx2
+else ifneq (,$(findstring sse41-popcnt,$(ARCH)))
+	ENGINE_ARCH_SUFFIX := -sse41popcnt
+endif
+ENGINE_FULL_NAME := $(ENGINE_BASE_NAME)$(ENGINE_ARCH_SUFFIX)
+
+ifeq ($(target_windows),yes)
+	EXE = $(ENGINE_FULL_NAME).exe
+else
+	EXE = $(ENGINE_FULL_NAME)
+endif
+
+### Propagate branding details to the binary
+CXXFLAGS += -DENGINE_BASE_NAME=\"$(ENGINE_BASE_NAME)\"
+CXXFLAGS += -DENGINE_ARCH_SUFFIX=\"$(ENGINE_ARCH_SUFFIX)\"
+CXXFLAGS += -DENGINE_NAME=\"$(ENGINE_FULL_NAME)\"
 
 optimize = yes
 debug = no

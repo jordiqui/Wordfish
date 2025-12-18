@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 ### Added
+- Nothing yet.
+
+### Changed
+- Nothing yet.
+
+## [3.60-181225]
+### Added
 - Documented new training emphasis on king safety, rook coordination, and endgame supervision.
 
 ### Changed
@@ -9,6 +16,7 @@
 - Reduced aggressive pruning in sharp positions and added verification search for large evaluation swings.
 - Rewarded connected rooks while penalizing premature flank pawn storms in the handcrafted evaluation.
 - Updated the main NNUE network to `nn-2962dca31855.nnue` from Stockfish dev 20251130.
+- Rebranded the engine to "Wordfish-3.60-181225" and aligned executable and UCI identifiers to include architecture-aware suffixes (e.g., `-sse41popcnt` or `-avx2`) so GUI search listings reflect the compiled target.
 
 ## [3.50]
 ### Changed
