@@ -44,14 +44,10 @@ class TimeManagement {
 
     TimePoint optimum() const;
     TimePoint maximum() const;
- codex/add-panic-mode-for-low-time-management
     TimePoint available_time() const;
     TimePoint panic_buffer() const;
     TimePoint panic_reserve() const;
     bool      panic() const;
-=======
-    TimePoint panic() const;
- main
     template<typename FUNC>
     TimePoint elapsed(FUNC nodes) const {
         return useNodesTime ? TimePoint(nodes()) : elapsed_time();
@@ -65,13 +61,9 @@ class TimeManagement {
     TimePoint startTime;
     TimePoint optimumTime;
     TimePoint maximumTime;
-codex/add-panic-mode-for-low-time-management
     TimePoint availableTime   = 0;
     TimePoint panicTimeBuffer = 0;
     TimePoint panicReserve    = 0;
-=======
-    TimePoint panicTime;
- main
 
     std::int64_t availableNodes = -1;     // When in 'nodes as time' mode
     bool         useNodesTime   = false;  // True if we are in 'nodes as time' mode
