@@ -163,6 +163,9 @@ void UCIEngine::loop() {
                 Move bookMove = polybook[0].probe(engine.access_position(), true);
 
                 if (bookMove == Move::none())
+                    bookMove = polybook[1].probe(engine.access_position(), true);
+
+                if (bookMove == Move::none())
                     sync_cout << "nobook" << sync_endl;
                 else
                     sync_cout << "bestmove "
@@ -237,6 +240,9 @@ void UCIEngine::loop() {
             else
             {
                 Move bookMove = polybook[0].probe(engine.access_position(), true);
+
+                if (bookMove == Move::none())
+                    bookMove = polybook[1].probe(engine.access_position(), true);
 
                 if (bookMove == Move::none())
                     sync_cout << "nobook" << sync_endl;

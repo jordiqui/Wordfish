@@ -22,6 +22,7 @@
 #include "bitboard.h"
 #include "position.h"
 #include "string.h"
+#include <string>
 #include "ucioption.h"
 #include <vector>
 
@@ -45,12 +46,14 @@ class PolyBook {
     static bool     generate(const std::string& bookfile, const Stockfish::Position& pos,
                              const std::vector<Stockfish::Move>& moves, uint16_t weight = 1,
                              uint32_t learn = 0);
-    Stockfish::Move probe(Stockfish::Position& pos, bool bestBookMove, int width = 10);
+    Stockfish::Move probe(Stockfish::Position& pos, bool forceEnabled = false);
 
    private:
     static Stockfish::Key  polyglot_key(const Stockfish::Position& pos);
     static uint16_t        sf_move_to_pg_move(const Stockfish::Position& pos, Stockfish::Move move);
     Stockfish::Move        pg_move_to_sf_move(const Stockfish::Position& pos, unsigned short pg_move);
+
+    void unload();
 
     int find_first_key(uint64_t key);
     int get_key_data();
@@ -60,6 +63,11 @@ class PolyBook {
     int       keycount;
     PolyHash* polyhash;
     bool      enabled;
+    bool      active;
+    bool      bestOnly;
+    int       maxDepth;
+    int       width;
+    std::string bookPath;
 
     int index_first;
     int index_best;
