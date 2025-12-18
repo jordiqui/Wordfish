@@ -40,6 +40,7 @@ class PolyBook {
 
     static void     init(const OptionsMap&);
     void            init(const std::string& bookfile);
+    Stockfish::Key  current_key(const Stockfish::Position& pos);
     Stockfish::Move probe(Stockfish::Position& pos, bool bestBookMove, int width = 10);
 
    private:

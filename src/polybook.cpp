@@ -468,6 +468,10 @@ Key PolyBook::polyglot_key(const Position& pos) {
     return key;
 }
 
+Key PolyBook::current_key(const Position& pos) {
+    return polyglot_key(pos);
+}
+
 // A PolyGlot book move is encoded as follows:
 //
 // bit  0- 5: destination square (from 0 to 63)
@@ -588,7 +592,7 @@ int PolyBook::get_key_data() {
 bool PolyBook::check_draw(Position& pos, Move m) {
     StateInfo st;
 
-    pos.do_move(m, st, pos.gives_check(m), nullptr);
+    pos.do_move(m, st, nullptr);
     bool draw = pos.is_draw(pos.game_ply());
     pos.undo_move(m);
 
