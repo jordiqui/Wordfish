@@ -44,6 +44,7 @@ class TimeManagement {
 
     TimePoint optimum() const;
     TimePoint maximum() const;
+    TimePoint panic() const;
     template<typename FUNC>
     TimePoint elapsed(FUNC nodes) const {
         return useNodesTime ? TimePoint(nodes()) : elapsed_time();
@@ -57,6 +58,7 @@ class TimeManagement {
     TimePoint startTime;
     TimePoint optimumTime;
     TimePoint maximumTime;
+    TimePoint panicTime;
 
     std::int64_t availableNodes = -1;     // When in 'nodes as time' mode
     bool         useNodesTime   = false;  // True if we are in 'nodes as time' mode
