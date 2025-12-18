@@ -705,6 +705,15 @@ void Search::Worker::iterative_deepening() {
 
             auto elapsedTime = elapsed();
 
+            if (mainThread->tm.panic())
+            {
+                TimePoint remainingTime =
+                  std::max(TimePoint(0), mainThread->tm.available_time() - elapsedTime);
+
+                if (remainingTime <= mainThread->tm.panic_reserve())
+                    threads.stop = true;
+            }
+
             // Stop the search if we have exceeded the totalTime or maximum
             if (elapsedTime > std::min(totalTime, double(mainThread->tm.maximum())))
             {
@@ -2162,6 +2171,23 @@ void SearchManager::check_time(Search::Worker& worker) {
     if (ponder)
         return;
 
+codex/add-panic-mode-for-low-time-management
+    if (worker.limits.use_time_management() && tm.panic())
+    {
+        TimePoint remaining = std::max(TimePoint(0), tm.available_time() - elapsed);
+
+        if (remaining <= tm.panic_reserve())
+            worker.threads.stop = worker.threads.abortedSearch = true;
+    }
+
+    if (
+      // Later we rely on the fact that we can at least use the mainthread previous
+      // root-search score and PV in a multithreaded environment to prove mated-in scores.
+      worker.completedDepth >= 1
+      && ((worker.limits.use_time_management() && (elapsed > tm.maximum() || stopOnPonderhit))
+          || (worker.limits.movetime && elapsed >= worker.limits.movetime)
+          || (worker.limits.nodes && worker.threads.nodes_searched() >= worker.limits.nodes)))
+=======
     const bool timeLimit =
       worker.limits.use_time_management() && (elapsed > tm.maximum() || stopOnPonderhit);
     const bool moveTimeLimit = worker.limits.movetime && elapsed >= worker.limits.movetime;
@@ -2177,6 +2203,7 @@ void SearchManager::check_time(Search::Worker& worker) {
     const bool exceededHardBudget = moveTimeLimit || nodeLimit || panicTime;
 
     if ((completedIteration && exceededTimeBudget) || (!completedIteration && exceededHardBudget))
+ main
         worker.threads.stop = worker.threads.abortedSearch = true;
 }
 

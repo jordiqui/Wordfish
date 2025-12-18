@@ -30,7 +30,14 @@ namespace Stockfish {
 
 TimePoint TimeManagement::optimum() const { return optimumTime; }
 TimePoint TimeManagement::maximum() const { return maximumTime; }
+ codex/add-panic-mode-for-low-time-management
+TimePoint TimeManagement::available_time() const { return availableTime; }
+TimePoint TimeManagement::panic_buffer() const { return panicTimeBuffer; }
+TimePoint TimeManagement::panic_reserve() const { return panicReserve; }
+bool      TimeManagement::panic() const { return panicMode; }
+=======
 TimePoint TimeManagement::panic() const { return panicTime; }
+ main
 
 void TimeManagement::clear() {
     availableNodes = -1;  // When in 'nodes as time' mode
@@ -57,7 +64,12 @@ void TimeManagement::init(Search::LimitsType& limits,
     // startTime is used by movetime and useNodesTime is used in elapsed calls.
     startTime    = limits.startTime;
     useNodesTime = npmsec != 0;
+ codex/add-panic-mode-for-low-time-management
+    panicMode    = false;
+    panicTimeBuffer = panicReserve = availableTime = 0;
+=======
     panicTime    = TimePoint(0);
+ main
 
     if (limits.time[us] == 0)
         return;
@@ -65,6 +77,7 @@ void TimeManagement::init(Search::LimitsType& limits,
     TimePoint moveOverhead      = TimePoint(options["Move Overhead"]);
     const int slowMover         = options["Slow Mover"];
     const TimePoint minimumTime = TimePoint(options["Minimum Thinking Time"]);
+    panicTimeBuffer             = TimePoint(options["Panic Time Buffer"]);
 
     // optScale is a percentage of available time to use for the current move.
     // maxScale is a multiplier applied to optimumTime.
@@ -84,6 +97,7 @@ void TimeManagement::init(Search::LimitsType& limits,
         limits.inc[us] *= npmsec;
         limits.npmsec = npmsec;
         moveOverhead *= npmsec;
+        panicTimeBuffer *= npmsec;
     }
 
     // These numbers are used where multiplications, divisions or comparisons
@@ -91,6 +105,12 @@ void TimeManagement::init(Search::LimitsType& limits,
     const int64_t   scaleFactor = useNodesTime ? npmsec : 1;
     const TimePoint scaledTime  = limits.time[us] / scaleFactor;
     const TimePoint scaledMinimumTime = minimumTime * scaleFactor;
+
+    availableTime = limits.time[us];
+    panicMode     = scaledTime < 1000;
+
+    if (panicMode)
+        moveOverhead = std::max(moveOverhead, panicTimeBuffer + scaledMinimumTime / 2);
 
     // Maximum move horizon
     int centiMTG = limits.movestogo ? std::min(limits.movestogo * 100, 5000) : 5051;
@@ -145,9 +165,24 @@ void TimeManagement::init(Search::LimitsType& limits,
     if (options["Ponder"])
         optimumTime += optimumTime / 4;
 
+ codex/add-panic-mode-for-low-time-management
+    if (panicMode)
+    {
+        TimePoint panicFractionCap = limits.time[us] / 4;
+        TimePoint panicAbsoluteCap = panicTimeBuffer ? panicTimeBuffer : maximumTime;
+        TimePoint panicCap =
+          std::max(scaledMinimumTime, std::min({maximumTime, panicFractionCap, panicAbsoluteCap}));
+
+        maximumTime = panicCap;
+        optimumTime = std::clamp(optimumTime, scaledMinimumTime, maximumTime);
+    }
+
+    panicReserve = panicTimeBuffer + moveOverhead;
+=======
     panicTime =
       std::max(maximumTime + scaledMinimumTime / 4,
                std::max(TimePoint(1), limits.time[us] - moveOverhead));
+ main
 }
 
 }  // namespace Stockfish
