@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <initializer_list>
+#include <limits>
 #include <iostream>
 #include <list>
 #include <ratio>
@@ -2150,16 +2151,47 @@ Move Skill::pick_best(const RootMoves& rootMoves, size_t multiPV) {
 // Used to print debug info and, more importantly, to detect
 // when we are out of available time and thus stop the search.
 void SearchManager::check_time(Search::Worker& worker) {
-    if (--callsCnt > 0)
-        return;
-
-    // When using nodes, ensure checking rate is not lower than 0.1% of nodes
-    callsCnt = worker.limits.nodes ? std::min(512, int(worker.limits.nodes / 1024)) : 512;
-
     static TimePoint lastInfoTime = now();
 
     TimePoint elapsed = tm.elapsed([&worker]() { return worker.threads.nodes_searched(); });
     TimePoint tick    = worker.limits.startTime + elapsed;
+
+    auto remaining_or_max = [&](TimePoint limit) {
+        return limit ? std::max<TimePoint>(TimePoint(0), limit - elapsed)
+                     : std::numeric_limits<TimePoint>::max();
+    };
+
+    const TimePoint timeToMoveTime  = remaining_or_max(worker.limits.movetime);
+    const TimePoint timeToMaxBudget = worker.limits.use_time_management() ? remaining_or_max(tm.maximum())
+                                                                          : std::numeric_limits<TimePoint>::max();
+    const TimePoint timeToPanic     = worker.limits.use_time_management() ? remaining_or_max(tm.panic())
+                                                                          : std::numeric_limits<TimePoint>::max();
+    const TimePoint nearestDeadline = std::min({timeToMoveTime, timeToMaxBudget, timeToPanic});
+    constexpr TimePoint urgentWindow = 50;
+
+    if (--callsCnt > 0 && nearestDeadline > urgentWindow)
+        return;
+
+    auto tightened_stride = [&](TimePoint remaining, int baseStride) {
+        if (remaining == std::numeric_limits<TimePoint>::max())
+            return baseStride;
+
+        if (remaining <= 1000)
+            return 1;
+        if (remaining <= 3000)
+            return std::min(baseStride, 2);
+        if (remaining <= 5000)
+            return std::min(baseStride, 4);
+        if (remaining <= 10000)
+            return std::min(baseStride, 8);
+
+        return baseStride;
+    };
+
+    // When using nodes, ensure checking rate is not lower than 0.1% of nodes
+    const int baseStride =
+      worker.limits.nodes ? std::min(512, int(worker.limits.nodes / 1024)) : 512;
+    callsCnt = tightened_stride(nearestDeadline, baseStride);
 
     if (tick - lastInfoTime >= 1000)
     {
