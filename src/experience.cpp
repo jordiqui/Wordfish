@@ -165,18 +165,21 @@ void merge_entry_for_load(std::uint64_t key, const Entry& entry, Stats& loadStat
     {
         ++loadStats.duplicateMoves;
 
+        const auto combinedVisits = static_cast<std::uint32_t>(existing->visits)
+                                   + static_cast<std::uint32_t>(entry.visits);
+
         if (entry.depth > existing->depth)
         {
-            *existing = entry;
+            existing->bestMove = entry.bestMove;
+            existing->score    = entry.score;
+            existing->eval     = entry.eval;
+            existing->depth    = entry.depth;
         }
         else if (entry.depth == existing->depth)
         {
             existing->score = entry.score;
             existing->eval  = entry.eval;
         }
-
-        const auto combinedVisits = static_cast<std::uint32_t>(existing->visits)
-                                   + static_cast<std::uint32_t>(entry.visits);
 
         existing->visits = static_cast<std::uint16_t>(std::min<std::uint32_t>(
           combinedVisits, std::numeric_limits<std::uint16_t>::max()));
