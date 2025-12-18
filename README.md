@@ -38,6 +38,24 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
 - **Neural networks**: `EvalFile` and `EvalFileSmall` accept external NNUE files and reload replicas on all threads.
 - **Tablebases**: `SyzygyPath`, `SyzygyProbeDepth`, `Syzygy50MoveRule`, and `SyzygyProbeLimit` configure probing depth, scope, and rule enforcement.
 
+## Uso de libros Polyglot (alineado con Pullfish)
+
+Wordfish expone dos ranuras configurables de libros Polyglot, `Book1` y `Book2`, para mezclar repertorios o mantener un respaldo. Cada ranura ofrece los mismos controles:
+
+- **Book1 / Book2**: activa la ranura.
+- **Book1 File / Book2 File**: ruta al libro `.bin`. Las rutas absolutas evitan problemas de GUI con espacios o directorios de trabajo.
+- **Book1 BestBookMove / Book2 BestBookMove**: restringe el juego al movimiento de mayor peso encontrado en el libro.
+- **Book1 Depth / Book2 Depth**: limita la profundidad desde la que se extraen jugadas del libro (plies, por defecto 255).
+- **Book1 Width / Book2 Width**: controla la amplitud de selección de jugadas (valores altos exploran más alternativas ponderadas).
+
+Para que una GUI (por ejemplo, Fritz, Arena o CuteChess) use el libro sin problemas:
+
+- Coloca el `.bin` junto al ejecutable de Wordfish o en una carpeta simple sin espacios (por ejemplo, `C:\Engines\Wordfish\`).
+- Ajusta `Book1 File` con la ruta absoluta y habilita `Book1`. Deja `Book2` deshabilitado salvo que necesites un segundo libro.
+- Si la GUI también tiene su propio libro, prueba ambas combinaciones: libro de la GUI apagado con `Book1` encendido (gestión del motor) y libro de la GUI encendido con `Book1` apagado (gestión de la GUI).
+- Revisa el log o consola al iniciar para confirmar que la GUI envía `setoption name Book1 value true` y la ruta correcta de `Book1 File`; así verificas que el motor recibe la configuración.
+- Si la GUI tiene problemas con rutas largas, acorta el nombre de la carpeta y evita caracteres especiales antes de volver a apuntar `Book1 File`.
+
 ## Building
 
 The sources live in `src/`. Build with optimised profiling settings by running:
