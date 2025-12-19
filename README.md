@@ -38,6 +38,19 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
 - **Neural networks**: `EvalFile` and `EvalFileSmall` accept external NNUE files and reload replicas on all threads.
 - **Tablebases**: `SyzygyPath`, `SyzygyProbeDepth`, `Syzygy50MoveRule`, and `SyzygyProbeLimit` configure probing depth, scope, and rule enforcement.
 
+## Settings: online time-control ranges (main page)
+
+Use the following ranges to set the **time control** values in the Settings section for popular online servers. Times are expressed as *base time + increment*.
+
+- **Playchess.com**
+  - **Bullet**: 60s + 0s up to 120s + 1s
+  - **Blitz**: 180s + 0s up to 16 minutes + 3s
+  - **Classical**: 16 minutes + 0s up to 120 minutes + 15s
+- **Lichess.org**
+  - **Bullet**: 60s + 0s up to 120s + 1s
+  - **Blitz**: 180s + 0s up to 16 minutes + 3s
+  - **Classical**: 16 minutes + 0s up to 120 minutes + 15s
+
 ## Uso de libros Polyglot (alineado con Pullfish)
 
 Wordfish expone dos ranuras configurables de libros Polyglot, `Book1` y `Book2`, para mezclar repertorios o mantener un respaldo. Cada ranura ofrece los mismos controles:
