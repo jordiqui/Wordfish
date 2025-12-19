@@ -361,21 +361,12 @@ void PolyBook::init(const OptionsMap& options) {
                         bool               bestBookMove,
                         int                depthLimit,
                         int                widthSetting) {
-        const std::string previousPath = slot.bookPath;
-
         slot.active   = slotEnabled;
         slot.bestOnly = bestBookMove;
         slot.maxDepth = depthLimit;
         slot.width    = widthSetting;
 
-        if (file.empty())
-        {
-            slot.init(file);
-            return;
-        }
-
-        if (!slot.enabled || file != previousPath)
-            slot.init(file);
+        slot.init(file);
     };
 
     configure(polybook[0],
@@ -449,6 +440,7 @@ void PolyBook::init(const std::string& bookfile) {
     if (bookfile == bookPath && polyhash != nullptr)
     {
         enabled = true;
+        sync_cout << "info string Book loaded: " << bookfile << sync_endl;
         return;
     }
 
