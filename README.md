@@ -46,6 +46,7 @@ Use the following ranges to set the **time control** values in the Settings sect
   - **Bullet**: 60s + 0s up to 120s + 1s
   - **Blitz**: 180s + 0s up to 16 minutes + 3s
   - **Classical**: 16 minutes + 0s up to 120 minutes + 15s
+ codex/add-game-time-control-values-to-settings-page-8o68op
 
 ### Recommended UCI values for these time controls
 
@@ -59,6 +60,8 @@ These baseline values are tuned for online play and are safe defaults across the
 - `SyzygyProbeDepth`: **1**
 - `Syzygy50MoveRule`: **true**
 - `SyzygyProbeLimit`: **7**
+=======
+ main
 - **Lichess.org**
   - **Bullet**: 60s + 0s up to 120s + 1s
   - **Blitz**: 180s + 0s up to 16 minutes + 3s
