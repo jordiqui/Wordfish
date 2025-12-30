@@ -4,11 +4,11 @@
 
 ## Overview
 
-Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-3.60-181225**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
+Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-3.70-301225**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
 
-## What's new in 3.60-181225
+## What's new in 3.70-301225
 
-- Rebranded the engine to **Wordfish-3.60-181225** and propagated architecture-aware suffixes to both the executable name and UCI identification so GUIs like Fritz 20 and CuteChess show `Wordfish-3.60-181225-sse41popcnt` (SSE4.1/POPCNT builds), `Wordfish-3.60-181225-avx2` (AVX2 builds), or the base `Wordfish-3.60-181225` name for generic targets.
+- Rebranded the engine to **Wordfish-3.70-301225** and expanded architecture-aware suffixes so GUI search listings display `Wordfish-3.70-301225-sse41popcnt` (SSE4.1/POPCNT builds), `Wordfish-3.70-301225-avx2` (AVX2 builds), `Wordfish-3.70-301225-bmi2` (BMI2 builds), `Wordfish-3.70-301225-FMA3` (FMA3 builds), or `Wordfish-3.70-301225-avx512` (AVX-512 builds) alongside the base name.
 - Updated the main NNUE evaluator to `nn-2962dca31855.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
 - Emphasized king safety, rook coordination, and supervised endgame patterns in recent network training and handcrafted heuristics.
 - Tightened king-safety heuristics around open files, rook lifts, and dark-square weaknesses while rewarding coordinated rooks and discouraging premature flank pawn storms.

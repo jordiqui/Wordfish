@@ -39,7 +39,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ENGINE_BASE_NAME := Wordfish-3.60-181225
+ENGINE_BASE_NAME := Wordfish-3.70-301225
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -146,10 +146,16 @@ else
 endif
 
 ENGINE_ARCH_SUFFIX :=
-ifneq (,$(findstring avx2,$(ARCH)))
-	ENGINE_ARCH_SUFFIX := -avx2
+ifneq (,$(findstring avx512,$(ARCH)))
+        ENGINE_ARCH_SUFFIX := -avx512
+else ifneq (,$(findstring bmi2,$(ARCH)))
+        ENGINE_ARCH_SUFFIX := -bmi2
+else ifneq (,$(findstring fma3,$(ARCH)))
+        ENGINE_ARCH_SUFFIX := -FMA3
+else ifneq (,$(findstring avx2,$(ARCH)))
+        ENGINE_ARCH_SUFFIX := -avx2
 else ifneq (,$(findstring sse41-popcnt,$(ARCH)))
-	ENGINE_ARCH_SUFFIX := -sse41popcnt
+        ENGINE_ARCH_SUFFIX := -sse41popcnt
 endif
 ENGINE_FULL_NAME := $(ENGINE_BASE_NAME)$(ENGINE_ARCH_SUFFIX)
 
