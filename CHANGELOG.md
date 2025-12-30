@@ -7,6 +7,10 @@
 ### Changed
 - Nothing yet.
 
+## [3.70-301225]
+### Changed
+- Rebranded the engine to "Wordfish-3.70-301225" and extended architecture-aware executable and UCI suffixes so GUIs like Fritz 20 and CuteChess show `Wordfish-3.70-301225-sse41popcnt`, `Wordfish-3.70-301225-avx2`, `Wordfish-3.70-301225-bmi2`, `Wordfish-3.70-301225-FMA3`, or `Wordfish-3.70-301225-avx512` depending on the compiled target.
+
 ## [3.60-181225]
 ### Added
 - Documented new training emphasis on king safety, rook coordination, and endgame supervision.
