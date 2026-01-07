@@ -39,7 +39,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ENGINE_BASE_NAME := Wordfish-3.70-301225
+ENGINE_BASE_NAME := Wordfish-3.70-070126
 
 ### Installation dir definitions
 PREFIX = /usr/local
