@@ -13,6 +13,7 @@
 #include "position.h"
 #include "search.h"
 #include "ucioption.h"
+#include "misc.h"
 
 namespace Stockfish {
 namespace MCTS {
@@ -233,6 +234,12 @@ Result analyze(Position&                 rootPos,
     Budget budget = compute_budget(options, limits, rootColor);
 
     const int rolloutDepth = std::clamp(rolloutDepthHint, 4, 128);
+    const int simsSetting =
+      options.count("MCTS Simulations") ? int(options["MCTS Simulations"]) : 5000;
+    const int exploreSetting = options.count("MCTS Explore") ? int(options["MCTS Explore"]) : 35;
+
+    sync_cout << "info string WordfishMCTS rollout=" << rolloutDepth << " sims=" << simsSetting
+              << " explore=" << exploreSetting << sync_endl;
 
     Position& pos = rootPos;
 
@@ -246,7 +253,6 @@ Result analyze(Position&                 rootPos,
 
     std::array<StateInfo, MAX_PLY> stateStack{};
 
-    const int exploreSetting = options.count("MCTS Explore") ? int(options["MCTS Explore"]) : 35;
     const double explorationBase = 1.41421356237;
     const double exploration     = (std::max(1, exploreSetting) / 35.0) * explorationBase;
 
@@ -439,4 +445,3 @@ Result analyze(Position&                 rootPos,
 
 }  // namespace MCTS
 }  // namespace Stockfish
-

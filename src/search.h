@@ -301,7 +301,7 @@ class Worker {
 
    private:
    void iterative_deepening();
-    void run_monte_carlo();
+    bool run_monte_carlo();
     void run_brainlearn_mcts();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
