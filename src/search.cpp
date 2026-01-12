@@ -215,12 +215,10 @@ void Search::Worker::start_searching() {
 
     accumulatorStack.reset();
 
-    const bool brainLearnEnabled =
-      options.count("BrainLearnMCTS") ? int(options["BrainLearnMCTS"]) : false;
     const bool strategyRequestsBrainLearn =
       options.count("Search Strategy")
       && (options["Search Strategy"] == "BrainLearnMCTS" || options["Search Strategy"] == "BL-MCTS");
-    const bool useBrainLearn = brainLearnEnabled && strategyRequestsBrainLearn;
+    const bool useBrainLearn = strategyRequestsBrainLearn;
 
     const int maxBrainLearnHelpers = std::max(0, int(options["Threads"]) - 1);
     const int brainLearnHelpers =
@@ -250,7 +248,8 @@ void Search::Worker::start_searching() {
     const bool strategyRequestsMcts = options.count("Search Strategy")
                                       && (options["Search Strategy"] == "MCTS"
                                           || options["Search Strategy"] == "Montecarlo");
-    const bool useMcts = strategyRequestsMcts || mctsEnabled;
+    const bool legacyMctsOverride = mctsEnabled && !strategyRequestsMcts && !useBrainLearn;
+    const bool useMcts = strategyRequestsMcts || legacyMctsOverride;
 
     auto ensure_root_moves = [&]() {
         if (!rootMoves.empty())
@@ -261,6 +260,16 @@ void Search::Worker::start_searching() {
 
         return !rootMoves.empty();
     };
+
+    if (legacyMctsOverride)
+        sync_cout << "info string MCTS Enabled implies Search Strategy=MCTS" << sync_endl;
+
+    if (useBrainLearn)
+        sync_cout << "info string Driver=BrainLearnMCTS" << sync_endl;
+    else if (useMcts)
+        sync_cout << "info string Driver=WordfishMCTS" << sync_endl;
+    else
+        sync_cout << "info string Driver=AlphaBeta" << sync_endl;
 
     if (useBrainLearn)
     {
@@ -296,8 +305,12 @@ void Search::Worker::start_searching() {
             main_manager()->updates.onUpdateNoMoves(
               {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
         }
-        else
-            run_monte_carlo();
+        else if (!run_monte_carlo())
+        {
+            sync_cout << "info string WordfishMCTS failed, falling back to AlphaBeta" << sync_endl;
+            threads.start_searching();  // start non-main threads
+            iterative_deepening();      // main thread start searching
+        }
     }
     else if (rootMoves.empty())
     {
@@ -336,7 +349,7 @@ void Search::Worker::start_searching() {
     Skill   skill =
       Skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
 
-    if (!useBrainLearn && int(options["MultiPV"]) == 1 && !limits.depth && !limits.mate
+    if (!useBrainLearn && !useMcts && int(options["MultiPV"]) == 1 && !limits.depth && !limits.mate
         && !skill.enabled() && rootMoves[0].pv[0] != Move::none())
         bestThread = threads.get_best_thread()->worker.get();
 
@@ -372,7 +385,7 @@ void Search::Worker::start_searching() {
 // Main iterative deepening loop. It calls search()
 // repeatedly with increasing depth until the allocated thinking time has been
 // consumed, the user stops the search, or the maximum search depth is reached.
-void Search::Worker::run_monte_carlo() {
+bool Search::Worker::run_monte_carlo() {
 
     auto stopRequested = [&]() { return threads.stop.load(std::memory_order_relaxed); };
 
@@ -382,6 +395,15 @@ void Search::Worker::run_monte_carlo() {
 
     const auto result =
       MCTS::analyze(rootPos, rootPos.side_to_move(), options, limits, stopRequested, depthHint);
+
+    const bool hasBestMove =
+      result.bestMove != Move::none() && result.bestMove.is_ok()
+      && std::any_of(rootMoves.begin(), rootMoves.end(), [&](const RootMove& rm) {
+             return !rm.pv.empty() && rm.pv[0] == result.bestMove;
+         });
+
+    if (!hasBestMove)
+        return false;
 
     nodes.store(result.nodesVisited ? result.nodesVisited : result.simulations,
                std::memory_order_relaxed);
@@ -501,13 +523,11 @@ void Search::Worker::run_monte_carlo() {
 
         main_manager()->updates.onUpdateFull(info);
     }
+
+    return true;
 }
 
 void Search::Worker::run_brainlearn_mcts() {
-
-    if (is_mainthread())
-        sync_cout << "info string BrainLearnMCTS enabled" << sync_endl;
-
     completedDepth = rootDepth = Depth(1);
     selDepth                   = 1;
 
