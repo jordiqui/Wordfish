@@ -35,6 +35,7 @@
 #include <utility>
 
 #include "bitboard.h"
+#include "brainlearn_mcts.h"
 #include "evaluate.h"
 #include "experience.h"
 #include "history.h"
@@ -214,9 +215,29 @@ void Search::Worker::start_searching() {
 
     accumulatorStack.reset();
 
+    const bool brainLearnEnabled =
+      options.count("BrainLearnMCTS") ? int(options["BrainLearnMCTS"]) : false;
+    const bool strategyRequestsBrainLearn =
+      options.count("Search Strategy")
+      && (options["Search Strategy"] == "BrainLearnMCTS" || options["Search Strategy"] == "BL-MCTS");
+    const bool useBrainLearn = brainLearnEnabled && strategyRequestsBrainLearn;
+
+    const int maxBrainLearnHelpers = std::max(0, int(options["Threads"]) - 1);
+    const int brainLearnHelpers =
+      options.count("BrainLearnMCTSThreads")
+        ? std::clamp<int>(options["BrainLearnMCTSThreads"], 0, maxBrainLearnHelpers)
+        : 0;
+
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
     {
+        if (useBrainLearn)
+        {
+            if (threadIdx > 0 && threadIdx <= static_cast<size_t>(brainLearnHelpers))
+                run_brainlearn_mcts();
+            return;
+        }
+
         iterative_deepening();
         return;
     }
@@ -241,7 +262,33 @@ void Search::Worker::start_searching() {
         return !rootMoves.empty();
     };
 
-    if (useMcts)
+    if (useBrainLearn)
+    {
+        if (!ensure_root_moves())
+        {
+            rootMoves.emplace_back(Move::none());
+            main_manager()->updates.onUpdateNoMoves(
+              {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
+        }
+        else
+        {
+            BrainLearnMCTS::mctsThreads = 1 + static_cast<size_t>(brainLearnHelpers);
+            BrainLearnMCTS::mctsMultiStrategy =
+              options.count("BrainLearnMultiStrategy")
+                ? size_t(int(options["BrainLearnMultiStrategy"]))
+                : 20;
+            BrainLearnMCTS::mctsMultiMinVisits =
+              options.count("BrainLearnMultiMinVisits")
+                ? double(int(options["BrainLearnMultiMinVisits"]))
+                : 5.0;
+
+            if (brainLearnHelpers > 0)
+                threads.start_searching();
+
+            run_brainlearn_mcts();
+        }
+    }
+    else if (useMcts)
     {
         if (!ensure_root_moves())
         {
@@ -289,8 +336,8 @@ void Search::Worker::start_searching() {
     Skill   skill =
       Skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
 
-    if (int(options["MultiPV"]) == 1 && !limits.depth && !limits.mate && !skill.enabled()
-        && rootMoves[0].pv[0] != Move::none())
+    if (!useBrainLearn && int(options["MultiPV"]) == 1 && !limits.depth && !limits.mate
+        && !skill.enabled() && rootMoves[0].pv[0] != Move::none())
         bestThread = threads.get_best_thread()->worker.get();
 
     main_manager()->bestPreviousScore        = bestThread->rootMoves[0].score;
@@ -454,6 +501,31 @@ void Search::Worker::run_monte_carlo() {
 
         main_manager()->updates.onUpdateFull(info);
     }
+}
+
+void Search::Worker::run_brainlearn_mcts() {
+
+    if (is_mainthread())
+        sync_cout << "info string BrainLearnMCTS enabled" << sync_endl;
+
+    completedDepth = rootDepth = Depth(1);
+    selDepth                   = 1;
+
+    BrainLearnMCTS::MonteCarlo monteCarlo(rootPos, this, tt);
+
+    monteCarlo.search(threads, limits, is_mainthread(), this);
+
+    if (is_mainthread())
+    {
+        const int maxPly = std::clamp(monteCarlo.max_ply(), 1, MAX_PLY - 1);
+        completedDepth   = rootDepth = Depth(maxPly);
+        selDepth                     = maxPly;
+        monteCarlo.emit_pv(this, threads);
+    }
+
+    nodes.store(BrainLearnMCTS::MCTSNodeCount.load(std::memory_order_relaxed),
+               std::memory_order_relaxed);
+    tbHits.store(0, std::memory_order_relaxed);
 }
 
 void Search::Worker::iterative_deepening() {
@@ -1971,6 +2043,54 @@ Value Search::Worker::evaluate(const Position& pos) {
         v += (pos.side_to_move() == WHITE ? contemptValue : -contemptValue);
 
     return std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
+}
+
+Value Search::Worker::minimax_value(Position& pos, Search::Stack* ss, Depth depth) {
+
+    Value alpha = -VALUE_INFINITE;
+    Value beta  = VALUE_INFINITE;
+    Move  pv[MAX_PLY + 1];
+    ss->pv = pv;
+
+    Value value = search<PV>(pos, ss, alpha, beta, depth, false);
+
+    if (limits.mate && value >= VALUE_MATE_IN_MAX_PLY && VALUE_MATE - value <= 2 * limits.mate)
+        threads.stop = true;
+
+    return value;
+}
+
+Value Search::Worker::minimax_value(
+  Position& pos, Search::Stack* ss, Depth depth, Value alpha, Value beta) {
+
+    Move pv[MAX_PLY + 1];
+    ss->pv = pv;
+
+    Value value = VALUE_ZERO;
+    Value delta = Value(18);
+
+    while (!threads.stop.load(std::memory_order_relaxed))
+    {
+        value = search<PV>(pos, ss, alpha, beta, depth, false);
+        if (value <= alpha)
+        {
+            beta  = (alpha + beta) / 2;
+            alpha = std::max(value - delta, -VALUE_INFINITE);
+        }
+        else if (value >= beta)
+        {
+            beta = std::min(value + delta, VALUE_INFINITE);
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    if (limits.mate && value >= VALUE_MATE_IN_MAX_PLY && VALUE_MATE - value <= 2 * limits.mate)
+        threads.stop = true;
+
+    return value;
 }
 
 namespace {

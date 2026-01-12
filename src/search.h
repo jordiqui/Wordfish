@@ -275,6 +275,9 @@ class Worker {
    void start_searching();
 
     bool is_mainthread() const { return threadIdx == 0; }
+    size_t thread_index() const { return threadIdx; }
+    RootMoves& root_moves() { return rootMoves; }
+    Depth completed_depth() const { return completedDepth; }
 
     void ensure_network_replicated();
 
@@ -293,9 +296,13 @@ class Worker {
 
     TTMoveHistory ttMoveHistory;
 
+    Value minimax_value(Position& pos, Search::Stack* ss, Depth depth);
+    Value minimax_value(Position& pos, Search::Stack* ss, Depth depth, Value alpha, Value beta);
+
    private:
    void iterative_deepening();
     void run_monte_carlo();
+    void run_brainlearn_mcts();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
