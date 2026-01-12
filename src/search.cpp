@@ -396,10 +396,14 @@ bool Search::Worker::run_monte_carlo() {
     const auto result =
       MCTS::analyze(rootPos, rootPos.side_to_move(), options, limits, stopRequested, depthHint);
 
+    Move bestMove = result.bestMove;
+    if ((bestMove == Move::none() || !bestMove.is_ok()) && !rootMoves.empty())
+        bestMove = rootMoves[0].pv.empty() ? Move::none() : rootMoves[0].pv[0];
+
     const bool hasBestMove =
-      result.bestMove != Move::none() && result.bestMove.is_ok()
+      bestMove != Move::none() && bestMove.is_ok()
       && std::any_of(rootMoves.begin(), rootMoves.end(), [&](const RootMove& rm) {
-             return !rm.pv.empty() && rm.pv[0] == result.bestMove;
+             return !rm.pv.empty() && rm.pv[0] == bestMove;
          });
 
     if (!hasBestMove)
