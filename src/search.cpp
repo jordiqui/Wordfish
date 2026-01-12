@@ -294,7 +294,13 @@ void Search::Worker::start_searching() {
             if (brainLearnHelpers > 0)
                 threads.start_searching();
 
-            run_brainlearn_mcts();
+            if (!run_brainlearn_mcts())
+            {
+                sync_cout << "info string BrainLearnMCTS failed, falling back to AlphaBeta"
+                          << sync_endl;
+                threads.start_searching();  // start non-main threads
+                iterative_deepening();      // main thread start searching
+            }
         }
     }
     else if (useMcts)
@@ -350,8 +356,12 @@ void Search::Worker::start_searching() {
       Skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
 
     if (!useBrainLearn && !useMcts && int(options["MultiPV"]) == 1 && !limits.depth && !limits.mate
-        && !skill.enabled() && rootMoves[0].pv[0] != Move::none())
+        && !skill.enabled() && !rootMoves.empty() && !rootMoves[0].pv.empty()
+        && rootMoves[0].pv[0] != Move::none())
         bestThread = threads.get_best_thread()->worker.get();
+
+    if (bestThread->rootMoves.empty())
+        bestThread->rootMoves.emplace_back(Move::none());
 
     main_manager()->bestPreviousScore        = bestThread->rootMoves[0].score;
     main_manager()->bestPreviousAverageScore = bestThread->rootMoves[0].averageScore;
@@ -362,14 +372,17 @@ void Search::Worker::start_searching() {
 
     std::string ponder;
 
-    if (bestThread->rootMoves[0].pv.size() > 1
-        || bestThread->rootMoves[0].extract_ponder_from_tt(tt, rootPos))
+    if (!bestThread->rootMoves.empty() && !bestThread->rootMoves[0].pv.empty()
+        && (bestThread->rootMoves[0].pv.size() > 1
+            || bestThread->rootMoves[0].extract_ponder_from_tt(tt, rootPos)))
         ponder = UCIEngine::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
 
-    const Value bestScore = bestThread->rootMoves[0].score;
-    const Value evalScore = bestThread->rootMoves[0].averageScore == -VALUE_INFINITE
-                              ? bestScore
-                              : bestThread->rootMoves[0].averageScore;
+    const Value bestScore =
+      !bestThread->rootMoves.empty() ? bestThread->rootMoves[0].score : VALUE_ZERO;
+    const Value evalScore =
+      !bestThread->rootMoves.empty() && bestThread->rootMoves[0].averageScore != -VALUE_INFINITE
+        ? bestThread->rootMoves[0].averageScore
+        : bestScore;
 
     Experience::on_search_complete(bestThread->rootPos,
                                    bestThread->rootMoves,
@@ -378,7 +391,18 @@ void Search::Worker::start_searching() {
                                    bestThread->completedDepth,
                                    bestThread->limits);
 
-    auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
+    Move fallbackMove = Move::none();
+    if (!bestThread->rootMoves.empty() && !bestThread->rootMoves[0].pv.empty())
+        fallbackMove = bestThread->rootMoves[0].pv[0];
+    if (fallbackMove == Move::none())
+    {
+        for (Move m : MoveList<LEGAL>(rootPos))
+        {
+            fallbackMove = m;
+            break;
+        }
+    }
+    auto bestmove = UCIEngine::move(fallbackMove, rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
 
@@ -531,25 +555,67 @@ bool Search::Worker::run_monte_carlo() {
     return true;
 }
 
-void Search::Worker::run_brainlearn_mcts() {
+bool Search::Worker::run_brainlearn_mcts() {
     completedDepth = rootDepth = Depth(1);
     selDepth                   = 1;
+
+    if (is_mainthread())
+    {
+        static std::atomic_bool stageEmitted{false};
+        if (!stageEmitted.exchange(true))
+            sync_cout << "info string BL-MCTS stage=enter" << sync_endl;
+    }
+
+    Move initialFallback = Move::none();
+    if (is_mainthread() && !rootMoves.empty() && !rootMoves[0].pv.empty())
+        initialFallback = rootMoves[0].pv[0];
 
     BrainLearnMCTS::MonteCarlo monteCarlo(rootPos, this, tt);
 
     monteCarlo.search(threads, limits, is_mainthread(), this);
 
+    bool hasMove = true;
     if (is_mainthread())
     {
         const int maxPly = std::clamp(monteCarlo.max_ply(), 1, MAX_PLY - 1);
         completedDepth   = rootDepth = Depth(maxPly);
         selDepth                     = maxPly;
         monteCarlo.emit_pv(this, threads);
+
+        auto has_valid_move = [&]() {
+            return !rootMoves.empty() && !rootMoves[0].pv.empty()
+                && rootMoves[0].pv[0] != Move::none() && rootPos.legal(rootMoves[0].pv[0]);
+        };
+
+        if (!has_valid_move())
+        {
+            Move fallbackMove =
+              initialFallback != Move::none() && rootPos.legal(initialFallback) ? initialFallback
+                                                                                : Move::none();
+            if (fallbackMove == Move::none())
+            {
+                for (Move m : MoveList<LEGAL>(rootPos))
+                {
+                    fallbackMove = m;
+                    break;
+                }
+            }
+
+            if (fallbackMove != Move::none())
+            {
+                rootMoves.clear();
+                rootMoves.emplace_back(fallbackMove);
+            }
+
+            hasMove = fallbackMove != Move::none();
+        }
     }
 
     nodes.store(BrainLearnMCTS::MCTSNodeCount.load(std::memory_order_relaxed),
                std::memory_order_relaxed);
     tbHits.store(0, std::memory_order_relaxed);
+
+    return hasMove;
 }
 
 void Search::Worker::iterative_deepening() {

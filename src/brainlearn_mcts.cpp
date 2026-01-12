@@ -64,6 +64,7 @@ class AutoSpinLock {
    private:
     const MonteCarlo* _mcts;
     Spinlock&         _sl;
+    size_t            _threadIndex;
 
    public:
     AutoSpinLock(const MonteCarlo* mcts, mctsNodeInfo* node) :
@@ -71,11 +72,13 @@ class AutoSpinLock {
 
     AutoSpinLock(const MonteCarlo* mcts, Spinlock& sl) :
         _mcts(mcts),
-        _sl(sl) {
-        _sl.acquire(_mcts->thisThread->thread_index());
+        _sl(sl),
+        _threadIndex(
+          mctsThreads > 0 ? std::min(_mcts->thisThread->thread_index(), mctsThreads - 1) : 0) {
+        _sl.acquire(_threadIndex);
     }
 
-    ~AutoSpinLock() { _sl.release(_mcts->thisThread->thread_index()); }
+    ~AutoSpinLock() { _sl.release(_threadIndex); }
 };
 
 #define LOCK__(m, n, l) AutoSpinLock asl##l(m, n)
@@ -477,9 +480,11 @@ void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
             }
         }
 
-        Move move = rootMoves[0].pv[0];
+        Move move = Move::none();
+        if (!rootMoves.empty() && !rootMoves[0].pv.empty())
+            move = rootMoves[0].pv[0];
         int  cnt  = 0;
-        while (pos.legal(move))
+        while (move != Move::none() && pos.legal(move))
         {
             cnt++;
             do_move(move);
