@@ -559,6 +559,14 @@ bool Search::Worker::run_brainlearn_mcts() {
     completedDepth = rootDepth = Depth(1);
     selDepth                   = 1;
 
+    Search::LimitsType brainLimits = limits;
+    if (brainLimits.depth && !brainLimits.movetime && !brainLimits.use_time_management()
+        && !brainLimits.infinite)
+    {
+        brainLimits.movetime = TimePoint(brainLimits.depth) * 200;
+        brainLimits.depth    = 0;
+    }
+
     if (is_mainthread())
     {
         static std::atomic_bool stageEmitted{false};
@@ -572,7 +580,27 @@ bool Search::Worker::run_brainlearn_mcts() {
 
     BrainLearnMCTS::MonteCarlo monteCarlo(rootPos, this, tt);
 
-    monteCarlo.search(threads, limits, is_mainthread(), this);
+    TimePoint allocatedTime = TimePoint(0);
+    bool      useTimeBudget = false;
+    if (!brainLimits.infinite)
+    {
+        if (brainLimits.movetime)
+        {
+            allocatedTime = brainLimits.movetime;
+            useTimeBudget = true;
+        }
+        else if (brainLimits.use_time_management() && is_mainthread())
+        {
+            allocatedTime = main_manager()->tm.maximum();
+            useTimeBudget = allocatedTime > 0;
+        }
+    }
+    if (is_mainthread())
+        monteCarlo.set_time_budget(allocatedTime, useTimeBudget);
+    else
+        monteCarlo.set_time_budget(TimePoint(0), false);
+
+    monteCarlo.search(threads, brainLimits, is_mainthread(), this);
 
     bool hasMove = true;
     if (is_mainthread())
@@ -580,14 +608,19 @@ bool Search::Worker::run_brainlearn_mcts() {
         const int maxPly = std::clamp(monteCarlo.max_ply(), 1, MAX_PLY - 1);
         completedDepth   = rootDepth = Depth(maxPly);
         selDepth                     = maxPly;
-        monteCarlo.emit_pv(this, threads);
+        const uint64_t playouts = monteCarlo.playouts();
+        if (playouts > 0)
+            monteCarlo.emit_pv(this, threads);
 
         auto has_valid_move = [&]() {
             return !rootMoves.empty() && !rootMoves[0].pv.empty()
                 && rootMoves[0].pv[0] != Move::none() && rootPos.legal(rootMoves[0].pv[0]);
         };
 
-        if (!has_valid_move())
+        const bool noLegalMoves = monteCarlo.no_legal_moves();
+        bool       fallbackUsed = playouts == 0;
+
+        if ((playouts == 0 || noLegalMoves) && !has_valid_move())
         {
             Move fallbackMove =
               initialFallback != Move::none() && rootPos.legal(initialFallback) ? initialFallback
@@ -608,7 +641,19 @@ bool Search::Worker::run_brainlearn_mcts() {
             }
 
             hasMove = fallbackMove != Move::none();
+            fallbackUsed = true;
         }
+
+        const TimePoint elapsed = monteCarlo.elapsed_ms();
+        const bool      timeExpired = monteCarlo.time_expired();
+        std::string_view reason =
+          noLegalMoves ? "nomoves"
+          : fallbackUsed ? "fallback"
+          : timeExpired  ? "time"
+                         : "stop";
+
+        sync_cout << "info string BL-MCTS playouts=" << playouts << " elapsed=" << elapsed
+                  << " reason=" << reason << sync_endl;
     }
 
     nodes.store(BrainLearnMCTS::MCTSNodeCount.load(std::memory_order_relaxed),

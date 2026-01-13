@@ -182,6 +182,11 @@ class MonteCarlo {
 
     void search(ThreadPool& threads, Search::LimitsType limits, bool isMainThread,
                 Search::Worker* worker);
+    void set_time_budget(TimePoint allocatedTime, bool useTimeBudget);
+    [[nodiscard]] uint64_t playouts() const { return playoutsCount; }
+    [[nodiscard]] bool time_expired() const { return timeExpired; }
+    [[nodiscard]] bool no_legal_moves() const { return noLegalMoves; }
+    [[nodiscard]] TimePoint elapsed_ms() const { return now() - startTime; }
 
     void          create_root(Search::Worker* worker);
     bool          computational_budget(ThreadPool& threads, Search::LimitsType limits);
@@ -226,6 +231,11 @@ class MonteCarlo {
     int       maximumPly{};
     TimePoint startTime{};
     TimePoint lastOutputTime{};
+    TimePoint endTime{};
+    uint64_t  playoutsCount{};
+    bool      useTimeBudget{};
+    bool      timeExpired{};
+    bool      noLegalMoves{};
 
     [[maybe_unused]] double max_epsilon = 0.99;
     [[maybe_unused]] double min_epsilon = 0.00;

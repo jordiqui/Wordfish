@@ -172,6 +172,8 @@ void MonteCarlo::search(ThreadPool&        threads,
     mctsNodeInfo* node = nullptr;
     AB_Rollout         = false;
     Reward reward      = value_to_reward(VALUE_DRAW);
+    playoutsCount      = 0;
+    timeExpired        = false;
 
     while (computational_budget(threads, limits) && (node = tree_policy(threads, limits)))
     {
@@ -206,6 +208,8 @@ void MonteCarlo::search(ThreadPool&        threads,
         if (ply >= 1)
             node->ttValue = backup(reward, AB_Rollout);
 
+        ++playoutsCount;
+
         if (should_emit_pv(isMainThread))
             emit_pv(worker, threads);
     }
@@ -215,6 +219,9 @@ void MonteCarlo::search(ThreadPool&        threads,
 
     if (should_emit_pv(isMainThread))
         emit_pv(worker, threads);
+
+    if (isMainThread && timeExpired)
+        threads.stop = true;
 }
 
 MonteCarlo::MonteCarlo(Position& p, Search::Worker* worker, TranspositionTable& transpositionTable) :
@@ -264,14 +271,32 @@ void MonteCarlo::create_root(Search::Worker* worker) {
 
     if (root->node_visits == 0)
         generate_moves(root);
+
+    noLegalMoves = root->number_of_sons == 0;
+}
+
+void MonteCarlo::set_time_budget(TimePoint allocatedTime, bool useTime) {
+    useTimeBudget = useTime;
+    endTime       = useTimeBudget ? startTime + allocatedTime : TimePoint(0);
 }
 
 bool MonteCarlo::computational_budget(ThreadPool& threads, Search::LimitsType limits) {
 
-    if (limits.depth && maximumPly > limits.depth * 2)
+    (void) limits;
+
+    if (noLegalMoves)
         return false;
 
-    return !threads.stop.load(std::memory_order_relaxed);
+    if (threads.stop.load(std::memory_order_relaxed))
+        return false;
+
+    if (useTimeBudget && now() >= endTime)
+    {
+        timeExpired = true;
+        return false;
+    }
+
+    return true;
 }
 
 mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType limits) {
