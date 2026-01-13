@@ -186,6 +186,8 @@ class MonteCarlo {
     [[nodiscard]] uint64_t playouts() const { return playoutsCount; }
     [[nodiscard]] bool time_expired() const { return timeExpired; }
     [[nodiscard]] bool no_legal_moves() const { return noLegalMoves; }
+    [[nodiscard]] bool guard_triggered() const { return guardTriggered; }
+    [[nodiscard]] int root_legal_moves() const { return root ? root->number_of_sons.load() : 0; }
     [[nodiscard]] TimePoint elapsed_ms() const { return now() - startTime; }
 
     void          create_root(Search::Worker* worker);
@@ -202,6 +204,7 @@ class MonteCarlo {
     void do_move(Move m);
     void undo_move();
     void generate_moves(mctsNodeInfo* node);
+    void generate_root_moves(mctsNodeInfo* node);
 
     [[nodiscard]] Reward value_to_reward(Value v) const;
     [[nodiscard]] Value  reward_to_value(Reward r) const;
@@ -236,6 +239,7 @@ class MonteCarlo {
     bool      useTimeBudget{};
     bool      timeExpired{};
     bool      noLegalMoves{};
+    bool      guardTriggered{};
 
     [[maybe_unused]] double max_epsilon = 0.99;
     [[maybe_unused]] double min_epsilon = 0.00;

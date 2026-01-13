@@ -563,12 +563,13 @@ bool Search::Worker::run_brainlearn_mcts() {
     if (brainLimits.depth && !brainLimits.movetime && !brainLimits.use_time_management()
         && !brainLimits.infinite)
     {
-        brainLimits.movetime = TimePoint(brainLimits.depth) * 200;
+        brainLimits.movetime = std::max(TimePoint(200), TimePoint(brainLimits.depth) * 200);
         brainLimits.depth    = 0;
     }
 
     if (is_mainthread())
     {
+        threads.stop = false;
         static std::atomic_bool stageEmitted{false};
         if (!stageEmitted.exchange(true))
             sync_cout << "info string BL-MCTS stage=enter" << sync_endl;
@@ -586,7 +587,7 @@ bool Search::Worker::run_brainlearn_mcts() {
     {
         if (brainLimits.movetime)
         {
-            allocatedTime = brainLimits.movetime;
+            allocatedTime = std::max(TimePoint(1), brainLimits.movetime);
             useTimeBudget = true;
         }
         else if (brainLimits.use_time_management() && is_mainthread())
@@ -645,15 +646,25 @@ bool Search::Worker::run_brainlearn_mcts() {
         }
 
         const TimePoint elapsed = monteCarlo.elapsed_ms();
-        const bool      timeExpired = monteCarlo.time_expired();
+        const bool      timeExpired =
+          monteCarlo.time_expired()
+          || (useTimeBudget && threads.stop.load(std::memory_order_relaxed));
+        const bool guardTriggered = monteCarlo.guard_triggered();
         std::string_view reason =
-          noLegalMoves ? "nomoves"
+          guardTriggered ? "guard"
+          : noLegalMoves ? "nomoves"
           : fallbackUsed ? "fallback"
           : timeExpired  ? "time"
                          : "stop";
 
         sync_cout << "info string BL-MCTS playouts=" << playouts << " elapsed=" << elapsed
                   << " reason=" << reason << sync_endl;
+        sync_cout << "info string BL-MCTS debug budget=" << allocatedTime
+                  << " useTB=" << (useTimeBudget ? 1 : 0)
+                  << " expired=" << (timeExpired ? 1 : 0)
+                  << " nomoves=" << (noLegalMoves ? 1 : 0)
+                  << " stop=" << (threads.stop.load(std::memory_order_relaxed) ? 1 : 0)
+                  << " rootN=" << monteCarlo.root_legal_moves() << sync_endl;
     }
 
     nodes.store(BrainLearnMCTS::MCTSNodeCount.load(std::memory_order_relaxed),
@@ -2144,8 +2155,9 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 }
 
 Depth Search::Worker::reduction(bool i, Depth d, int mn, int delta) const {
-    int reductionScale = reductions[d] * reductions[mn];
-    return reductionScale - delta * 757 / rootDelta + !i * reductionScale * 218 / 512 + 1200;
+    int reductionScale      = reductions[d] * reductions[mn];
+    Value safeRootDelta     = rootDelta != 0 ? rootDelta : 1;
+    return reductionScale - delta * 757 / safeRootDelta + !i * reductionScale * 218 / 512 + 1200;
 }
 
 // elapsed() returns the time elapsed since the search started. If the
