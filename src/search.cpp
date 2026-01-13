@@ -212,6 +212,7 @@ void Search::Worker::start_searching() {
 
     contemptValue     = Value(contemptSetting * PawnValue / 100);
     kingSafetySetting = int(options["King Safety"]);
+    brainlearnSummary = BrainLearnSummary{};
 
     accumulatorStack.reset();
 
@@ -403,6 +404,13 @@ void Search::Worker::start_searching() {
         }
     }
     auto bestmove = UCIEngine::move(fallbackMove, rootPos.is_chess960());
+    if (useBrainLearn && brainlearnSummary.ready)
+    {
+        sync_cout << "info string BL-MCTS playouts=" << brainlearnSummary.playouts
+                  << " elapsed=" << brainlearnSummary.elapsed
+                  << " reason=" << brainlearnSummary.reason << sync_endl;
+        brainlearnSummary.ready = false;
+    }
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
 
@@ -568,12 +576,7 @@ bool Search::Worker::run_brainlearn_mcts() {
     }
 
     if (is_mainthread())
-    {
         threads.stop = false;
-        static std::atomic_bool stageEmitted{false};
-        if (!stageEmitted.exchange(true))
-            sync_cout << "info string BL-MCTS stage=enter" << sync_endl;
-    }
 
     Move initialFallback = Move::none();
     if (is_mainthread() && !rootMoves.empty() && !rootMoves[0].pv.empty())
@@ -649,22 +652,15 @@ bool Search::Worker::run_brainlearn_mcts() {
         const bool      timeExpired =
           monteCarlo.time_expired()
           || (useTimeBudget && threads.stop.load(std::memory_order_relaxed));
-        const bool guardTriggered = monteCarlo.guard_triggered();
-        std::string_view reason =
-          guardTriggered ? "guard"
-          : noLegalMoves ? "nomoves"
-          : fallbackUsed ? "fallback"
-          : timeExpired  ? "time"
-                         : "stop";
+        std::string_view reason = noLegalMoves ? "nomoves"
+                                 : fallbackUsed ? "fallback"
+                                 : timeExpired  ? "time"
+                                                : "stop";
 
-        sync_cout << "info string BL-MCTS playouts=" << playouts << " elapsed=" << elapsed
-                  << " reason=" << reason << sync_endl;
-        sync_cout << "info string BL-MCTS debug budget=" << allocatedTime
-                  << " useTB=" << (useTimeBudget ? 1 : 0)
-                  << " expired=" << (timeExpired ? 1 : 0)
-                  << " nomoves=" << (noLegalMoves ? 1 : 0)
-                  << " stop=" << (threads.stop.load(std::memory_order_relaxed) ? 1 : 0)
-                  << " rootN=" << monteCarlo.root_legal_moves() << sync_endl;
+        brainlearnSummary.playouts = playouts;
+        brainlearnSummary.elapsed  = elapsed;
+        brainlearnSummary.reason   = std::string(reason);
+        brainlearnSummary.ready    = hasMove;
     }
 
     nodes.store(BrainLearnMCTS::MCTSNodeCount.load(std::memory_order_relaxed),
