@@ -174,9 +174,20 @@ void MonteCarlo::search(ThreadPool&        threads,
     Reward reward      = value_to_reward(VALUE_DRAW);
     playoutsCount      = 0;
     timeExpired        = false;
+    guardTriggered     = false;
 
-    while (computational_budget(threads, limits) && (node = tree_policy(threads, limits)))
+    while (!threads.stop.load(std::memory_order_relaxed) && !timeExpired && !noLegalMoves)
     {
+        if (useTimeBudget && now() >= endTime)
+        {
+            timeExpired = true;
+            break;
+        }
+
+        node = tree_policy(threads, limits);
+        if (!node)
+            break;
+
         LOCK(this, node);
 
         if (AB_Rollout)
@@ -212,6 +223,21 @@ void MonteCarlo::search(ThreadPool&        threads,
 
         if (should_emit_pv(isMainThread))
             emit_pv(worker, threads);
+
+        if (threads.stop.load(std::memory_order_relaxed))
+            break;
+
+        if (useTimeBudget && now() >= endTime)
+        {
+            timeExpired = true;
+            break;
+        }
+
+        if (elapsed_ms() > TimePoint(60000) || playoutsCount > 100000000ULL)
+        {
+            guardTriggered = true;
+            break;
+        }
     }
 
     if (ply >= 1)
@@ -269,8 +295,9 @@ void MonteCarlo::create_root(Search::Worker* worker) {
 
     LOCK(this, root);
 
-    if (root->node_visits == 0)
-        generate_moves(root);
+    root->node_visits    = 0;
+    root->number_of_sons = 0;
+    generate_root_moves(root);
 
     noLegalMoves = root->number_of_sons == 0;
 }
@@ -654,6 +681,35 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
         }
 
     int n = node->number_of_sons;
+    if (n > 0)
+    {
+        EdgeArray& children = node->children;
+        std::stable_sort(children.begin(), children.begin() + n, ComparePrior);
+    }
+
+    node->node_visits++;
+}
+
+void MonteCarlo::generate_root_moves(mctsNodeInfo* node) {
+
+    LOCK(this, node);
+
+    if (node->node_visits != 0 || node->number_of_sons != 0)
+        return;
+
+    int    moveCount = 0;
+    Reward bestPrior = REWARD_DRAW;
+    for (Move move : MoveList<LEGAL>(pos))
+    {
+        stack[ply].moveCount = ++moveCount;
+        const Reward prior = REWARD_DRAW;
+        add_prior_to_node(node, move, prior);
+    }
+
+    if (moveCount > 0)
+        node->ttValue = reward_to_value(bestPrior);
+
+    const int n = node->number_of_sons;
     if (n > 0)
     {
         EdgeArray& children = node->children;
