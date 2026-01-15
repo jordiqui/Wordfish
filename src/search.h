@@ -314,6 +314,7 @@ class Worker {
 
    void iterative_deepening();
     bool run_mcts_search(bool emitOutput);
+    void apply_mcts_root_ordering();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void

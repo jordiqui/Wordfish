@@ -126,6 +126,68 @@ bool stop_requested() { return mctsStopRequested.load(std::memory_order_relaxed)
 
 void clear() { MCTS.clear(); }
 
+Value reward_to_value(Reward r) {
+    if (r > 0.99)
+        return VALUE_MATE;
+    if (r < 0.01)
+        return -VALUE_MATE;
+
+    constexpr double g = 203.77396313709564;  //  this is 1 / k
+    const double     v = g * log(r / (1.0 - r));
+    return static_cast<Value>(static_cast<int>(v));
+}
+
+bool collect_root_stats(const Position& pos, size_t threadId, std::vector<MctsMoveStat>& out) {
+    out.clear();
+
+    const Key key1 = pos.key();
+    const Key key2 = pos.pawn_key();
+
+    mctsNodeInfo* node = nullptr;
+    createLock.acquire(threadId);
+    if (!MCTS.empty())
+    {
+        const auto [fst, snd] = MCTS.equal_range(key1);
+        for (auto it = fst; it != snd; ++it)
+        {
+            mctsNodeInfo* candidate = it->second;
+            if (candidate->key1 == key1 && candidate->key2 == key2)
+            {
+                node = candidate;
+                break;
+            }
+        }
+    }
+    createLock.release(threadId);
+
+    if (!node)
+        return false;
+
+    if (mctsThreads > 1)
+        node->lock.acquire(threadId);
+
+    const int n = node->number_of_sons.load(std::memory_order_relaxed);
+    out.reserve(n);
+    for (int k = 0; k < n; ++k)
+    {
+        Edge* edge = node->children[k];
+        const Move move = edge->move.load(std::memory_order_relaxed);
+        if (!move.is_ok())
+            continue;
+        MctsMoveStat stat;
+        stat.move = move;
+        stat.visits = edge->visits.load(std::memory_order_relaxed);
+        stat.meanActionValue = edge->meanActionValue.load(std::memory_order_relaxed);
+        stat.prior = edge->prior.load(std::memory_order_relaxed);
+        out.push_back(stat);
+    }
+
+    if (mctsThreads > 1)
+        node->lock.release(threadId);
+
+    return !out.empty();
+}
+
 template<typename T>
 T TRand(const T min, const T max) {
     static std::random_device        rd;

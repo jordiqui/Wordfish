@@ -24,6 +24,7 @@
 #include <cmath>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "../movepick.h"
 #include "../position.h"
@@ -69,6 +70,13 @@ struct Edge {
     std::atomic<Reward> meanActionValue;
 };
 
+struct MctsMoveStat {
+    Move   move = Move::none();
+    double visits = 0.0;
+    Reward meanActionValue = REWARD_NONE;
+    Reward prior = REWARD_NONE;
+};
+
 extern size_t                           mctsThreads;
 extern size_t                           mctsMultiStrategy;
 extern double                           mctsMultiMinVisits;
@@ -77,6 +85,8 @@ void                                    request_stop();
 void                                    clear_stop();
 bool                                    stop_requested();
 void                                    clear();
+Value                                   reward_to_value(Reward r);
+bool collect_root_stats(const Position& pos, size_t threadId, std::vector<MctsMoveStat>& out);
 constexpr int                           MAX_CHILDREN = MAX_MOVES;
 typedef std::array<Edge*, MAX_CHILDREN> EdgeArray;
 
