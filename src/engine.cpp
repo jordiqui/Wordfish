@@ -109,14 +109,13 @@ Engine::Engine(std::optional<std::string> path) :
       "MultiPV", Option(1, 1, MAX_MOVES));
 
     options.add("Search Strategy",
-                Option("AlphaBeta MCTS Montecarlo BrainLearnMCTS BL-MCTS", "AlphaBeta"));
-    options.add("MCTS Enabled", Option(false));
+                Option("AlphaBeta BrainLearnMCTS BL-MCTS", "AlphaBeta"));
 
-    options.add("MCTS Rollout Depth", Option(12, 4, 128));
-    options.add("MCTS Simulations", Option(5000, 0, 1000000));
-    options.add("MCTS Explore", Option(35, 1, 200));
-
-    options.add("BrainLearnMCTS", Option(false));
+    options.add("BrainLearnMCTS", Option(false, [this](const Option& o) {
+        options.options_map["Search Strategy"] =
+          std::string(int(o) ? "BrainLearnMCTS" : "AlphaBeta");
+        return std::nullopt;
+    }));
     options.add("BrainLearnMCTSThreads", Option(0, 0, 512));
     options.add("BrainLearnMultiStrategy", Option(20, 0, 100));
     options.add("BrainLearnMultiMinVisits", Option(5, 0, 1000));
@@ -246,7 +245,10 @@ void Engine::go(Search::LimitsType& limits) {
 
     threads.start_thinking(options, pos, states, limits);
 }
-void Engine::stop() { threads.stop = true; }
+void Engine::stop() {
+    threads.stop = true;
+    BrainLearnMCTS::request_stop();
+}
 
 void Engine::search_clear() {
     wait_for_search_finished();

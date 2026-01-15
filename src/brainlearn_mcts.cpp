@@ -92,6 +92,13 @@ size_t              mctsThreads;
 size_t              mctsMultiStrategy;
 double              mctsMultiMinVisits;
 std::atomic<size_t> MCTSNodeCount(0);
+std::atomic_bool    StopRequested(false);
+
+void request_stop() { StopRequested.store(true, std::memory_order_relaxed); }
+
+void clear_stop() { StopRequested.store(false, std::memory_order_relaxed); }
+
+bool stop_requested() { return StopRequested.load(std::memory_order_relaxed); }
 
 template<typename T>
 T TRand(const T min, const T max) {
@@ -176,7 +183,8 @@ void MonteCarlo::search(ThreadPool&        threads,
     timeExpired        = false;
     guardTriggered     = false;
 
-    while (!threads.stop.load(std::memory_order_relaxed) && !timeExpired && !noLegalMoves)
+    while (!threads.stop.load(std::memory_order_relaxed) && !stop_requested() && !timeExpired
+           && !noLegalMoves)
     {
         if (useTimeBudget && now() >= endTime)
         {
@@ -193,7 +201,7 @@ void MonteCarlo::search(ThreadPool&        threads,
         if (AB_Rollout)
         {
             Value value = evaluate_with_minimax(node, std::min(ply, MAX_PLY - ply - 2));
-            if (threads.stop)
+            if (threads.stop || stop_requested())
                 break;
 
             if (value == VALUE_ZERO)
@@ -224,7 +232,7 @@ void MonteCarlo::search(ThreadPool&        threads,
         if (should_emit_pv(isMainThread))
             emit_pv(worker, threads);
 
-        if (threads.stop.load(std::memory_order_relaxed))
+        if (threads.stop.load(std::memory_order_relaxed) || stop_requested())
             break;
 
         if (useTimeBudget && now() >= endTime)
@@ -314,7 +322,7 @@ bool MonteCarlo::computational_budget(ThreadPool& threads, Search::LimitsType li
     if (noLegalMoves)
         return false;
 
-    if (threads.stop.load(std::memory_order_relaxed))
+    if (threads.stop.load(std::memory_order_relaxed) || stop_requested())
         return false;
 
     if (useTimeBudget && now() >= endTime)

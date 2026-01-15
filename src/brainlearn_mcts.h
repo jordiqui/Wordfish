@@ -171,6 +171,10 @@ extern MCTSHashTable MCTS;
 
 const size_t MCTSMaxNodes = 100000;
 
+void request_stop();
+void clear_stop();
+bool stop_requested();
+
 class MonteCarlo {
     friend class AutoSpinLock;
 

@@ -42,7 +42,6 @@
 #include "misc.h"
 #include "movegen.h"
 #include "movepick.h"
-#include "mcts.h"
 #include "nnue/network.h"
 #include "nnue/nnue_accumulator.h"
 #include "position.h"
@@ -245,13 +244,6 @@ void Search::Worker::start_searching() {
                             main_manager()->originalTimeAdjust);
     tt.new_search();
 
-    const bool mctsEnabled = options.count("MCTS Enabled") ? int(options["MCTS Enabled"]) : false;
-    const bool strategyRequestsMcts = options.count("Search Strategy")
-                                      && (options["Search Strategy"] == "MCTS"
-                                          || options["Search Strategy"] == "Montecarlo");
-    const bool legacyMctsOverride = mctsEnabled && !strategyRequestsMcts && !useBrainLearn;
-    const bool useMcts = strategyRequestsMcts || legacyMctsOverride;
-
     auto ensure_root_moves = [&]() {
         if (!rootMoves.empty())
             return true;
@@ -262,13 +254,8 @@ void Search::Worker::start_searching() {
         return !rootMoves.empty();
     };
 
-    if (legacyMctsOverride)
-        sync_cout << "info string MCTS Enabled implies Search Strategy=MCTS" << sync_endl;
-
     if (useBrainLearn)
         sync_cout << "info string Driver=BrainLearnMCTS" << sync_endl;
-    else if (useMcts)
-        sync_cout << "info string Driver=WordfishMCTS" << sync_endl;
     else
         sync_cout << "info string Driver=AlphaBeta" << sync_endl;
 
@@ -302,21 +289,6 @@ void Search::Worker::start_searching() {
                 threads.start_searching();  // start non-main threads
                 iterative_deepening();      // main thread start searching
             }
-        }
-    }
-    else if (useMcts)
-    {
-        if (!ensure_root_moves())
-        {
-            rootMoves.emplace_back(Move::none());
-            main_manager()->updates.onUpdateNoMoves(
-              {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
-        }
-        else if (!run_monte_carlo())
-        {
-            sync_cout << "info string WordfishMCTS failed, falling back to AlphaBeta" << sync_endl;
-            threads.start_searching();  // start non-main threads
-            iterative_deepening();      // main thread start searching
         }
     }
     else if (rootMoves.empty())
@@ -356,7 +328,7 @@ void Search::Worker::start_searching() {
     Skill   skill =
       Skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
 
-    if (!useBrainLearn && !useMcts && int(options["MultiPV"]) == 1 && !limits.depth && !limits.mate
+    if (!useBrainLearn && int(options["MultiPV"]) == 1 && !limits.depth && !limits.mate
         && !skill.enabled() && !rootMoves.empty() && !rootMoves[0].pv.empty()
         && rootMoves[0].pv[0] != Move::none())
         bestThread = threads.get_best_thread()->worker.get();
@@ -414,158 +386,10 @@ void Search::Worker::start_searching() {
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
 
-// Main iterative deepening loop. It calls search()
-// repeatedly with increasing depth until the allocated thinking time has been
-// consumed, the user stops the search, or the maximum search depth is reached.
-bool Search::Worker::run_monte_carlo() {
-
-    auto stopRequested = [&]() { return threads.stop.load(std::memory_order_relaxed); };
-
-    const int defaultDepth = options.count("MCTS Rollout Depth") ? int(options["MCTS Rollout Depth"]) : 12;
-    const int depthHint = limits.depth ? std::clamp<int>(2 * limits.depth, 4, MAX_PLY - 1)
-                                       : std::clamp<int>(defaultDepth, 4, MAX_PLY - 1);
-
-    const auto result =
-      MCTS::analyze(rootPos, rootPos.side_to_move(), options, limits, stopRequested, depthHint);
-
-    Move bestMove = result.bestMove;
-    if ((bestMove == Move::none() || !bestMove.is_ok()) && !rootMoves.empty())
-        bestMove = rootMoves[0].pv.empty() ? Move::none() : rootMoves[0].pv[0];
-
-    const bool hasBestMove =
-      bestMove != Move::none() && bestMove.is_ok()
-      && std::any_of(rootMoves.begin(), rootMoves.end(), [&](const RootMove& rm) {
-             return !rm.pv.empty() && rm.pv[0] == bestMove;
-         });
-
-    if (!hasBestMove)
-        return false;
-
-    nodes.store(result.nodesVisited ? result.nodesVisited : result.simulations,
-               std::memory_order_relaxed);
-    tbHits.store(0, std::memory_order_relaxed);
-
-    completedDepth = rootDepth = Depth(depthHint);
-    selDepth       = depthHint;
-
-    auto to_value = [](double pawns) {
-        const double limit   = double(VALUE_MATE) / PawnValue;
-        const double clamped = std::clamp(pawns, -limit, limit);
-        const int    scaled  = int(std::round(clamped * PawnValue));
-        return Value(std::clamp(scaled, -VALUE_MATE, VALUE_MATE));
-    };
-
-    for (auto& rm : rootMoves)
-    {
-        const Move move = rm.pv.empty() ? Move::none() : rm.pv[0];
-        const auto statIt = std::find_if(result.moveStats.begin(), result.moveStats.end(),
-                                         [&](const MCTS::MoveStats& s) { return s.move == move; });
-
-        const Value score = statIt != result.moveStats.end() ? to_value(statIt->averageValue)
-                                                             : -VALUE_INFINITE;
-
-        rm.score            = score;
-        rm.previousScore    = score;
-        rm.averageScore     = score;
-        rm.meanSquaredScore = (score == -VALUE_INFINITE) ? score : Value(int(score) * int(score));
-        rm.uciScore         = score;
-        rm.scoreLowerbound  = false;
-        rm.scoreUpperbound  = false;
-        rm.selDepth         = depthHint;
-        rm.tbRank           = 0;
-        rm.tbScore          = score;
-        rm.effort           = statIt != result.moveStats.end() ? statIt->visits : 0;
-        rm.pv.assign(1, move);
-    }
-
-    // Bring the highest scoring moves to the front so the reported best move
-    // matches the MCTS evaluation instead of the generator's default order.
-    std::stable_sort(rootMoves.begin(), rootMoves.end());
-
-    if (!result.principalVariation.empty() && result.principalVariation[0].is_ok())
-    {
-        auto bestIt = std::find_if(rootMoves.begin(), rootMoves.end(), [&](const RootMove& rm) {
-            return !rm.pv.empty() && rm.pv[0] == result.principalVariation[0];
-        });
-
-        if (bestIt != rootMoves.end())
-        {
-            bestIt->pv.clear();
-            for (Move m : result.principalVariation)
-            {
-                if (!m.is_ok())
-                    break;
-                bestIt->pv.push_back(m);
-            }
-        }
-    }
-
-    std::sort(rootMoves.begin(), rootMoves.end());
-
-    if (!rootMoves.empty())
-    {
-        if (rootMoves[0].score == -VALUE_INFINITE)
-        {
-            rootMoves[0].score        = VALUE_ZERO;
-            rootMoves[0].averageScore = VALUE_ZERO;
-            rootMoves[0].uciScore     = VALUE_ZERO;
-        }
-
-        main_manager()->bestPreviousScore        = rootMoves[0].score;
-        main_manager()->bestPreviousAverageScore = rootMoves[0].averageScore;
-    }
-
-    pvIdx  = 0;
-    pvLast = rootMoves.size();
-
-    const TimePoint elapsed   = std::max<TimePoint>(TimePoint(1), result.elapsedMs);
-    const uint64_t  nodeCount = result.nodesVisited ? result.nodesVisited : result.simulations;
-    const uint64_t  nps       = result.elapsedMs ? (nodeCount * 1000 / elapsed) : 0;
-    const bool      showWdl = bool(options["UCI_ShowWDL"]);
-
-    const size_t multiPV = std::min<size_t>(options["MultiPV"], rootMoves.size());
-
-    for (size_t i = 0; i < multiPV; ++i)
-    {
-        RootMove& rm = rootMoves[i];
-
-        std::string pv;
-        for (Move m : rm.pv)
-        {
-            if (!m.is_ok())
-                break;
-            pv += UCIEngine::move(m, rootPos.is_chess960()) + " ";
-        }
-        if (!pv.empty())
-            pv.pop_back();
-
-        std::string wdl;
-        if (showWdl && rm.score != -VALUE_INFINITE)
-            wdl = UCIEngine::wdl(rm.score, rootPos);
-
-        InfoFull info;
-        info.depth    = depthHint;
-        info.selDepth = depthHint;
-        info.multiPV  = i + 1;
-        info.score    = {rm.score, rootPos};
-        info.wdl      = wdl;
-        info.bound    = "";
-        info.timeMs   = elapsed;
-        info.nodes    = result.nodesVisited ? result.nodesVisited : result.simulations;
-        info.nps      = nps;
-        info.tbHits   = 0;
-        info.pv       = pv;
-        info.hashfull = tt.hashfull();
-
-        main_manager()->updates.onUpdateFull(info);
-    }
-
-    return true;
-}
-
 bool Search::Worker::run_brainlearn_mcts() {
     completedDepth = rootDepth = Depth(1);
     selDepth                   = 1;
+    BrainLearnMCTS::clear_stop();
 
     Search::LimitsType brainLimits = limits;
     if (brainLimits.depth && !brainLimits.movetime && !brainLimits.use_time_management()
