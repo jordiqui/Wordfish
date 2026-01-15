@@ -197,7 +197,7 @@ class MonteCarlo {
     void          create_root(Search::Worker* worker);
     bool          computational_budget(ThreadPool& threads, Search::LimitsType limits);
     mctsNodeInfo* tree_policy(ThreadPool& threads, Search::LimitsType limits);
-    Reward        playout_policy(mctsNodeInfo* node);
+    Reward        playout_policy(mctsNodeInfo* node, ThreadPool& threads);
     Value         backup(Reward r, bool AB_Mode);
     Edge*         best_child(mctsNodeInfo* node, EdgeStatistic statistic) const;
 
@@ -248,6 +248,7 @@ class MonteCarlo {
     bool      noLegalMoves{};
     bool      guardTriggered{};
     bool      emittedSearchMarker{};
+    bool      should_abort(ThreadPool& threads);
 
     [[maybe_unused]] double max_epsilon = 0.99;
     [[maybe_unused]] double min_epsilon = 0.00;

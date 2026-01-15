@@ -226,11 +226,12 @@ void Search::Worker::start_searching() {
       strategyRequestsBrainLearn || (brainLearnCheckboxEnabled && strategyIsAlphaBeta);
     bool       ranAlphaBeta = !useBrainLearn;
 
-    const int maxBrainLearnHelpers = std::max(0, int(options["Threads"]) - 1);
-    const int brainLearnHelpers =
-      options.count("BrainLearnMCTSThreads")
-        ? std::clamp<int>(options["BrainLearnMCTSThreads"], 0, maxBrainLearnHelpers)
-        : 0;
+    const int maxBrainLearnThreads = std::max(1, int(options["Threads"]));
+    const int requestedBrainLearnThreads =
+      options.count("BrainLearnMCTSThreads") ? int(options["BrainLearnMCTSThreads"]) : 0;
+    const int clampedBrainLearnThreads = std::clamp(
+      requestedBrainLearnThreads == 0 ? 1 : requestedBrainLearnThreads, 1, maxBrainLearnThreads);
+    const int brainLearnHelpers = clampedBrainLearnThreads - 1;
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -275,7 +276,7 @@ void Search::Worker::start_searching() {
         }
         else
         {
-            BrainLearnMCTS::mctsThreads = 1 + static_cast<size_t>(brainLearnHelpers);
+            BrainLearnMCTS::mctsThreads = static_cast<size_t>(clampedBrainLearnThreads);
             BrainLearnMCTS::mctsMultiStrategy =
               options.count("BrainLearnMultiStrategy")
                 ? size_t(int(options["BrainLearnMultiStrategy"]))
