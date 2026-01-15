@@ -657,6 +657,8 @@ void MonteCarlo::emit_info(ThreadPool& threads) {
     const uint64_t  nps          = nodesVisited * 1000 / elapsed;
     const int       depth        = std::max(1, maximumPly);
     const int       selDepth     = std::max(1, maximumPly);
+    const Value     scoreValue =
+      reward_to_value(best_child(root, STAT_MEAN)->meanActionValue.load(std::memory_order_relaxed));
 
     std::string pvLine = pvStream.str();
 
@@ -669,9 +671,10 @@ void MonteCarlo::emit_info(ThreadPool& threads) {
             pvLine = "BrainLearnMCTS " + pvLine;
     }
 
-    sync_cout << "info depth " << depth << " seldepth " << selDepth << " nodes " << nodesVisited
-              << " nps " << nps << " hashfull " << tt.hashfull() << " time " << elapsed
-              << " pv " << (pvLine.empty() ? "(none)" : pvLine) << sync_endl;
+    sync_cout << "info depth " << depth << " seldepth " << selDepth << " score "
+              << UCIEngine::format_score({scoreValue, pos}) << " nodes " << nodesVisited << " nps "
+              << nps << " hashfull " << tt.hashfull() << " time " << elapsed << " pv "
+              << (pvLine.empty() ? "(none)" : pvLine) << sync_endl;
 
     lastInfoTime = now();
 }

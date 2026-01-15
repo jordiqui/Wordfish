@@ -224,6 +224,7 @@ void Search::Worker::start_searching() {
       options.count("BrainLearnMCTS") && bool(int(options["BrainLearnMCTS"]));
     const bool useBrainLearn =
       strategyRequestsBrainLearn || (brainLearnCheckboxEnabled && strategyIsAlphaBeta);
+    bool       ranAlphaBeta = !useBrainLearn;
 
     const int maxBrainLearnHelpers = std::max(0, int(options["Threads"]) - 1);
     const int brainLearnHelpers =
@@ -291,6 +292,7 @@ void Search::Worker::start_searching() {
             {
                 sync_cout << "info string BrainLearnMCTS failed, falling back to AlphaBeta"
                           << sync_endl;
+                ranAlphaBeta = true;
                 threads.start_searching();  // start non-main threads
                 iterative_deepening();      // main thread start searching
             }
@@ -345,7 +347,12 @@ void Search::Worker::start_searching() {
     main_manager()->bestPreviousAverageScore = bestThread->rootMoves[0].averageScore;
 
     // Send again PV info if we have a new best thread
-    if (bestThread != this)
+    if (ranAlphaBeta)
+    {
+        const Depth infoDepth = std::max<Depth>(Depth(1), bestThread->completedDepth);
+        main_manager()->pv(*bestThread, threads, tt, infoDepth);
+    }
+    else if (bestThread != this)
         main_manager()->pv(*bestThread, threads, tt, bestThread->completedDepth);
 
     std::string ponder;
@@ -2244,6 +2251,7 @@ Move Skill::pick_best(const RootMoves& rootMoves, size_t multiPV) {
 // when we are out of available time and thus stop the search.
 void SearchManager::check_time(Search::Worker& worker) {
     static TimePoint lastInfoTime = now();
+    static TimePoint lastPvTime   = now();
 
     TimePoint elapsed = tm.elapsed([&worker]() { return worker.threads.nodes_searched(); });
     TimePoint tick    = worker.limits.startTime + elapsed;
@@ -2296,6 +2304,17 @@ void SearchManager::check_time(Search::Worker& worker) {
     {
         lastInfoTime = tick;
         dbg_print();
+    }
+
+    if (worker.is_mainthread() && !worker.threads.stop.load(std::memory_order_relaxed)
+        && tick - lastPvTime >= 250)
+    {
+        if (!worker.rootMoves.empty() && !worker.rootMoves[0].pv.empty())
+        {
+            lastPvTime = tick;
+            const Depth infoDepth = std::max<Depth>(Depth(1), worker.rootDepth);
+            pv(worker, worker.threads, worker.tt, infoDepth);
+        }
     }
 
     // We should not stop pondering until told so by the GUI
