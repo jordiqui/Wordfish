@@ -283,6 +283,7 @@ void MonteCarlo::create_root(Search::Worker* worker) {
     startTime      = now();
     lastOutputTime = startTime;
     lastInfoTime   = startTime;
+    emittedSearchMarker = false;
 
     for (auto& currentStack : stackBuffer)
     {
@@ -607,6 +608,8 @@ void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
 
 void MonteCarlo::emit_info(ThreadPool& threads) {
 
+    (void) threads;
+
     assert(ply == 1);
 
     LOCK(this, root);
@@ -655,9 +658,20 @@ void MonteCarlo::emit_info(ThreadPool& threads) {
     const int       depth        = std::max(1, maximumPly);
     const int       selDepth     = std::max(1, maximumPly);
 
+    std::string pvLine = pvStream.str();
+
+    if (!emittedSearchMarker)
+    {
+        emittedSearchMarker = true;
+        if (pvLine.empty())
+            pvLine = "BrainLearnMCTS";
+        else
+            pvLine = "BrainLearnMCTS " + pvLine;
+    }
+
     sync_cout << "info depth " << depth << " seldepth " << selDepth << " nodes " << nodesVisited
               << " nps " << nps << " hashfull " << tt.hashfull() << " time " << elapsed
-              << " pv " << (pvStream.str().empty() ? "(none)" : pvStream.str()) << sync_endl;
+              << " pv " << (pvLine.empty() ? "(none)" : pvLine) << sync_endl;
 
     lastInfoTime = now();
 }
