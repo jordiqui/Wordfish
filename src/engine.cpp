@@ -241,6 +241,7 @@ void Engine::go(Search::LimitsType& limits) {
 void Engine::stop() {
     threads.stop = true;
     Brainlearn::request_stop();
+    wait_for_search_finished();
 }
 
 void Engine::search_clear() {

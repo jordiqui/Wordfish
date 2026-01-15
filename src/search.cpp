@@ -205,9 +205,22 @@ void Search::Worker::ensure_network_replicated() {
     (void) (networks[numaAccessToken]);
 }
 
+bool Search::Worker::mcts_debug_enabled() const {
+    return options.count("Debug Log File")
+        && !std::string(options["Debug Log File"]).empty();
+}
+
+void Search::Worker::log_mcts_debug(std::string_view line) const {
+    if (!mcts_debug_enabled())
+        return;
+
+    sync_cout << line << sync_endl;
+}
+
 void Search::Worker::start_searching() {
 
     limits.startTime = now();
+    Brainlearn::clear_stop();
 
     const bool hasContempOption = options.count("Contemp");
     const int  contemptSetting  = hasContempOption ? int(options["Contemp"]) : int(options["Contempt"]);
@@ -228,7 +241,8 @@ void Search::Worker::start_searching() {
                                         ? std::min(maxMctsHelpers, 8)
                                         : std::clamp(requestedMctsThreads, 0, maxMctsHelpers))
                                    : 0;
-    bool ranAlphaBeta = false;
+    bool      ranAlphaBeta = false;
+    TimePoint mctsStartTime = TimePoint(0);
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -269,7 +283,6 @@ void Search::Worker::start_searching() {
     {
         if (useMcts)
         {
-            Brainlearn::clear_stop();
             Brainlearn::clear();
 
             Brainlearn::mctsThreads =
@@ -285,6 +298,7 @@ void Search::Worker::start_searching() {
 
             if (clampedMctsHelpers > 0)
             {
+                mctsStartTime = now();
                 const std::string fen = rootPos.fen();
                 const bool        chess960 = rootPos.is_chess960();
 
@@ -410,12 +424,43 @@ void Search::Worker::start_searching() {
         }
     }
     auto bestmove = UCIEngine::move(fallbackMove, rootPos.is_chess960());
-    if (useMcts && mctsSummary.ready)
+    if (useMcts)
     {
-        sync_cout << "info string MCTS playouts=" << mctsSummary.playouts
-                  << " elapsed=" << mctsSummary.elapsed << " reason=" << mctsSummary.reason
-                  << sync_endl;
-        mctsSummary.ready = false;
+        uint64_t totalPlayouts = 0;
+        bool     anyNoMoves    = false;
+        bool     anyTime       = false;
+        bool     anyFallback   = false;
+
+        for (const auto& helper : mctsHelperWorkers)
+        {
+            if (!helper || !helper->mctsSummary.ready)
+                continue;
+
+            totalPlayouts += helper->mctsSummary.playouts;
+            if (helper->mctsSummary.reason == "nomoves")
+                anyNoMoves = true;
+            else if (helper->mctsSummary.reason == "time")
+                anyTime = true;
+            else if (helper->mctsSummary.reason == "fallback")
+                anyFallback = true;
+        }
+
+        const TimePoint elapsed =
+          mctsStartTime > TimePoint(0) ? now() - mctsStartTime : TimePoint(0);
+        const bool fallback =
+          totalPlayouts == 0 && elapsed > TimePoint(1000);
+
+        std::string reason = "stop";
+        if (anyNoMoves)
+            reason = "nomoves";
+        else if (fallback || anyFallback)
+            reason = "fallback";
+        else if (anyTime)
+            reason = "time";
+
+        sync_cout << "info string MCTS playouts=" << totalPlayouts
+                  << " elapsed=" << elapsed << " helpers=" << clampedMctsHelpers
+                  << " reason=" << reason << sync_endl;
     }
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
@@ -423,6 +468,12 @@ void Search::Worker::start_searching() {
 bool Search::Worker::run_mcts_search(bool emitOutput) {
     completedDepth = rootDepth = Depth(1);
     selDepth                   = 1;
+    const bool debugLog        = mcts_debug_enabled();
+
+    if (debugLog)
+    {
+        log_mcts_debug("info string MCTS helper=" + std::to_string(threadIdx) + " start");
+    }
 
     Search::LimitsType mctsLimits = limits;
     if (mctsLimits.depth && !mctsLimits.movetime && !mctsLimits.use_time_management()
@@ -458,21 +509,20 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
     const bool emitPv = false;
     monteCarlo.search(threads, mctsLimits, emitPv, this);
 
-    bool hasMove = true;
+    const uint64_t playouts = monteCarlo.playouts();
+    const bool     noLegalMoves = monteCarlo.no_legal_moves();
+    bool           fallbackUsed = playouts == 0;
+    bool           hasMove = true;
     if (emitOutput)
     {
         const int maxPly = std::clamp(monteCarlo.max_ply(), 1, MAX_PLY - 1);
         completedDepth   = rootDepth = Depth(maxPly);
         selDepth                     = maxPly;
-        const uint64_t playouts = monteCarlo.playouts();
 
         auto has_valid_move = [&]() {
             return !rootMoves.empty() && !rootMoves[0].pv.empty()
                 && rootMoves[0].pv[0] != Move::none() && rootPos.legal(rootMoves[0].pv[0]);
         };
-
-        const bool noLegalMoves = monteCarlo.no_legal_moves();
-        bool       fallbackUsed = playouts == 0;
 
         if ((playouts == 0 || noLegalMoves) && !has_valid_move())
         {
@@ -497,20 +547,28 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
             hasMove = fallbackMove != Move::none();
             fallbackUsed = true;
         }
+    }
 
-        const TimePoint elapsed = monteCarlo.elapsed_ms();
-        const bool      timeExpired =
-          monteCarlo.time_expired()
-          || (useTimeBudget && threads.stop.load(std::memory_order_relaxed));
-        std::string_view reason = noLegalMoves ? "nomoves"
-                                 : fallbackUsed ? "fallback"
-                                 : timeExpired  ? "time"
-                                                : "stop";
+    const TimePoint elapsed = monteCarlo.elapsed_ms();
+    const bool      timeExpired =
+      monteCarlo.time_expired()
+      || (useTimeBudget && threads.stop.load(std::memory_order_relaxed));
+    std::string_view reason = noLegalMoves ? "nomoves"
+                             : fallbackUsed ? "fallback"
+                             : timeExpired  ? "time"
+                                            : "stop";
 
-        mctsSummary.playouts = playouts;
-        mctsSummary.elapsed  = elapsed;
-        mctsSummary.reason   = std::string(reason);
-        mctsSummary.ready    = hasMove;
+    mctsSummary.playouts = playouts;
+    mctsSummary.elapsed  = elapsed;
+    mctsSummary.reason   = std::string(reason);
+    mctsSummary.ready    = true;
+
+    if (debugLog)
+    {
+        log_mcts_debug("info string MCTS helper=" + std::to_string(threadIdx)
+                       + " exit playouts=" + std::to_string(playouts)
+                       + " elapsed=" + std::to_string(elapsed)
+                       + " reason=" + std::string(reason));
     }
 
     nodes.store(Brainlearn::MCTSNodeCount.load(std::memory_order_relaxed),
