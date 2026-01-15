@@ -636,6 +636,67 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
     return hasMove;
 }
 
+void Search::Worker::apply_mcts_root_ordering() {
+    // Use MCTS helper statistics to bias AlphaBeta root move ordering.
+    if (!is_mainthread())
+        return;
+
+    if (!options.count("MCTS") || !bool(int(options["MCTS"])))
+        return;
+
+    if (rootMoves.empty())
+        return;
+
+    std::vector<Brainlearn::MctsMoveStat> stats;
+    const size_t lockId =
+      threadIdx == 0 ? Brainlearn::mctsThreads + 1 : threadIdx;
+    if (!Brainlearn::collect_root_stats(rootPos, lockId, stats))
+        return;
+
+    auto find_stat = [&](Move move) -> const Brainlearn::MctsMoveStat* {
+        for (const auto& stat : stats)
+            if (stat.move == move)
+                return &stat;
+        return nullptr;
+    };
+
+    bool hasStats = false;
+    for (RootMove& rm : rootMoves)
+    {
+        if (const auto* stat = find_stat(rm.pv[0]))
+        {
+            hasStats = true;
+            if (rm.score == -VALUE_INFINITE)
+                rm.previousScore = Brainlearn::reward_to_value(stat->meanActionValue);
+        }
+    }
+
+    if (!hasStats)
+        return;
+
+    std::stable_sort(rootMoves.begin(), rootMoves.end(),
+                     [&](const RootMove& a, const RootMove& b) {
+                         const auto* statA = find_stat(a.pv[0]);
+                         const auto* statB = find_stat(b.pv[0]);
+
+                         if (statA && statB)
+                         {
+                             const double scoreA = 10.0 * statA->visits + statA->prior;
+                             const double scoreB = 10.0 * statB->visits + statB->prior;
+                             if (scoreA != scoreB)
+                                 return scoreA > scoreB;
+                             if (statA->meanActionValue != statB->meanActionValue)
+                                 return statA->meanActionValue > statB->meanActionValue;
+                             return false;
+                         }
+                         if (statA && !statB)
+                             return true;
+                         if (!statA && statB)
+                             return false;
+                         return false;
+                     });
+}
+
 void Search::Worker::iterative_deepening() {
 
     SearchManager* mainThread = (is_mainthread() ? main_manager() : nullptr);
@@ -705,6 +766,8 @@ void Search::Worker::iterative_deepening() {
         // all the move scores except the (new) PV are set to -VALUE_INFINITE.
         for (RootMove& rm : rootMoves)
             rm.previousScore = rm.score;
+
+        apply_mcts_root_ordering();
 
         size_t pvFirst = 0;
         pvLast         = 0;
