@@ -98,6 +98,8 @@ class Spinlock {
                                                 std::memory_order_relaxed)
                    && currentOwner != threadId)
             {
+                if (stop_requested())
+                    std::this_thread::yield();
                 currentOwner = NO_THREAD;
                 std::this_thread::yield();
             }
@@ -198,7 +200,7 @@ class MonteCarlo {
     bool          computational_budget(ThreadPool& threads, Search::LimitsType limits);
     mctsNodeInfo* tree_policy(ThreadPool& threads, Search::LimitsType limits);
     Reward        playout_policy(mctsNodeInfo* node, ThreadPool& threads);
-    Value         backup(Reward r, bool AB_Mode);
+    Value         backup(Reward r, bool AB_Mode, ThreadPool& threads);
     Edge*         best_child(mctsNodeInfo* node, EdgeStatistic statistic) const;
 
     double ucb(const Edge* edge, long fatherVisits, bool priorMode) const;
@@ -207,7 +209,7 @@ class MonteCarlo {
     bool is_terminal(mctsNodeInfo* node) const;
     void do_move(Move m);
     void undo_move();
-    void generate_moves(mctsNodeInfo* node);
+    void generate_moves(mctsNodeInfo* node, ThreadPool& threads);
     void generate_root_moves(mctsNodeInfo* node);
 
     [[nodiscard]] Reward value_to_reward(Value v) const;
@@ -242,6 +244,7 @@ class MonteCarlo {
     TimePoint lastOutputTime{};
     TimePoint lastInfoTime{};
     TimePoint endTime{};
+    TimePoint hardStopTime{};
     uint64_t  playoutsCount{};
     bool      useTimeBudget{};
     bool      timeExpired{};
