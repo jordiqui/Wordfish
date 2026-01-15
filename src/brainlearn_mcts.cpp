@@ -228,7 +228,7 @@ void MonteCarlo::search(ThreadPool&        threads,
         }
 
         if (ply >= 1)
-            node->ttValue = backup(reward, AB_Rollout);
+            node->ttValue = backup(reward, AB_Rollout, threads);
 
         ++playoutsCount;
 
@@ -249,7 +249,7 @@ void MonteCarlo::search(ThreadPool&        threads,
     }
 
     if (ply >= 1)
-        backup(reward, AB_Rollout);
+        backup(reward, AB_Rollout, threads);
 
     if (should_emit_pv(isMainThread))
         emit_pv(worker, threads);
@@ -318,6 +318,7 @@ void MonteCarlo::create_root(Search::Worker* worker) {
 void MonteCarlo::set_time_budget(TimePoint allocatedTime, bool useTime) {
     useTimeBudget = useTime;
     endTime       = useTimeBudget ? startTime + allocatedTime : TimePoint(0);
+    hardStopTime  = useTimeBudget ? endTime + TimePoint(200) : TimePoint(0);
 }
 
 bool MonteCarlo::computational_budget(ThreadPool& threads, Search::LimitsType limits) {
@@ -336,6 +337,12 @@ bool MonteCarlo::computational_budget(ThreadPool& threads, Search::LimitsType li
         return false;
     }
 
+    if (useTimeBudget && hardStopTime && now() >= hardStopTime)
+    {
+        timeExpired = true;
+        return false;
+    }
+
     return true;
 }
 
@@ -344,6 +351,12 @@ bool MonteCarlo::should_abort(ThreadPool& threads) {
         return true;
 
     if (useTimeBudget && now() >= endTime)
+    {
+        timeExpired = true;
+        return true;
+    }
+
+    if (useTimeBudget && hardStopTime && now() >= hardStopTime)
     {
         timeExpired = true;
         return true;
@@ -431,7 +444,7 @@ Reward MonteCarlo::playout_policy(mctsNodeInfo* node, ThreadPool& threads) {
 
     if (node->node_visits == 0)
     {
-        generate_moves(node);
+        generate_moves(node, threads);
         assert(node->node_visits == 1);
     }
 
@@ -444,13 +457,16 @@ Reward MonteCarlo::playout_policy(mctsNodeInfo* node, ThreadPool& threads) {
     return node->children[0]->prior;
 }
 
-Value MonteCarlo::backup(Reward r, bool AB_Mode) {
+Value MonteCarlo::backup(Reward r, bool AB_Mode, ThreadPool& threads) {
 
     assert(ply >= 1);
     double weight = 1.0;
 
     while (ply != 1)
     {
+        if (should_abort(threads))
+            break;
+
         undo_move();
 
         r = 1.0 - r;
@@ -767,7 +783,7 @@ void MonteCarlo::undo_move() {
     pos.undo_move(stack[ply].currentMove);
 }
 
-void MonteCarlo::generate_moves(mctsNodeInfo* node) {
+void MonteCarlo::generate_moves(mctsNodeInfo* node, ThreadPool& threads) {
 
     LOCK(this, node);
 
@@ -794,6 +810,9 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
 
     Reward bestPrior = REWARD_MATED;
     while (((move = mp.next_move()) != Move::none()))
+    {
+        if (should_abort(threads))
+            return;
         if (pos.legal(move))
         {
             stack[ply].moveCount = ++moveCount;
@@ -806,6 +825,7 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
 
             add_prior_to_node(node, move, prior);
         }
+    }
 
     int n = node->number_of_sons;
     if (n > 0)
@@ -828,6 +848,8 @@ void MonteCarlo::generate_root_moves(mctsNodeInfo* node) {
     Reward bestPrior = REWARD_DRAW;
     for (Move move : MoveList<LEGAL>(pos))
     {
+        if (stop_requested())
+            return;
         stack[ply].moveCount = ++moveCount;
         const Reward prior = REWARD_DRAW;
         add_prior_to_node(node, move, prior);
