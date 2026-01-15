@@ -28,8 +28,8 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
 - **Session control**: `uci` announces identity and options; `isready` synchronises threads; `ucinewgame` clears experience buffers; `stop` halts search; `ponderhit` resumes after pondering; `quit` exits cleanly.
 - **Core options**: `Hash` (MB for the transposition table), `Clear Hash` (button), `Ponder`, `MultiPV`, `Skill Level`, `Move Overhead`, `Minimum Thinking Time`, `Panic Time Buffer`, `Slow Mover`, `nodestime`, `UCI_Chess960`, `UCI_LimitStrength` and `UCI_Elo`, `Contempt`/`Contemp`, and `King Safety`.
 - **Short-clock safety**: when the active clock drops under a second, the engine enters a panic regime that boosts `Move Overhead`, clamps thinking time to a fraction of the remaining clock, and caps it by `Panic Time Buffer` (default 200 ms). Raising `Minimum Thinking Time` or `Panic Time Buffer` increases the cushion for sudden disconnections or lag.
-- **Monte Carlo tuning**: `Search Strategy` accepts `AlphaBeta`, `BrainLearnMCTS`, or the alias `BL-MCTS`. The combo selection is authoritative: `BrainLearnMCTS`/`BL-MCTS` run the BrainLearn driver, and all other values stay on alpha–beta. When a clock-based limit is provided (`wtime`, `btime`, or `movetime`), BrainLearn MCTS respects the same time manager and stop conditions.
-- **BrainLearn MCTS (experimental)**: Set `Search Strategy` to `BrainLearnMCTS` (or `BL-MCTS`) to activate the BrainLearn Monte Carlo Tree Search driver. It is OFF by default. The `BrainLearnMCTS` check option is a GUI-friendly alias that toggles `Search Strategy` between `BrainLearnMCTS` and `AlphaBeta`.
+- **Monte Carlo tuning**: `Search Strategy` accepts `AlphaBeta` or `BrainLearnMCTS` (plus the parsed alias `BL-MCTS`, even though it is not listed in GUI combos). The combo selection is authoritative: `BrainLearnMCTS` runs the BrainLearn driver, and all other values stay on alpha–beta. When a clock-based limit is provided (`wtime`, `btime`, or `movetime`), BrainLearn MCTS respects the same time manager and stop conditions.
+- **BrainLearn MCTS (experimental)**: Set `Search Strategy` to `BrainLearnMCTS` (or `BL-MCTS`) to activate the BrainLearn Monte Carlo Tree Search driver. It is OFF by default. The `BrainLearnMCTS` check option is a GUI fallback that sets `Search Strategy` to `BrainLearnMCTS` when enabled without overriding an explicit combo choice when disabled.
   - `BrainLearnMCTSThreads`: Helper thread budget for BrainLearn MCTS (default 0, up to 512). The main thread remains alpha–beta unless `Search Strategy` is set to BrainLearn MCTS.
   - `BrainLearnMultiStrategy`: Percentage threshold used by BrainLearn for mixing rollouts with minimax probes (default 20, range 0–100).
   - `BrainLearnMultiMinVisits`: Visit threshold that unlocks expanded UCB logic in BrainLearn MCTS (default 5, range 0–1000).
@@ -104,17 +104,7 @@ Use `make help` for platform-specific targets. Bundled binaries embed default NN
 4. During analysis, monitor `info` strings for depth, score, nodes per second, and—when enabled—win/draw/loss figures.
 
 ### How to enable BrainLearnMCTS in Fritz/Cutechess
-
-1. Open the engine options panel for Wordfish.
-2. Set `Search Strategy` to `BrainLearnMCTS` (or `BL-MCTS` if that is the only visible alias).
-3. If your GUI cannot change the combo reliably, toggle the `BrainLearnMCTS` check option instead; it sets `Search Strategy` to `BrainLearnMCTS` when enabled and back to `AlphaBeta` when disabled.
-4. Apply any BrainLearn tuning (threads, strategy mix, minimum visits) as needed.
-
-Example command:
-
-```bash
-setoption name Search Strategy value BrainLearnMCTS
-```
+Enable in Fritz/Cutechess: set Search Strategy = BrainLearnMCTS (or tick BrainLearnMCTS if your GUI can’t change combos).
 
 ## Suggested BrainLearnMCTS evaluation profile
 
