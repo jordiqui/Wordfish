@@ -218,7 +218,12 @@ void Search::Worker::start_searching() {
     const bool strategyRequestsBrainLearn =
       options.count("Search Strategy")
       && (options["Search Strategy"] == "BrainLearnMCTS" || options["Search Strategy"] == "BL-MCTS");
-    const bool useBrainLearn = strategyRequestsBrainLearn;
+    const bool strategyIsAlphaBeta =
+      options.count("Search Strategy") && options["Search Strategy"] == "AlphaBeta";
+    const bool brainLearnCheckboxEnabled =
+      options.count("BrainLearnMCTS") && bool(int(options["BrainLearnMCTS"]));
+    const bool useBrainLearn =
+      strategyRequestsBrainLearn || (brainLearnCheckboxEnabled && strategyIsAlphaBeta);
 
     const int maxBrainLearnHelpers = std::max(0, int(options["Threads"]) - 1);
     const int brainLearnHelpers =

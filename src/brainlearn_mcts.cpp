@@ -232,6 +232,9 @@ void MonteCarlo::search(ThreadPool&        threads,
         if (should_emit_pv(isMainThread))
             emit_pv(worker, threads);
 
+        if (should_emit_info(isMainThread))
+            emit_info(threads);
+
         if (threads.stop.load(std::memory_order_relaxed) || stop_requested())
             break;
 
@@ -253,6 +256,9 @@ void MonteCarlo::search(ThreadPool&        threads,
 
     if (should_emit_pv(isMainThread))
         emit_pv(worker, threads);
+
+    if (should_emit_info(isMainThread))
+        emit_info(threads);
 
     if (isMainThread && timeExpired)
         threads.stop = true;
@@ -276,6 +282,7 @@ void MonteCarlo::create_root(Search::Worker* worker) {
     maximumPly     = 1;
     startTime      = now();
     lastOutputTime = startTime;
+    lastInfoTime   = startTime;
 
     for (auto& currentStack : stackBuffer)
     {
@@ -507,6 +514,19 @@ bool MonteCarlo::should_emit_pv(bool isMainThread) const {
     return outputDelay >= 60000;
 }
 
+bool MonteCarlo::should_emit_info(bool isMainThread) const {
+
+    if (!isMainThread)
+        return false;
+
+    if (ply != 1)
+        return false;
+
+    const TimePoint outputDelay = now() - lastInfoTime;
+
+    return outputDelay >= 200;
+}
+
 void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
 
     assert(ply == 1);
@@ -583,6 +603,63 @@ void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
     }
 
     lastOutputTime = now();
+}
+
+void MonteCarlo::emit_info(ThreadPool& threads) {
+
+    assert(ply == 1);
+
+    LOCK(this, root);
+
+    if (root->number_of_sons <= 0)
+    {
+        lastInfoTime = now();
+        return;
+    }
+
+    const bool chess960 = pos.is_chess960();
+    std::ostringstream pvStream;
+    int movesMade = 0;
+
+    Move move = best_child(root, STAT_VISITS)->move;
+    while (move != Move::none() && pos.legal(move))
+    {
+        if (movesMade > 0)
+            pvStream << ' ';
+        pvStream << UCIEngine::move(move, chess960);
+
+        do_move(move);
+        ++movesMade;
+
+        mctsNodeInfo* node = nodes[ply] = get_node(this, pos);
+        if (node == nullptr)
+            break;
+
+        LOCK(this, node);
+
+        if (is_terminal(node) || node->number_of_sons <= 0 || node->node_visits <= 0)
+            break;
+
+        move = best_child(node, STAT_VISITS)->move;
+    }
+
+    for (int k = 0; k < movesMade; k++)
+        undo_move();
+
+    if (pvStream.str().empty() && move != Move::none() && pos.legal(move))
+        pvStream << UCIEngine::move(move, chess960);
+
+    const TimePoint elapsed      = std::max<TimePoint>(1, elapsed_ms());
+    const uint64_t  nodesVisited = playoutsCount;
+    const uint64_t  nps          = nodesVisited * 1000 / elapsed;
+    const int       depth        = std::max(1, maximumPly);
+    const int       selDepth     = std::max(1, maximumPly);
+
+    sync_cout << "info depth " << depth << " seldepth " << selDepth << " nodes " << nodesVisited
+              << " nps " << nps << " hashfull " << tt.hashfull() << " time " << elapsed
+              << " pv " << (pvStream.str().empty() ? "(none)" : pvStream.str()) << sync_endl;
+
+    lastInfoTime = now();
 }
 
 inline bool MonteCarlo::is_root(const mctsNodeInfo* node) const {

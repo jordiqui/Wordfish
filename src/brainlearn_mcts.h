@@ -223,7 +223,9 @@ class MonteCarlo {
     [[nodiscard]] double exploration_constant() const;
 
     [[nodiscard]] bool should_emit_pv(bool isMainThread) const;
+    [[nodiscard]] bool should_emit_info(bool isMainThread) const;
     void               emit_pv(Search::Worker* worker, ThreadPool& threads);
+    void               emit_info(ThreadPool& threads);
     void               print_children();
 
     int max_ply() const { return maximumPly; }
@@ -238,6 +240,7 @@ class MonteCarlo {
     int       maximumPly{};
     TimePoint startTime{};
     TimePoint lastOutputTime{};
+    TimePoint lastInfoTime{};
     TimePoint endTime{};
     uint64_t  playoutsCount{};
     bool      useTimeBudget{};
