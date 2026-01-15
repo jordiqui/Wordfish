@@ -36,7 +36,7 @@
 #include <utility>
 
 #include "bitboard.h"
-#include "MCTS/brainlearn_mcts.h"
+#include "mcts/brainlearn_mcts.h"
 #include "evaluate.h"
 #include "experience.h"
 #include "history.h"
@@ -445,8 +445,10 @@ bool Search::Worker::run_brainlearn_mcts() {
 
             helperWorker->limits = limits;
             helperWorker->tbConfig = tbConfig;
-            helperWorker->rootPos = rootPos;
-            helperWorker->rootState = rootState;
+            helperWorker->rootState = StateInfo{};
+            const std::string fen = rootPos.fen();
+            const bool        isChess960 = bool(int(options["UCI_Chess960"]));
+            helperWorker->rootPos.set(fen, isChess960, &helperWorker->rootState);
             helperWorker->rootMoves = rootMoves;
             helperWorker->contemptValue = contemptValue;
             helperWorker->kingSafetySetting = kingSafetySetting;
@@ -454,7 +456,7 @@ bool Search::Worker::run_brainlearn_mcts() {
             helperWorker->brainlearnSummary = BrainLearnSummary{};
 
             helperThreads.emplace_back(
-              [&threads, helper = helperWorker.get()]() { helper->run_brainlearn_mcts(); });
+              [this, helper = helperWorker.get()]() { helper->run_brainlearn_mcts(); });
             helperWorkers.emplace_back(std::move(helperWorker));
         }
     }

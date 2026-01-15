@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-#include "MCTS/brainlearn_mcts.h"
+#include "mcts/brainlearn_mcts.h"
 #include "evaluate.h"
 #include "experience.h"
 #include "misc.h"
