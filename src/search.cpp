@@ -310,7 +310,7 @@ void Search::Worker::start_searching() {
 
                     const bool emitOutput = idx == 0;
                     mctsHelperThreads.emplace_back(
-                      [&threads, helper = helperWorker.get(), emitOutput]() {
+                      [helper = helperWorker.get(), emitOutput]() {
                           helper->run_mcts_search(emitOutput);
                       });
                     mctsHelperWorkers.emplace_back(std::move(helperWorker));
