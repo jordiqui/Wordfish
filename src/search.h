@@ -27,8 +27,10 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "history.h"
@@ -282,6 +284,7 @@ class Worker {
     void ensure_network_replicated();
     bool mcts_debug_enabled() const;
     void log_mcts_debug(std::string_view line) const;
+    void join_mcts_helpers();
 
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;
@@ -357,6 +360,9 @@ class Worker {
     Value     rootDelta;
 
     MctsSummary mctsSummary;
+    std::vector<std::unique_ptr<Search::Worker>> mctsHelperWorkers;
+    std::vector<std::thread>                     mctsHelperThreads;
+    std::mutex                                   mctsHelperMutex;
 
     size_t                    threadIdx;
     NumaReplicatedAccessToken numaAccessToken;

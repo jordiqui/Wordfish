@@ -242,6 +242,8 @@ void Engine::stop() {
     threads.stop = true;
     Brainlearn::request_stop();
     wait_for_search_finished();
+    if (threads.main_thread() && threads.main_thread()->worker)
+        threads.main_thread()->worker->join_mcts_helpers();
 }
 
 void Engine::search_clear() {
