@@ -247,6 +247,7 @@ class MonteCarlo {
     bool      timeExpired{};
     bool      noLegalMoves{};
     bool      guardTriggered{};
+    bool      emittedSearchMarker{};
 
     [[maybe_unused]] double max_epsilon = 0.99;
     [[maybe_unused]] double min_epsilon = 0.00;
