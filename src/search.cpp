@@ -224,6 +224,7 @@ void Search::Worker::start_searching() {
       options.count("BrainLearnMCTS") && bool(int(options["BrainLearnMCTS"]));
     const bool useBrainLearn =
       strategyRequestsBrainLearn || (brainLearnCheckboxEnabled && strategyIsAlphaBeta);
+    bool       ranAlphaBeta = !useBrainLearn;
 
     const int maxBrainLearnHelpers = std::max(0, int(options["Threads"]) - 1);
     const int brainLearnHelpers =
@@ -291,6 +292,7 @@ void Search::Worker::start_searching() {
             {
                 sync_cout << "info string BrainLearnMCTS failed, falling back to AlphaBeta"
                           << sync_endl;
+                ranAlphaBeta = true;
                 threads.start_searching();  // start non-main threads
                 iterative_deepening();      // main thread start searching
             }
@@ -345,7 +347,12 @@ void Search::Worker::start_searching() {
     main_manager()->bestPreviousAverageScore = bestThread->rootMoves[0].averageScore;
 
     // Send again PV info if we have a new best thread
-    if (bestThread != this)
+    if (ranAlphaBeta)
+    {
+        const Depth infoDepth = std::max<Depth>(Depth(1), bestThread->completedDepth);
+        main_manager()->pv(*bestThread, threads, tt, infoDepth);
+    }
+    else if (bestThread != this)
         main_manager()->pv(*bestThread, threads, tt, bestThread->completedDepth);
 
     std::string ponder;
