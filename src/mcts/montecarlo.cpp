@@ -36,10 +36,7 @@
 #include "../uci.h"
 #include "../syzygy/tbprobe.h"
 
- codex/align-wordfish-with-brainlearn-mcts-ux
-=======
 namespace Stockfish {
- main
 namespace Brainlearn {
 
 // MonteCarlo is a class implementing Monte-Carlo Tree Search for Brainlearn.
@@ -102,17 +99,10 @@ class AutoSpinLock {
     AutoSpinLock(const MonteCarlo* mcts, Spinlock& sl) :
         _mcts(mcts),
         _sl(sl) {
- codex/align-wordfish-with-brainlearn-mcts-ux
-        _sl.acquire(_mcts->thisThread->threadIdx);
-    }
-
-    ~AutoSpinLock() { _sl.release(_mcts->thisThread->threadIdx); }
-=======
         _sl.acquire(_mcts->thisThread->thread_index());
     }
 
     ~AutoSpinLock() { _sl.release(_mcts->thisThread->thread_index()); }
- main
 };
 
 #define LOCK__(m, n, l) AutoSpinLock asl##l(m, n)
@@ -126,8 +116,7 @@ size_t              mctsThreads;
 size_t              mctsMultiStrategy;
 double              mctsMultiMinVisits;
 std::atomic<size_t> MCTSNodeCount(0);
- codex/align-wordfish-with-brainlearn-mcts-ux
-std::atomic<bool>   mctsStopRequested(false);
+std::atomic_bool    mctsStopRequested(false);
 
 void request_stop() { mctsStopRequested.store(true, std::memory_order_relaxed); }
 
@@ -136,9 +125,6 @@ void clear_stop() { mctsStopRequested.store(false, std::memory_order_relaxed); }
 bool stop_requested() { return mctsStopRequested.load(std::memory_order_relaxed); }
 
 void clear() { MCTS.clear(); }
-=======
-std::atomic_bool    mctsStopRequested(false);
- main
 
 template<typename T>
 T TRand(const T min, const T max) {
@@ -222,13 +208,8 @@ void MonteCarlo::add_prior_to_node(mctsNodeInfo* node, Move m, Reward prior) con
 }
 
 // MonteCarlo::search() is the main function of Monte-Carlo algorithm.
-codex/align-wordfish-with-brainlearn-mcts-ux
-void MonteCarlo::search(Brainlearn::ThreadPool&        threads,
-                        Brainlearn::Search::LimitsType limits,
-=======
 void MonteCarlo::search(ThreadPool&        threads,
                         Search::LimitsType limits,
- main
                         bool                           isMainThread,
                         Search::Worker*                worker) {
 
@@ -236,48 +217,28 @@ void MonteCarlo::search(ThreadPool&        threads,
     AB_Rollout         = false;
     Reward reward      = value_to_reward(
       VALUE_DRAW);  //TODO: Perhaps we should use static_value() here instead of 'VALUE_DRAW'
- codex/align-wordfish-with-brainlearn-mcts-ux
-    threadsPtr = &threads;
+
+    threadsPtr    = &threads;
     playoutsCount = 0;
 
     while (computational_budget(threads, limits) && (node = tree_policy(threads, limits)))
     {
-        if (stop_requested())
-            break;
-
-=======
-
-    while (computational_budget(threads, limits) && (node = tree_policy(threads, limits)))
-    {
- main
         LOCK(this, node);
 
         if (AB_Rollout)
         {
             Value value = evaluate_with_minimax(node, std::min(ply, MAX_PLY - ply - 2));
- codex/align-wordfish-with-brainlearn-mcts-ux
-            if (threads.stop)
-=======
-            if (stop_requested(threads))
- main
+            if (stop_requested())
                 break;
 
             if (value == VALUE_ZERO)
                 value = node->ttValue;
 
-codex/align-wordfish-with-brainlearn-mcts-ux
-            if (value >= VALUE_KNOWN_WIN)
-                value = VALUE_KNOWN_WIN - ply;
-
-            if (value <= -VALUE_KNOWN_WIN)
-                value = -(VALUE_KNOWN_WIN - ply);
-=======
             if (value >= VALUE_MATE)
                 value = VALUE_MATE - ply;
 
             if (value <= -VALUE_MATE)
                 value = -(VALUE_MATE - ply);
- main
 
             reward        = value_to_reward(value);
             node->ttValue = value;
@@ -292,12 +253,7 @@ codex/align-wordfish-with-brainlearn-mcts-ux
 
         if (ply >= 1)
             node->ttValue = backup(reward, AB_Rollout);
- codex/align-wordfish-with-brainlearn-mcts-ux
-
-        playoutsCount++;
-=======
-        ++playoutCount;
-main
+        ++playoutsCount;
 
         if (should_emit_pv(isMainThread))
             emit_pv(worker, threads);
@@ -333,22 +289,14 @@ void MonteCarlo::create_root(Search::Worker* worker) {
     maximumPly     = 1;
     startTime      = now();
     lastOutputTime = startTime;
-codex/align-wordfish-with-brainlearn-mcts-ux
     playoutsCount  = 0;
-=======
-    playoutCount   = 0;
- main
     noLegalMoves   = false;
 
     // Prepare the stack to go down and up in the game tree
 
     for (auto& currentStack : stackBuffer)
     {
-codex/align-wordfish-with-brainlearn-mcts-ux
-        currentStack = Brainlearn::Search::Stack();
-=======
         currentStack = Search::Stack();
- main
     }
 
     for (int i = -7; i <= MAX_PLY + 10; i++)
@@ -376,37 +324,13 @@ codex/align-wordfish-with-brainlearn-mcts-ux
 
     if (root->node_visits == 0)
         generate_moves(root);
- codex/align-wordfish-with-brainlearn-mcts-ux
-
-=======
- main
     noLegalMoves = root->number_of_sons == 0;
 }
 
 /// MonteCarlo::computational_budget() returns true the search is still
 /// in the computational budget (time limit, or number of nodes, etc.)
- codex/align-wordfish-with-brainlearn-mcts-ux
-bool MonteCarlo::computational_budget(Brainlearn::ThreadPool&        threads,
-                                      Brainlearn::Search::LimitsType limits) {
-
-    (void) threads;
-    if (limits.depth && maximumPly > limits.depth * 2)
-        return false;
-
-    return !stop_requested();
-}
-
-/// MonteCarlo::tree_policy() selects the next node to be expanded
-mctsNodeInfo* MonteCarlo::tree_policy(Brainlearn::ThreadPool&        threads,
-                                      Brainlearn::Search::LimitsType limits) {
-
-    assert(ply == 1);
-
-    if (stop_requested())
-        return nullptr;
-
-=======
 bool MonteCarlo::computational_budget(ThreadPool& threads, Search::LimitsType limits) {
+    (void) threads;
 
     if (limits.depth && maximumPly > limits.depth * 2)
         return false;
@@ -417,12 +341,22 @@ bool MonteCarlo::computational_budget(ThreadPool& threads, Search::LimitsType li
     if (useTimeBudget && time_expired())
         return false;
 
-    return !stop_requested(threads);
+    return !stop_requested();
 }
 
-bool MonteCarlo::stop_requested(const ThreadPool& threads) const {
-    return threads.stop.load(std::memory_order_relaxed)
-        || mctsStopRequested.load(std::memory_order_relaxed);
+bool MonteCarlo::stop_requested() const {
+    if (mctsStopRequested.load(std::memory_order_relaxed))
+        return true;
+    if (threadsPtr && threadsPtr->stop.load(std::memory_order_relaxed))
+        return true;
+
+    const TimePoint elapsed = elapsed_ms();
+    if (useTimeBudget && elapsed > timeBudget + TimePoint(200))
+        return true;
+    if (playoutsCount == 0 && elapsed > TimePoint(1000))
+        return true;
+
+    return false;
 }
 
 /// MonteCarlo::tree_policy() selects the next node to be expanded
@@ -430,7 +364,6 @@ mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType li
 
     assert(ply == 1);
 
- main
     if (root->number_of_sons == 0)
     {
         return root;
@@ -439,12 +372,6 @@ mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType li
     mctsNodeInfo* node = nullptr;
     while ((node = nodes[ply]))
     {
- codex/align-wordfish-with-brainlearn-mcts-ux
-        if (stop_requested())
-            return nullptr;
-
-=======
- main
         LOCK(this, node);
 
         if (node->node_visits == 0)
@@ -482,11 +409,7 @@ mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType li
         LOCK(this, node);
 
         const size_t greedy = TRand<size_t>(0, 100);
-codex/align-wordfish-with-brainlearn-mcts-ux
-        if (!is_root(node) && node->ttValue < VALUE_KNOWN_WIN && node->ttValue > -VALUE_KNOWN_WIN
-=======
         if (!is_root(node) && node->ttValue < VALUE_MATE && node->ttValue > -VALUE_MATE
-main
             && (node->number_of_sons > 5 && greedy >= mctsMultiStrategy))
         {
             AB_Rollout = true;
@@ -503,13 +426,10 @@ Reward MonteCarlo::playout_policy(mctsNodeInfo* node) {
 
     LOCK(this, node);
 
-    // Step 0. Check for terminal nodes
- codex/align-wordfish-with-brainlearn-mcts-ux
     if (stop_requested())
         return REWARD_DRAW;
 
-=======
- main
+    // Step 0. Check for terminal nodes
     if (is_terminal(node))
         return evaluate_terminal(node);
 
@@ -542,11 +462,6 @@ Value MonteCarlo::backup(Reward r, bool AB_Mode) {
 
     while (ply != 1)
     {
- codex/align-wordfish-with-brainlearn-mcts-ux
-        (void) stop_requested();
-
-=======
- main
         undo_move();
 
         r = 1.0 - r;
@@ -630,43 +545,6 @@ bool MonteCarlo::should_emit_pv(bool isMainThread) const {
     if (ply != 1)
         return false;
 
- codex/align-wordfish-with-brainlearn-mcts-ux
-    const TimePoint outputDelay = now() - lastOutputTime;
-
-    return outputDelay >= 200;
-}
-
-void MonteCarlo::set_time_budget(TimePoint timeBudgetMs, bool useBudget) {
-    timeBudget    = timeBudgetMs;
-    useTimeBudget = useBudget;
-}
-
-bool MonteCarlo::time_expired() const {
-    return useTimeBudget && elapsed_ms() >= timeBudget;
-}
-
-TimePoint MonteCarlo::elapsed_ms() const { return now() - startTime; }
-
-uint64_t MonteCarlo::playouts() const { return playoutsCount; }
-
-int MonteCarlo::max_ply() const { return maximumPly; }
-
-bool MonteCarlo::no_legal_moves() const { return noLegalMoves; }
-
-bool MonteCarlo::stop_requested() const {
-    if (Brainlearn::stop_requested())
-        return true;
-    if (threadsPtr && threadsPtr->stop.load(std::memory_order_relaxed))
-        return true;
-
-    const TimePoint elapsed = elapsed_ms();
-    if (useTimeBudget && elapsed > timeBudget + TimePoint(200))
-        return true;
-    if (playoutsCount == 0 && elapsed > TimePoint(1000))
-        return true;
-
-    return time_expired();
-=======
     const TimePoint elapsed     = now() - startTime + 1;  // in milliseconds
     const TimePoint outputDelay = now() - lastOutputTime;
 
@@ -682,17 +560,12 @@ bool MonteCarlo::stop_requested() const {
         return outputDelay >= 60000;
 
     return outputDelay >= 60000;
- main
 }
 
 
 /// MonteCarlo::emit_pv() emits the principal variation (PV) of the game tree on the
 /// standard output stream, as requested by the UCI protocol.
- codex/align-wordfish-with-brainlearn-mcts-ux
-void MonteCarlo::emit_pv(Search::Worker* worker, Brainlearn::ThreadPool& threads) {
-=======
 void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
- main
 
     assert(ply == 1);
 
@@ -709,11 +582,7 @@ void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
         std::sort(list.begin(), list.begin() + n, CompareRobustChoice);
 
     // Clear the global list of moves for root (Search::RootMoves)
- codex/align-wordfish-with-brainlearn-mcts-ux
-    Search::RootMoves& rootMoves = thisThread->rootMoves;
-=======
     Search::RootMoves& rootMoves = thisThread->root_moves();
- main
     rootMoves.clear();
 
     if (n > 0)
@@ -764,11 +633,7 @@ void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
         assert(int(rootMoves.size()) == root->number_of_sons);
         assert(ply == 1);
 
- codex/align-wordfish-with-brainlearn-mcts-ux
-        threads.main_manager()->pv(*worker, threads, tt, worker->completedDepth);
-=======
    threads.main_manager()->pv(*worker, threads, tt, worker->completed_depth());
- main
     }
     else
     {
@@ -776,10 +641,6 @@ void MonteCarlo::emit_pv(Search::Worker* worker, ThreadPool& threads) {
         rootMoves.emplace_back(Move::none());
         threads.main_manager()->updates.onUpdateNoMoves(
           {0, {pos.checkers() ? -VALUE_MATE : VALUE_DRAW, pos}});
- codex/align-wordfish-with-brainlearn-mcts-ux
-        noLegalMoves = true;
-=======
- main
     }
 
     lastOutputTime = now();
@@ -890,12 +751,9 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
     // Generate the legal moves and calculate their priors
     Reward bestPrior = REWARD_MATED;
     while (((move = mp.next_move()) != Move::none()))
- codex/align-wordfish-with-brainlearn-mcts-ux
     {
         if (stop_requested())
             break;
-=======
- main
         if (pos.legal(move))
         {
             stack[ply].moveCount = ++moveCount;
@@ -908,10 +766,7 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
 
             add_prior_to_node(node, move, prior);
         }
- codex/align-wordfish-with-brainlearn-mcts-ux
     }
-=======
- main
 
     // Sort the moves according to their prior value
     int n = node->number_of_sons;
@@ -923,12 +778,6 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
 
     // Indicate that we have just expanded the current node
     node->node_visits++;
- codex/align-wordfish-with-brainlearn-mcts-ux
-
-    if (is_root(node))
-        noLegalMoves = node->number_of_sons == 0;
-=======
- main
 }
 
 
@@ -1015,15 +864,9 @@ Reward MonteCarlo::value_to_reward(Value v) const {
 /// and a reward of 0.05 corresponds to -600 (about minus three pawns).
 Value MonteCarlo::reward_to_value(Reward r) const {
     if (r > 0.99)
- codex/align-wordfish-with-brainlearn-mcts-ux
-        return VALUE_KNOWN_WIN;
-    if (r < 0.01)
-        return -VALUE_KNOWN_WIN;
-=======
         return VALUE_MATE;
     if (r < 0.01)
         return -VALUE_MATE;
- main
 
     constexpr double g = 203.77396313709564;  //  this is 1 / k
     const double     v = g * log(r / (1.0 - r));
@@ -1042,8 +885,6 @@ void MonteCarlo::set_exploration_constant(double c) { UCB_EXPLORATION_CONSTANT =
 /// MonteCarlo::exploration_constant() returns the exploration constant of the UCB formula
 double MonteCarlo::exploration_constant() const { return UCB_EXPLORATION_CONSTANT; }
 
-codex/align-wordfish-with-brainlearn-mcts-ux
-=======
 void MonteCarlo::set_time_budget(TimePoint allocated, bool useBudget) {
     timeBudget    = allocated;
     useTimeBudget = useBudget;
@@ -1051,7 +892,7 @@ void MonteCarlo::set_time_budget(TimePoint allocated, bool useBudget) {
 
 int MonteCarlo::max_ply() const { return maximumPly; }
 
-uint64_t MonteCarlo::playouts() const { return playoutCount; }
+uint64_t MonteCarlo::playouts() const { return playoutsCount; }
 
 bool MonteCarlo::no_legal_moves() const { return noLegalMoves; }
 
@@ -1061,7 +902,6 @@ bool MonteCarlo::time_expired() const {
     return useTimeBudget && timeBudget > 0 && elapsed_ms() >= timeBudget;
 }
 
-main
 /// MonteCarlo::ucb() calculates the upper confidence bound formula for the son
 /// which we reach from node "node" by following the edge "edge".
 ///
@@ -1134,9 +974,5 @@ void MonteCarlo::print_children() {
 
     lastOutputTime = now();
 }
- codex/align-wordfish-with-brainlearn-mcts-ux
-}
-=======
 }  // namespace Brainlearn
 }  // namespace Stockfish
- main
