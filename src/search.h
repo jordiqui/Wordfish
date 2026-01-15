@@ -308,7 +308,6 @@ class Worker {
     };
 
    void iterative_deepening();
-    bool run_monte_carlo();
     bool run_brainlearn_mcts();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
