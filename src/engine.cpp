@@ -110,8 +110,8 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("MCTS", Option(false));
     options.add("MCTSThreads", Option(0, 0, 512));
-    options.add("MCTS Multi Strategy", Option(20, 0, 100));
-    options.add("MCTS Multi MinVisits", Option(5, 0, 1000));
+    options.add("Multi Strategy", Option(20, 0, 100));
+    options.add("Multi MinVisits", Option(5, 0, 1000));
 
     options.add("Skill Level", Option(20, 0, 20));
 

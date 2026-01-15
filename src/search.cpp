@@ -288,12 +288,12 @@ void Search::Worker::start_searching() {
             Brainlearn::mctsThreads =
               std::max<size_t>(1, static_cast<size_t>(clampedMctsHelpers));
             Brainlearn::mctsMultiStrategy =
-              options.count("MCTS Multi Strategy")
-                ? size_t(int(options["MCTS Multi Strategy"]))
+              options.count("Multi Strategy")
+                ? size_t(int(options["Multi Strategy"]))
                 : 20;
             Brainlearn::mctsMultiMinVisits =
-              options.count("MCTS Multi MinVisits")
-                ? double(int(options["MCTS Multi MinVisits"]))
+              options.count("Multi MinVisits")
+                ? double(int(options["Multi MinVisits"]))
                 : 5.0;
 
             if (clampedMctsHelpers > 0)
@@ -315,12 +315,25 @@ void Search::Worker::start_searching() {
 
                     helperWorker->limits = limits;
                     helperWorker->tbConfig = tbConfig;
+                    helperWorker->rootState = StateInfo();
                     helperWorker->rootPos.set(fen, chess960, &helperWorker->rootState);
                     helperWorker->rootMoves.clear();
                     helperWorker->contemptValue = contemptValue;
                     helperWorker->kingSafetySetting = kingSafetySetting;
                     helperWorker->accumulatorStack.reset();
                     helperWorker->mctsSummary = MctsSummary{};
+
+                    if (MoveList<LEGAL>(helperWorker->rootPos).size() == 0)
+                    {
+                        sync_cout << "info string MCTS helper init failed: no legal moves from FEN="
+                                  << fen << sync_endl;
+                        helperWorker->mctsSummary.playouts = 0;
+                        helperWorker->mctsSummary.elapsed  = TimePoint(0);
+                        helperWorker->mctsSummary.reason   = "nomoves";
+                        helperWorker->mctsSummary.ready    = true;
+                        mctsHelperWorkers.emplace_back(std::move(helperWorker));
+                        continue;
+                    }
 
                     const bool emitOutput = idx == 0;
                     mctsHelperThreads.emplace_back(
