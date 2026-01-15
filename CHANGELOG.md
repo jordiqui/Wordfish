@@ -7,6 +7,12 @@
 ### Changed
 - Nothing yet.
 
+## [3.90-150126]
+### Changed
+- Rebranded the engine to "Wordfish-3.90-150126" and extended architecture-aware executable and UCI suffixes so GUIs like Fritz 20 and CuteChess show `Wordfish-3.90-150126-sse41popcnt`, `Wordfish-3.90-150126-avx2`, `Wordfish-3.90-150126-bmi2`, `Wordfish-3.90-150126-FMA3`, or `Wordfish-3.90-150126-avx512` depending on the compiled target.
+- BrainLearnMCTS is now the only Monte-Carlo strategy available, with GUI-facing `Search Strategy` options reduced to AlphaBeta and BrainLearnMCTS plus the BrainLearnMCTS checkbox fallback.
+- BrainLearnMCTS now honors `go movetime`, and `go infinite` responds reliably to `stop` across GUIs.
+
 ## [3.70-070126]
 ### Changed
 - Rebranded the engine to "Wordfish-3.70-070126" and extended architecture-aware executable and UCI suffixes so GUIs like Fritz 20 and CuteChess show `Wordfish-3.70-070126-sse41popcnt`, `Wordfish-3.70-070126-avx2`, `Wordfish-3.70-070126-bmi2`, `Wordfish-3.70-070126-FMA3`, or `Wordfish-3.70-070126-avx512` depending on the compiled target.
