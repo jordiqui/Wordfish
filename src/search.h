@@ -361,6 +361,7 @@ class Worker {
     Value     rootDelta;
 
     MctsSummary mctsSummary;
+    bool        mctsInfoLogged = false;
     std::vector<std::unique_ptr<Search::Worker>> mctsHelperWorkers;
     std::vector<std::thread>                     mctsHelperThreads;
     std::mutex                                   mctsHelperMutex;

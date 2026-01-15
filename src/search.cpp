@@ -240,6 +240,7 @@ void Search::Worker::start_searching() {
     contemptValue     = Value(contemptSetting * PawnValue / 100);
     kingSafetySetting = int(options["King Safety"]);
     mctsSummary = MctsSummary{};
+    mctsInfoLogged = false;
     const bool debugLog = mcts_debug_enabled();
 
     accumulatorStack.reset();
@@ -255,7 +256,6 @@ void Search::Worker::start_searching() {
                                         : std::clamp(requestedMctsThreads, 0, maxMctsHelpers))
                                    : 0;
     bool      ranAlphaBeta = false;
-    TimePoint mctsStartTime = TimePoint(0);
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -279,10 +279,6 @@ void Search::Worker::start_searching() {
     };
 
     sync_cout << "info string Driver=AlphaBeta" << sync_endl;
-    if (useMcts)
-        sync_cout << "info string MCTS helpers=" << clampedMctsHelpers
-                  << " engineThreads=" << engineThreads << sync_endl;
-
     if (is_mainthread())
         join_mcts_helpers();
     {
@@ -316,7 +312,6 @@ void Search::Worker::start_searching() {
 
             if (clampedMctsHelpers > 0)
             {
-                mctsStartTime = now();
                 const std::string fen = rootPos.fen();
                 const bool        chess960 = rootPos.is_chess960();
 
@@ -338,7 +333,6 @@ void Search::Worker::start_searching() {
                     helperWorker->tbConfig = tbConfig;
                     helperWorker->rootState = StateInfo();
                     helperWorker->rootPos.set(fen, chess960, &helperWorker->rootState);
-                    helperWorker->rootState = rootState;
                     helperWorker->rootMoves.clear();
                     helperWorker->contemptValue = contemptValue;
                     helperWorker->kingSafetySetting = kingSafetySetting;
@@ -369,8 +363,13 @@ void Search::Worker::start_searching() {
 
                     if (legalCount == 0)
                     {
-                        log_mcts_debug("info string MCTS helper init failed: no legal moves from FEN="
-                                       + fen);
+                        const std::string stm = helperWorker->rootPos.side_to_move() == WHITE
+                                                  ? "white"
+                                                  : "black";
+                        sync_cout << "info string MCTS helper init failed: no legal moves fen=" << fen
+                                  << " side=" << stm << sync_endl;
+                        log_mcts_debug("info string MCTS helper init failed: no legal moves fen="
+                                       + fen + " side=" + stm);
                         helperWorker->mctsSummary.playouts = 0;
                         helperWorker->mctsSummary.elapsed  = TimePoint(0);
                         helperWorker->mctsSummary.reason   = "nomoves";
@@ -484,9 +483,7 @@ void Search::Worker::start_searching() {
     if (useMcts)
     {
         uint64_t totalPlayouts = 0;
-        bool     anyNoMoves    = false;
-        bool     anyTime       = false;
-        bool     anyFallback   = false;
+        uint64_t totalVisits   = 0;
 
         std::lock_guard<std::mutex> lock(mctsHelperMutex);
         for (const auto& helper : mctsHelperWorkers)
@@ -495,30 +492,24 @@ void Search::Worker::start_searching() {
                 continue;
 
             totalPlayouts += helper->mctsSummary.playouts;
-            if (helper->mctsSummary.reason == "nomoves")
-                anyNoMoves = true;
-            else if (helper->mctsSummary.reason == "time")
-                anyTime = true;
-            else if (helper->mctsSummary.reason == "fallback")
-                anyFallback = true;
         }
 
-        const TimePoint elapsed =
-          mctsStartTime > TimePoint(0) ? now() - mctsStartTime : TimePoint(0);
-        const bool fallback =
-          totalPlayouts == 0 && elapsed > TimePoint(1000);
+        if (!mctsInfoLogged)
+        {
+            std::vector<Brainlearn::MctsMoveStat> stats;
+            const size_t lockId =
+              threadIdx == 0 ? Brainlearn::mctsThreads + 1 : threadIdx;
+            if (Brainlearn::collect_root_stats(rootPos, lockId, stats))
+            {
+                for (const auto& stat : stats)
+                    totalVisits += stat.visits;
+            }
 
-        std::string reason = "stop";
-        if (anyNoMoves)
-            reason = "nomoves";
-        else if (fallback || anyFallback)
-            reason = "fallback";
-        else if (anyTime)
-            reason = "time";
-
-        sync_cout << "info string MCTS playouts=" << totalPlayouts
-                  << " elapsed=" << elapsed << " helpers=" << clampedMctsHelpers
-                  << " reason=" << reason << sync_endl;
+            sync_cout << "info string MCTS playouts=" << totalPlayouts
+                      << " helpers=" << clampedMctsHelpers
+                      << " visits=" << totalVisits << sync_endl;
+            mctsInfoLogged = true;
+        }
     }
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
@@ -647,6 +638,9 @@ void Search::Worker::apply_mcts_root_ordering() {
     if (rootMoves.empty())
         return;
 
+    if (rootDepth != 1)
+        return;
+
     std::vector<Brainlearn::MctsMoveStat> stats;
     const size_t lockId =
       threadIdx == 0 ? Brainlearn::mctsThreads + 1 : threadIdx;
@@ -659,6 +653,13 @@ void Search::Worker::apply_mcts_root_ordering() {
                 return &stat;
         return nullptr;
     };
+
+    uint64_t totalVisits = 0;
+    for (const auto& stat : stats)
+        totalVisits += stat.visits;
+
+    if (totalVisits == 0)
+        return;
 
     bool hasStats = false;
     for (RootMove& rm : rootMoves)
@@ -674,25 +675,38 @@ void Search::Worker::apply_mcts_root_ordering() {
     if (!hasStats)
         return;
 
+    if (!mctsInfoLogged)
+    {
+        uint64_t totalPlayouts = 0;
+        {
+            std::lock_guard<std::mutex> lock(mctsHelperMutex);
+            for (const auto& helper : mctsHelperWorkers)
+                if (helper && helper->mctsSummary.ready)
+                    totalPlayouts += helper->mctsSummary.playouts;
+        }
+        sync_cout << "info string MCTS playouts=" << totalPlayouts
+                  << " helpers=" << mctsHelperWorkers.size()
+                  << " visits=" << totalVisits << sync_endl;
+        mctsInfoLogged = true;
+    }
+
     std::stable_sort(rootMoves.begin(), rootMoves.end(),
                      [&](const RootMove& a, const RootMove& b) {
                          const auto* statA = find_stat(a.pv[0]);
                          const auto* statB = find_stat(b.pv[0]);
 
-                         if (statA && statB)
-                         {
-                             const double scoreA = 10.0 * statA->visits + statA->prior;
-                             const double scoreB = 10.0 * statB->visits + statB->prior;
-                             if (scoreA != scoreB)
-                                 return scoreA > scoreB;
-                             if (statA->meanActionValue != statB->meanActionValue)
-                                 return statA->meanActionValue > statB->meanActionValue;
-                             return false;
-                         }
-                         if (statA && !statB)
-                             return true;
-                         if (!statA && statB)
-                             return false;
+                         const uint64_t visitsA = statA ? statA->visits : 0;
+                         const uint64_t visitsB = statB ? statB->visits : 0;
+                         if (visitsA != visitsB)
+                             return visitsA > visitsB;
+                         const double meanA = statA ? statA->meanActionValue : 0.0;
+                         const double meanB = statB ? statB->meanActionValue : 0.0;
+                         if (meanA != meanB)
+                             return meanA > meanB;
+                         const double priorA = statA ? statA->prior : 0.0;
+                         const double priorB = statB ? statB->prior : 0.0;
+                         if (priorA != priorB)
+                             return priorA > priorB;
                          return false;
                      });
 }
