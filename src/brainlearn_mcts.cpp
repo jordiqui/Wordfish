@@ -183,25 +183,28 @@ void MonteCarlo::search(ThreadPool&        threads,
     timeExpired        = false;
     guardTriggered     = false;
 
-    while (!threads.stop.load(std::memory_order_relaxed) && !stop_requested() && !timeExpired
-           && !noLegalMoves)
+    constexpr TimePoint zeroPlayoutTimeoutMs = TimePoint(1000);
+
+    while (!should_abort(threads) && !noLegalMoves)
     {
-        if (useTimeBudget && now() >= endTime)
+        if (playoutsCount == 0 && elapsed_ms() >= zeroPlayoutTimeoutMs)
         {
-            timeExpired = true;
+            guardTriggered = true;
             break;
         }
 
         node = tree_policy(threads, limits);
-        if (!node)
+        if (!node || should_abort(threads))
             break;
 
         LOCK(this, node);
 
         if (AB_Rollout)
         {
+            if (should_abort(threads))
+                break;
             Value value = evaluate_with_minimax(node, std::min(ply, MAX_PLY - ply - 2));
-            if (threads.stop || stop_requested())
+            if (should_abort(threads))
                 break;
 
             if (value == VALUE_ZERO)
@@ -221,7 +224,7 @@ void MonteCarlo::search(ThreadPool&        threads,
         }
         else
         {
-            reward = playout_policy(node);
+            reward = playout_policy(node, threads);
         }
 
         if (ply >= 1)
@@ -235,14 +238,8 @@ void MonteCarlo::search(ThreadPool&        threads,
         if (should_emit_info(isMainThread))
             emit_info(threads);
 
-        if (threads.stop.load(std::memory_order_relaxed) || stop_requested())
+        if (should_abort(threads))
             break;
-
-        if (useTimeBudget && now() >= endTime)
-        {
-            timeExpired = true;
-            break;
-        }
 
         if (elapsed_ms() > TimePoint(60000) || playoutsCount > 100000000ULL)
         {
@@ -342,9 +339,25 @@ bool MonteCarlo::computational_budget(ThreadPool& threads, Search::LimitsType li
     return true;
 }
 
+bool MonteCarlo::should_abort(ThreadPool& threads) {
+    if (threads.stop.load(std::memory_order_relaxed) || stop_requested())
+        return true;
+
+    if (useTimeBudget && now() >= endTime)
+    {
+        timeExpired = true;
+        return true;
+    }
+
+    return false;
+}
+
 mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType limits) {
 
     assert(ply == 1);
+
+    if (should_abort(threads))
+        return nullptr;
 
     if (root->number_of_sons == 0)
     {
@@ -354,6 +367,9 @@ mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType li
     mctsNodeInfo* node = nullptr;
     while ((node = nodes[ply]))
     {
+        if (should_abort(threads))
+            return nullptr;
+
         LOCK(this, node);
 
         if (node->node_visits == 0)
@@ -378,6 +394,9 @@ mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType li
 
         do_move(m);
 
+        if (should_abort(threads))
+            return nullptr;
+
         nodes[ply] = get_node(this, pos);
         if (nodes[ply] == nullptr)
         {
@@ -400,7 +419,10 @@ mctsNodeInfo* MonteCarlo::tree_policy(ThreadPool& threads, Search::LimitsType li
     return node;
 }
 
-Reward MonteCarlo::playout_policy(mctsNodeInfo* node) {
+Reward MonteCarlo::playout_policy(mctsNodeInfo* node, ThreadPool& threads) {
+
+    if (should_abort(threads))
+        return REWARD_DRAW;
 
     LOCK(this, node);
 
@@ -412,6 +434,9 @@ Reward MonteCarlo::playout_policy(mctsNodeInfo* node) {
         generate_moves(node);
         assert(node->node_visits == 1);
     }
+
+    if (should_abort(threads))
+        return REWARD_DRAW;
 
     if (node->number_of_sons == 0)
         return evaluate_terminal(node);
