@@ -4,15 +4,48 @@
 
 ## Overview
 
-Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable BrainLearn Monte Carlo search. The current release is **Wordfish-3.70-070126**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
+Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable BrainLearn Monte Carlo search. The current release is **Wordfish-3.90-150126**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
 
-## What's new in 3.70-070126
+## Wordfish-3.90-150126 — Release Notes (Fritz/Cutechess users)
 
-- Rebranded the engine to **Wordfish-3.70-070126** and expanded architecture-aware suffixes so GUI search listings display `Wordfish-3.70-070126-sse41popcnt` (SSE4.1/POPCNT builds), `Wordfish-3.70-070126-avx2` (AVX2 builds), `Wordfish-3.70-070126-bmi2` (BMI2 builds), `Wordfish-3.70-070126-FMA3` (FMA3 builds), or `Wordfish-3.70-070126-avx512` (AVX-512 builds) alongside the base name.
-- Updated the main NNUE evaluator to `nn-2962dca31855.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
-- Emphasized king safety, rook coordination, and supervised endgame patterns in recent network training and handcrafted heuristics.
-- Tightened king-safety heuristics around open files, rook lifts, and dark-square weaknesses while rewarding coordinated rooks and discouraging premature flank pawn storms.
-- Reduced aggressive pruning in sharp positions and introduced a verification search to confirm large swings in evaluation, improving stability in complicated lines.
+### Key changes
+
+- BrainLearnMCTS is now the only Monte-Carlo strategy available in Wordfish. The legacy Wordfish MCTS driver and its old options have been removed to avoid GUI confusion and option conflicts.
+- GUI-friendly `Search Strategy`: the combo now exposes only AlphaBeta and BrainLearnMCTS, so it is clear which mode is active.
+- Fritz/ChessBase fallback: if your GUI cannot set combo options reliably, you can enable BrainLearnMCTS using the BrainLearnMCTS checkbox (it safely switches the strategy for you).
+- Robust time/stop handling: BrainLearnMCTS honors `go movetime`, and `go infinite` responds reliably to `stop` across GUIs.
+
+### How to enable BrainLearnMCTS
+
+In your GUI options:
+
+1. Set `Search Strategy` = `BrainLearnMCTS`.
+2. Or, if the combo cannot be changed in your GUI, tick `BrainLearnMCTS`.
+
+### Recommended starting settings
+
+- `Threads`: set as you normally do for Wordfish (e.g., number of physical cores you allocate).
+- `BrainLearnMCTSThreads`: keep at `0` (stable default).
+- `BrainLearnMultiStrategy`: `20` (default).
+- `BrainLearnMultiMinVisits`: `5` (default).
+
+### UCI confirmation
+
+When BrainLearnMCTS is active, the engine will output a clean termination summary:
+
+```
+info string BL-MCTS playouts=<N> elapsed=<ms> reason=<time|stop|nomoves|fallback>
+```
+
+### Naming
+
+The engine reports an internal UCI name that includes the build suffix, so GUI search listings (Fritz 20, Cutechess) show the compiled target:
+
+- `Wordfish-3.90-150126-sse41popcnt`
+- `Wordfish-3.90-150126-avx2`
+- `Wordfish-3.90-150126-bmi2`
+- `Wordfish-3.90-150126-FMA3`
+- `Wordfish-3.90-150126-avx512`
 
 ## Architecture and integrated modules
 
