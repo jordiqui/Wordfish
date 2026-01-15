@@ -36,7 +36,11 @@
 #include <utility>
 
 #include "bitboard.h"
+ codex/align-wordfish-with-brainlearn-mcts-ux
 #include "mcts/montecarlo.h"
+=======
+#include "mcts/brainlearn_mcts.h"
+ main
 #include "evaluate.h"
 #include "experience.h"
 #include "history.h"
@@ -430,7 +434,45 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
     if (emitOutput && !rootMoves.empty() && !rootMoves[0].pv.empty())
         initialFallback = rootMoves[0].pv[0];
 
+ codex/align-wordfish-with-brainlearn-mcts-ux
     Brainlearn::MonteCarlo monteCarlo(rootPos, this, tt);
+=======
+    BrainLearnMCTS::MonteCarlo monteCarlo(rootPos, this, tt);
+
+    std::vector<std::unique_ptr<Search::Worker>> helperWorkers;
+    std::vector<std::thread>                     helperThreads;
+
+    if (is_mainthread() && BrainLearnMCTS::mctsThreads > 1)
+    {
+        helperWorkers.reserve(BrainLearnMCTS::mctsThreads - 1);
+        helperThreads.reserve(BrainLearnMCTS::mctsThreads - 1);
+
+        for (size_t idx = 1; idx < BrainLearnMCTS::mctsThreads; ++idx)
+        {
+            auto helperManager = std::make_unique<Search::NullSearchManager>();
+            Search::SharedState sharedState(options, threads, tt, networks);
+            auto helperWorker =
+              std::make_unique<Search::Worker>(sharedState, std::move(helperManager), idx,
+                                               numaAccessToken);
+
+            helperWorker->limits = limits;
+            helperWorker->tbConfig = tbConfig;
+            helperWorker->rootState = StateInfo{};
+            const std::string fen = rootPos.fen();
+            const bool        isChess960 = bool(int(options["UCI_Chess960"]));
+            helperWorker->rootPos.set(fen, isChess960, &helperWorker->rootState);
+            helperWorker->rootMoves = rootMoves;
+            helperWorker->contemptValue = contemptValue;
+            helperWorker->kingSafetySetting = kingSafetySetting;
+            helperWorker->accumulatorStack.reset();
+            helperWorker->brainlearnSummary = BrainLearnSummary{};
+
+            helperThreads.emplace_back(
+              [this, helper = helperWorker.get()]() { helper->run_brainlearn_mcts(); });
+            helperWorkers.emplace_back(std::move(helperWorker));
+        }
+    }
+ main
 
     TimePoint allocatedTime = TimePoint(0);
     bool      useTimeBudget = false;

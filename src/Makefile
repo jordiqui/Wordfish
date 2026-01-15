@@ -49,14 +49,22 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
+codex/align-wordfish-with-brainlearn-mcts-ux
 SRCS = benchmark.cpp bitboard.cpp mcts/montecarlo.cpp evaluate.cpp experience.cpp main.cpp \
+=======
+SRCS = benchmark.cpp bitboard.cpp mcts/brainlearn_mcts.cpp mcts/montecarlo.cpp evaluate.cpp experience.cpp main.cpp \
+ main
         misc.cpp movegen.cpp movepick.cpp polybook.cpp position.cpp \
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
         nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/network.cpp \
         nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp \
         engine.cpp score.cpp memory.cpp
 
+ codex/align-wordfish-with-brainlearn-mcts-ux
 HEADERS = benchmark.h bitboard.h mcts/montecarlo.h evaluate.h experience.h experience_compat.h Wordfish_zobrist.h misc.h movegen.h movepick.h history.h polybook.h \
+=======
+HEADERS = benchmark.h bitboard.h mcts/brainlearn_mcts.h mcts/montecarlo.h evaluate.h experience.h experience_compat.h Wordfish_zobrist.h misc.h movegen.h movepick.h history.h polybook.h \
+ main
                 nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/features/full_threats.h \
                 nnue/layers/affine_transform.h nnue/layers/affine_transform_sparse_input.h \
                 nnue/layers/clipped_relu.h nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h \
@@ -472,6 +480,7 @@ ifeq ($(MAKELEVEL),0)
 endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
+CXXFLAGS += -I.
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
