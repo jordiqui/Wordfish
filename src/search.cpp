@@ -36,7 +36,7 @@
 #include <utility>
 
 #include "bitboard.h"
-#include "brainlearn_mcts.h"
+#include "MCTS/brainlearn_mcts.h"
 #include "evaluate.h"
 #include "experience.h"
 #include "history.h"

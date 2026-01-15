@@ -16,7 +16,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "brainlearn_mcts.h"
+#include "MCTS/brainlearn_mcts.h"
 
 #include <algorithm>
 #include <cassert>
