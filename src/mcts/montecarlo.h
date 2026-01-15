@@ -19,6 +19,7 @@
 #ifndef MONTECARLO_H_INCLUDED
 #define MONTECARLO_H_INCLUDED
 
+#include <atomic>
 #include <cmath>
 #include <unordered_map>
 
@@ -68,6 +69,11 @@ struct Edge {
 extern size_t                           mctsThreads;
 extern size_t                           mctsMultiStrategy;
 extern double                           mctsMultiMinVisits;
+extern std::atomic<bool>                mctsStopRequested;
+void                                    request_stop();
+void                                    clear_stop();
+bool                                    stop_requested();
+void                                    clear();
 constexpr int                           MAX_CHILDREN = MAX_MOVES;
 typedef std::array<Edge*, MAX_CHILDREN> EdgeArray;
 
@@ -101,6 +107,8 @@ class Spinlock {
                                                 std::memory_order_relaxed)
                    && currentOwner != threadId)
             {
+                if (mctsStopRequested.load(std::memory_order_relaxed))
+                    std::this_thread::yield();
                 currentOwner = NO_THREAD;
                 std::this_thread::yield();  //Be nice
             }
@@ -238,8 +246,16 @@ class MonteCarlo {
     [[nodiscard]] bool should_emit_pv(bool isMainThread) const;
     void               emit_pv(Search::Worker* worker, Brainlearn::ThreadPool& threads);
     void               print_children();
+    void               set_time_budget(TimePoint timeBudgetMs, bool useBudget);
+    [[nodiscard]] bool time_expired() const;
+    [[nodiscard]] TimePoint elapsed_ms() const;
+    [[nodiscard]] uint64_t playouts() const;
+    [[nodiscard]] int      max_ply() const;
+    [[nodiscard]] bool     no_legal_moves() const;
 
    private:
+    [[nodiscard]] bool stop_requested() const;
+
     Position&                   pos;  // The current position of the tree
     Brainlearn::Search::Worker* thisThread;
     TranspositionTable&         tt;
@@ -250,6 +266,11 @@ class MonteCarlo {
     int       maximumPly{};
     TimePoint startTime{};
     TimePoint lastOutputTime{};
+    TimePoint timeBudget{};
+    bool      useTimeBudget{};
+    bool      noLegalMoves{};
+    uint64_t  playoutsCount{};
+    Brainlearn::ThreadPool* threadsPtr{};
 
     [[maybe_unused]] double max_epsilon = 0.99;
     [[maybe_unused]] double min_epsilon = 0.00;

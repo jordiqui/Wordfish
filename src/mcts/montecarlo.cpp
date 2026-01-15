@@ -26,7 +26,7 @@
 #include <unordered_map>
 
 #include "../misc.h"
-#include "montecarlo.h"
+#include "mcts/montecarlo.h"
 
 #include <random>
 
@@ -115,6 +115,15 @@ size_t              mctsThreads;
 size_t              mctsMultiStrategy;
 double              mctsMultiMinVisits;
 std::atomic<size_t> MCTSNodeCount(0);
+std::atomic<bool>   mctsStopRequested(false);
+
+void request_stop() { mctsStopRequested.store(true, std::memory_order_relaxed); }
+
+void clear_stop() { mctsStopRequested.store(false, std::memory_order_relaxed); }
+
+bool stop_requested() { return mctsStopRequested.load(std::memory_order_relaxed); }
+
+void clear() { MCTS.clear(); }
 
 template<typename T>
 T TRand(const T min, const T max) {
@@ -207,9 +216,14 @@ void MonteCarlo::search(Brainlearn::ThreadPool&        threads,
     AB_Rollout         = false;
     Reward reward      = value_to_reward(
       VALUE_DRAW);  //TODO: Perhaps we should use static_value() here instead of 'VALUE_DRAW'
+    threadsPtr = &threads;
+    playoutsCount = 0;
 
     while (computational_budget(threads, limits) && (node = tree_policy(threads, limits)))
     {
+        if (stop_requested())
+            break;
+
         LOCK(this, node);
 
         if (AB_Rollout)
@@ -240,6 +254,8 @@ void MonteCarlo::search(Brainlearn::ThreadPool&        threads,
 
         if (ply >= 1)
             node->ttValue = backup(reward, AB_Rollout);
+
+        playoutsCount++;
 
         if (should_emit_pv(isMainThread))
             emit_pv(worker, threads);
@@ -275,6 +291,8 @@ void MonteCarlo::create_root(Search::Worker* worker) {
     maximumPly     = 1;
     startTime      = now();
     lastOutputTime = startTime;
+    playoutsCount  = 0;
+    noLegalMoves   = false;
 
     // Prepare the stack to go down and up in the game tree
 
@@ -308,6 +326,8 @@ void MonteCarlo::create_root(Search::Worker* worker) {
 
     if (root->node_visits == 0)
         generate_moves(root);
+
+    noLegalMoves = root->number_of_sons == 0;
 }
 
 /// MonteCarlo::computational_budget() returns true the search is still
@@ -315,10 +335,11 @@ void MonteCarlo::create_root(Search::Worker* worker) {
 bool MonteCarlo::computational_budget(Brainlearn::ThreadPool&        threads,
                                       Brainlearn::Search::LimitsType limits) {
 
+    (void) threads;
     if (limits.depth && maximumPly > limits.depth * 2)
         return false;
 
-    return !threads.stop.load(std::memory_order_relaxed);
+    return !stop_requested();
 }
 
 /// MonteCarlo::tree_policy() selects the next node to be expanded
@@ -326,6 +347,9 @@ mctsNodeInfo* MonteCarlo::tree_policy(Brainlearn::ThreadPool&        threads,
                                       Brainlearn::Search::LimitsType limits) {
 
     assert(ply == 1);
+
+    if (stop_requested())
+        return nullptr;
 
     if (root->number_of_sons == 0)
     {
@@ -335,6 +359,9 @@ mctsNodeInfo* MonteCarlo::tree_policy(Brainlearn::ThreadPool&        threads,
     mctsNodeInfo* node = nullptr;
     while ((node = nodes[ply]))
     {
+        if (stop_requested())
+            return nullptr;
+
         LOCK(this, node);
 
         if (node->node_visits == 0)
@@ -390,6 +417,9 @@ Reward MonteCarlo::playout_policy(mctsNodeInfo* node) {
     LOCK(this, node);
 
     // Step 0. Check for terminal nodes
+    if (stop_requested())
+        return REWARD_DRAW;
+
     if (is_terminal(node))
         return evaluate_terminal(node);
 
@@ -422,6 +452,8 @@ Value MonteCarlo::backup(Reward r, bool AB_Mode) {
 
     while (ply != 1)
     {
+        (void) stop_requested();
+
         undo_move();
 
         r = 1.0 - r;
@@ -505,21 +537,41 @@ bool MonteCarlo::should_emit_pv(bool isMainThread) const {
     if (ply != 1)
         return false;
 
-    const TimePoint elapsed     = now() - startTime + 1;  // in milliseconds
     const TimePoint outputDelay = now() - lastOutputTime;
 
-    if (elapsed < 1100)
-        return outputDelay >= 100;
-    else if (elapsed < static_cast<int64_t>(11 * 1000))
-        return outputDelay >= 1000;
-    else if (elapsed < static_cast<int64_t>(61 * 1000))
-        return outputDelay >= 10000;
-    else if (elapsed < static_cast<int64_t>(6 * 60 * 1000))
-        return outputDelay >= 30000;
-    else if (elapsed < static_cast<int64_t>(61 * 60 * 1000))
-        return outputDelay >= 60000;
+    return outputDelay >= 200;
+}
 
-    return outputDelay >= 60000;
+void MonteCarlo::set_time_budget(TimePoint timeBudgetMs, bool useBudget) {
+    timeBudget    = timeBudgetMs;
+    useTimeBudget = useBudget;
+}
+
+bool MonteCarlo::time_expired() const {
+    return useTimeBudget && elapsed_ms() >= timeBudget;
+}
+
+TimePoint MonteCarlo::elapsed_ms() const { return now() - startTime; }
+
+uint64_t MonteCarlo::playouts() const { return playoutsCount; }
+
+int MonteCarlo::max_ply() const { return maximumPly; }
+
+bool MonteCarlo::no_legal_moves() const { return noLegalMoves; }
+
+bool MonteCarlo::stop_requested() const {
+    if (Brainlearn::stop_requested())
+        return true;
+    if (threadsPtr && threadsPtr->stop.load(std::memory_order_relaxed))
+        return true;
+
+    const TimePoint elapsed = elapsed_ms();
+    if (useTimeBudget && elapsed > timeBudget + TimePoint(200))
+        return true;
+    if (playoutsCount == 0 && elapsed > TimePoint(1000))
+        return true;
+
+    return time_expired();
 }
 
 
@@ -601,6 +653,7 @@ void MonteCarlo::emit_pv(Search::Worker* worker, Brainlearn::ThreadPool& threads
         rootMoves.emplace_back(Move::none());
         threads.main_manager()->updates.onUpdateNoMoves(
           {0, {pos.checkers() ? -VALUE_MATE : VALUE_DRAW, pos}});
+        noLegalMoves = true;
     }
 
     lastOutputTime = now();
@@ -711,6 +764,9 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
     // Generate the legal moves and calculate their priors
     Reward bestPrior = REWARD_MATED;
     while (((move = mp.next_move()) != Move::none()))
+    {
+        if (stop_requested())
+            break;
         if (pos.legal(move))
         {
             stack[ply].moveCount = ++moveCount;
@@ -723,6 +779,7 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
 
             add_prior_to_node(node, move, prior);
         }
+    }
 
     // Sort the moves according to their prior value
     int n = node->number_of_sons;
@@ -734,6 +791,9 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
 
     // Indicate that we have just expanded the current node
     node->node_visits++;
+
+    if (is_root(node))
+        noLegalMoves = node->number_of_sons == 0;
 }
 
 

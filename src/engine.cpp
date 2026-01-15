@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-#include "MCTS/brainlearn_mcts.h"
+#include "mcts/montecarlo.h"
 #include "evaluate.h"
 #include "experience.h"
 #include "misc.h"
@@ -108,37 +108,10 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "MultiPV", Option(1, 1, MAX_MOVES));
 
-    options.add("Search Strategy",
-                Option("AlphaBeta BrainLearnMCTS", "AlphaBeta", [this](const Option&) {
-                    if (!updatingSearchStrategyFromCheckbox)
-                        searchStrategySetByCheckbox = false;
-                    return std::nullopt;
-                }));
-
-    options.add("BrainLearnMCTS", Option(false, [this](const Option& o) {
-        const bool enable = static_cast<bool>(int(o));
-
-        if (enable)
-        {
-            updatingSearchStrategyFromCheckbox = true;
-            options.options_map["Search Strategy"] = std::string("BrainLearnMCTS");
-            updatingSearchStrategyFromCheckbox = false;
-            searchStrategySetByCheckbox        = true;
-            return std::nullopt;
-        }
-
-        if (searchStrategySetByCheckbox)
-        {
-            updatingSearchStrategyFromCheckbox = true;
-            options.options_map["Search Strategy"] = std::string("AlphaBeta");
-            updatingSearchStrategyFromCheckbox = false;
-            searchStrategySetByCheckbox        = false;
-        }
-        return std::nullopt;
-    }));
-    options.add("BrainLearnMCTSThreads", Option(0, 0, 512));
-    options.add("BrainLearnMultiStrategy", Option(20, 0, 100));
-    options.add("BrainLearnMultiMinVisits", Option(5, 0, 1000));
+    options.add("MCTS", Option(false));
+    options.add("MCTSThreads", Option(0, 0, 512));
+    options.add("MCTS Multi Strategy", Option(20, 0, 100));
+    options.add("MCTS Multi MinVisits", Option(5, 0, 1000));
 
     options.add("Skill Level", Option(20, 0, 20));
 
@@ -267,7 +240,7 @@ void Engine::go(Search::LimitsType& limits) {
 }
 void Engine::stop() {
     threads.stop = true;
-    BrainLearnMCTS::request_stop();
+    Brainlearn::request_stop();
 }
 
 void Engine::search_clear() {
@@ -275,7 +248,7 @@ void Engine::search_clear() {
 
     tt.clear(threads);
     threads.clear();
-    BrainLearnMCTS::clear();
+    Brainlearn::clear();
 
     // @TODO wont work with multiple instances
     Tablebases::init(options["SyzygyPath"]);  // Free mapped files

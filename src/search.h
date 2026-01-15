@@ -300,7 +300,7 @@ class Worker {
     Value minimax_value(Position& pos, Search::Stack* ss, Depth depth, Value alpha, Value beta);
 
    private:
-    struct BrainLearnSummary {
+    struct MctsSummary {
         uint64_t   playouts = 0;
         TimePoint  elapsed  = TimePoint(0);
         std::string reason;
@@ -308,7 +308,7 @@ class Worker {
     };
 
    void iterative_deepening();
-    bool run_brainlearn_mcts();
+    bool run_mcts_search(bool emitOutput);
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
@@ -354,7 +354,7 @@ class Worker {
     Depth     rootDepth, completedDepth;
     Value     rootDelta;
 
-    BrainLearnSummary brainlearnSummary;
+    MctsSummary mctsSummary;
 
     size_t                    threadIdx;
     NumaReplicatedAccessToken numaAccessToken;
