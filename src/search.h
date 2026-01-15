@@ -280,6 +280,8 @@ class Worker {
     Depth completed_depth() const { return completedDepth; }
 
     void ensure_network_replicated();
+    bool mcts_debug_enabled() const;
+    void log_mcts_debug(std::string_view line) const;
 
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;

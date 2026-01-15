@@ -220,6 +220,8 @@ void MonteCarlo::search(ThreadPool&        threads,
 
     threadsPtr    = &threads;
     playoutsCount = 0;
+    const bool debugLog = thisThread && thisThread->mcts_debug_enabled();
+    TimePoint   lastDebugLog = startTime;
 
     while (computational_budget(threads, limits) && (node = tree_policy(threads, limits)))
     {
@@ -254,6 +256,20 @@ void MonteCarlo::search(ThreadPool&        threads,
         if (ply >= 1)
             node->ttValue = backup(reward, AB_Rollout);
         ++playoutsCount;
+
+        if (debugLog)
+        {
+            const TimePoint nowTime = now();
+            if (nowTime - lastDebugLog >= TimePoint(1000))
+            {
+                std::ostringstream oss;
+                oss << "info string MCTS helper=" << thisThread->thread_index()
+                    << " playouts=" << playoutsCount
+                    << " elapsed=" << (nowTime - startTime);
+                thisThread->log_mcts_debug(oss.str());
+                lastDebugLog = nowTime;
+            }
+        }
 
         if (should_emit_pv(isMainThread))
             emit_pv(worker, threads);
