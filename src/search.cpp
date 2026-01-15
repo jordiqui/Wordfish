@@ -217,6 +217,18 @@ void Search::Worker::log_mcts_debug(std::string_view line) const {
     sync_cout << line << sync_endl;
 }
 
+void Search::Worker::join_mcts_helpers() {
+    std::vector<std::thread> threadsToJoin;
+    {
+        std::lock_guard<std::mutex> lock(mctsHelperMutex);
+        threadsToJoin.swap(mctsHelperThreads);
+    }
+
+    for (auto& helperThread : threadsToJoin)
+        if (helperThread.joinable())
+            helperThread.join();
+}
+
 void Search::Worker::start_searching() {
 
     limits.startTime = now();
@@ -228,6 +240,7 @@ void Search::Worker::start_searching() {
     contemptValue     = Value(contemptSetting * PawnValue / 100);
     kingSafetySetting = int(options["King Safety"]);
     mctsSummary = MctsSummary{};
+    const bool debugLog = mcts_debug_enabled();
 
     accumulatorStack.reset();
 
@@ -270,8 +283,13 @@ void Search::Worker::start_searching() {
         sync_cout << "info string MCTS helpers=" << clampedMctsHelpers
                   << " engineThreads=" << engineThreads << sync_endl;
 
-    std::vector<std::unique_ptr<Search::Worker>> mctsHelperWorkers;
-    std::vector<std::thread>                     mctsHelperThreads;
+    if (is_mainthread())
+        join_mcts_helpers();
+    {
+        std::lock_guard<std::mutex> lock(mctsHelperMutex);
+        mctsHelperWorkers.clear();
+        mctsHelperThreads.clear();
+    }
     const bool                                   hasRootMoves = ensure_root_moves();
     if (!hasRootMoves)
     {
@@ -302,8 +320,11 @@ void Search::Worker::start_searching() {
                 const std::string fen = rootPos.fen();
                 const bool        chess960 = rootPos.is_chess960();
 
-                mctsHelperWorkers.reserve(clampedMctsHelpers);
-                mctsHelperThreads.reserve(clampedMctsHelpers);
+                {
+                    std::lock_guard<std::mutex> lock(mctsHelperMutex);
+                    mctsHelperWorkers.reserve(clampedMctsHelpers);
+                    mctsHelperThreads.reserve(clampedMctsHelpers);
+                }
 
                 for (int idx = 0; idx < clampedMctsHelpers; ++idx)
                 {
@@ -317,30 +338,57 @@ void Search::Worker::start_searching() {
                     helperWorker->tbConfig = tbConfig;
                     helperWorker->rootState = StateInfo();
                     helperWorker->rootPos.set(fen, chess960, &helperWorker->rootState);
+                    helperWorker->rootState = rootState;
                     helperWorker->rootMoves.clear();
                     helperWorker->contemptValue = contemptValue;
                     helperWorker->kingSafetySetting = kingSafetySetting;
                     helperWorker->accumulatorStack.reset();
                     helperWorker->mctsSummary = MctsSummary{};
 
-                    if (MoveList<LEGAL>(helperWorker->rootPos).size() == 0)
+                    MoveList<LEGAL> legalMoves(helperWorker->rootPos);
+                    const size_t    legalCount = legalMoves.size();
+                    if (debugLog)
                     {
-                        sync_cout << "info string MCTS helper init failed: no legal moves from FEN="
-                                  << fen << sync_endl;
+                        std::string sampleMoves;
+                        int         samples = 0;
+                        for (const Move m : legalMoves)
+                        {
+                            if (samples >= 4)
+                                break;
+                            if (!sampleMoves.empty())
+                                sampleMoves += " ";
+                            sampleMoves += UCIEngine::move(m, chess960);
+                            ++samples;
+                        }
+
+                        log_mcts_debug("info string MCTS helper=" + std::to_string(idx + 1)
+                                       + " fen=" + fen + " legal_moves="
+                                       + std::to_string(legalCount) + " sample=[" + sampleMoves
+                                       + "]");
+                    }
+
+                    if (legalCount == 0)
+                    {
+                        log_mcts_debug("info string MCTS helper init failed: no legal moves from FEN="
+                                       + fen);
                         helperWorker->mctsSummary.playouts = 0;
                         helperWorker->mctsSummary.elapsed  = TimePoint(0);
                         helperWorker->mctsSummary.reason   = "nomoves";
                         helperWorker->mctsSummary.ready    = true;
+                        std::lock_guard<std::mutex> lock(mctsHelperMutex);
                         mctsHelperWorkers.emplace_back(std::move(helperWorker));
                         continue;
                     }
 
                     const bool emitOutput = idx == 0;
-                    mctsHelperThreads.emplace_back(
-                      [helper = helperWorker.get(), emitOutput]() {
-                          helper->run_mcts_search(emitOutput);
-                      });
-                    mctsHelperWorkers.emplace_back(std::move(helperWorker));
+                    {
+                        std::lock_guard<std::mutex> lock(mctsHelperMutex);
+                        mctsHelperThreads.emplace_back(
+                          [helper = helperWorker.get(), emitOutput]() {
+                              helper->run_mcts_search(emitOutput);
+                          });
+                        mctsHelperWorkers.emplace_back(std::move(helperWorker));
+                    }
                 }
             }
         }
@@ -368,11 +416,7 @@ void Search::Worker::start_searching() {
     threads.wait_for_search_finished();
 
     if (useMcts)
-    {
-        for (auto& helperThread : mctsHelperThreads)
-            if (helperThread.joinable())
-                helperThread.join();
-    }
+        join_mcts_helpers();
 
     // When playing in 'nodes as time' mode, subtract the searched nodes from
     // the available ones before exiting.
@@ -444,6 +488,7 @@ void Search::Worker::start_searching() {
         bool     anyTime       = false;
         bool     anyFallback   = false;
 
+        std::lock_guard<std::mutex> lock(mctsHelperMutex);
         for (const auto& helper : mctsHelperWorkers)
         {
             if (!helper || !helper->mctsSummary.ready)
