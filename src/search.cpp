@@ -36,11 +36,7 @@
 #include <utility>
 
 #include "bitboard.h"
- codex/align-wordfish-with-brainlearn-mcts-ux
 #include "mcts/montecarlo.h"
-=======
-#include "mcts/brainlearn_mcts.h"
- main
 #include "evaluate.h"
 #include "experience.h"
 #include "history.h"
@@ -223,11 +219,15 @@ void Search::Worker::start_searching() {
     accumulatorStack.reset();
 
     const bool useMcts = options.count("MCTS") && bool(int(options["MCTS"]));
-    const int  engineThreads = std::max(1, int(options["Threads"]));
-    const int  requestedMctsThreads =
+    const int engineThreads = std::max(1, int(options["Threads"]));
+    const int maxMctsHelpers = std::max(0, engineThreads - 1);
+    const int requestedMctsThreads =
       options.count("MCTSThreads") ? int(options["MCTSThreads"]) : 0;
-    const int clampedMctsHelpers =
-      std::clamp(requestedMctsThreads, 0, std::max(0, engineThreads - 1));
+    const int clampedMctsHelpers = useMcts
+                                   ? (requestedMctsThreads == 0
+                                        ? std::min(maxMctsHelpers, 8)
+                                        : std::clamp(requestedMctsThreads, 0, maxMctsHelpers))
+                                   : 0;
     bool ranAlphaBeta = false;
 
     // Non-main threads go directly to iterative_deepening()
@@ -269,7 +269,11 @@ void Search::Worker::start_searching() {
     {
         if (useMcts)
         {
-            Brainlearn::mctsThreads = std::max<size_t>(1, static_cast<size_t>(clampedMctsHelpers));
+            Brainlearn::clear_stop();
+            Brainlearn::clear();
+
+            Brainlearn::mctsThreads =
+              std::max<size_t>(1, static_cast<size_t>(clampedMctsHelpers));
             Brainlearn::mctsMultiStrategy =
               options.count("MCTS Multi Strategy")
                 ? size_t(int(options["MCTS Multi Strategy"]))
@@ -278,8 +282,6 @@ void Search::Worker::start_searching() {
               options.count("MCTS Multi MinVisits")
                 ? double(int(options["MCTS Multi MinVisits"]))
                 : 5.0;
-            Brainlearn::clear_stop();
-            Brainlearn::clear();
 
             if (clampedMctsHelpers > 0)
             {
@@ -434,45 +436,7 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
     if (emitOutput && !rootMoves.empty() && !rootMoves[0].pv.empty())
         initialFallback = rootMoves[0].pv[0];
 
- codex/align-wordfish-with-brainlearn-mcts-ux
     Brainlearn::MonteCarlo monteCarlo(rootPos, this, tt);
-=======
-    BrainLearnMCTS::MonteCarlo monteCarlo(rootPos, this, tt);
-
-    std::vector<std::unique_ptr<Search::Worker>> helperWorkers;
-    std::vector<std::thread>                     helperThreads;
-
-    if (is_mainthread() && BrainLearnMCTS::mctsThreads > 1)
-    {
-        helperWorkers.reserve(BrainLearnMCTS::mctsThreads - 1);
-        helperThreads.reserve(BrainLearnMCTS::mctsThreads - 1);
-
-        for (size_t idx = 1; idx < BrainLearnMCTS::mctsThreads; ++idx)
-        {
-            auto helperManager = std::make_unique<Search::NullSearchManager>();
-            Search::SharedState sharedState(options, threads, tt, networks);
-            auto helperWorker =
-              std::make_unique<Search::Worker>(sharedState, std::move(helperManager), idx,
-                                               numaAccessToken);
-
-            helperWorker->limits = limits;
-            helperWorker->tbConfig = tbConfig;
-            helperWorker->rootState = StateInfo{};
-            const std::string fen = rootPos.fen();
-            const bool        isChess960 = bool(int(options["UCI_Chess960"]));
-            helperWorker->rootPos.set(fen, isChess960, &helperWorker->rootState);
-            helperWorker->rootMoves = rootMoves;
-            helperWorker->contemptValue = contemptValue;
-            helperWorker->kingSafetySetting = kingSafetySetting;
-            helperWorker->accumulatorStack.reset();
-            helperWorker->brainlearnSummary = BrainLearnSummary{};
-
-            helperThreads.emplace_back(
-              [this, helper = helperWorker.get()]() { helper->run_brainlearn_mcts(); });
-            helperWorkers.emplace_back(std::move(helperWorker));
-        }
-    }
- main
 
     TimePoint allocatedTime = TimePoint(0);
     bool      useTimeBudget = false;
@@ -491,7 +455,8 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
     }
     monteCarlo.set_time_budget(allocatedTime, useTimeBudget);
 
-    monteCarlo.search(threads, mctsLimits, emitOutput, this);
+    const bool emitPv = false;
+    monteCarlo.search(threads, mctsLimits, emitPv, this);
 
     bool hasMove = true;
     if (emitOutput)
@@ -500,8 +465,6 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
         completedDepth   = rootDepth = Depth(maxPly);
         selDepth                     = maxPly;
         const uint64_t playouts = monteCarlo.playouts();
-        if (playouts > 0)
-            monteCarlo.emit_pv(this, threads);
 
         auto has_valid_move = [&]() {
             return !rootMoves.empty() && !rootMoves[0].pv.empty()

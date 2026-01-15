@@ -19,21 +19,17 @@
 #ifndef MONTECARLO_H_INCLUDED
 #define MONTECARLO_H_INCLUDED
 
- codex/align-wordfish-with-brainlearn-mcts-ux
+#include <array>
 #include <atomic>
-=======
- main
 #include <cmath>
+#include <thread>
 #include <unordered_map>
 
 #include "../movepick.h"
 #include "../position.h"
 #include "../thread.h"
 
-codex/align-wordfish-with-brainlearn-mcts-ux
-=======
 namespace Stockfish {
- main
 namespace Brainlearn {
 // The data structures for the Monte Carlo algorithm
 typedef double Reward;
@@ -76,15 +72,11 @@ struct Edge {
 extern size_t                           mctsThreads;
 extern size_t                           mctsMultiStrategy;
 extern double                           mctsMultiMinVisits;
-codex/align-wordfish-with-brainlearn-mcts-ux
-extern std::atomic<bool>                mctsStopRequested;
+extern std::atomic_bool                 mctsStopRequested;
 void                                    request_stop();
 void                                    clear_stop();
 bool                                    stop_requested();
 void                                    clear();
-=======
-extern std::atomic_bool                 mctsStopRequested;
- main
 constexpr int                           MAX_CHILDREN = MAX_MOVES;
 typedef std::array<Edge*, MAX_CHILDREN> EdgeArray;
 
@@ -118,11 +110,8 @@ class Spinlock {
                                                 std::memory_order_relaxed)
                    && currentOwner != threadId)
             {
- codex/align-wordfish-with-brainlearn-mcts-ux
                 if (mctsStopRequested.load(std::memory_order_relaxed))
                     std::this_thread::yield();
-=======
- main
                 currentOwner = NO_THREAD;
                 std::this_thread::yield();  //Be nice
             }
@@ -199,7 +188,6 @@ class MCTSHashTable: public MCTS_MAP_BASE {
     }
 };
 extern MCTSHashTable MCTS;
-extern MCTSHashTable MCTS;
 const size_t         MCTSMaxNodes = 100000;
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -217,27 +205,15 @@ class MonteCarlo {
     MonteCarlo& operator=(const MonteCarlo&) = delete;
 
     // The main function of the class
-codex/align-wordfish-with-brainlearn-mcts-ux
-    void search(Brainlearn::ThreadPool&        threads,
-                Brainlearn::Search::LimitsType limits,
-=======
     void search(ThreadPool&        threads,
                 Search::LimitsType limits,
- main
                 bool                           isMainThread,
                 Search::Worker*                worker);
 
     // The high-level description of the Monte-Carlo algorithm
     void          create_root(Search::Worker* worker);
-codex/align-wordfish-with-brainlearn-mcts-ux
-    bool          computational_budget(Brainlearn::ThreadPool&        threads,
-                                       Brainlearn::Search::LimitsType limits);
-    mctsNodeInfo* tree_policy(Brainlearn::ThreadPool&        threads,
-                              Brainlearn::Search::LimitsType limits);
-=======
     bool          computational_budget(ThreadPool&        threads, Search::LimitsType limits);
     mctsNodeInfo* tree_policy(ThreadPool&        threads, Search::LimitsType limits);
- main
     Reward        playout_policy(mctsNodeInfo* node);
     Value         backup(Reward r, bool AB_Mode);
     Edge*         best_child(mctsNodeInfo* node, EdgeStatistic statistic) const;
@@ -265,25 +241,6 @@ codex/align-wordfish-with-brainlearn-mcts-ux
     void                 default_parameters();
     void                 set_exploration_constant(double c);
     [[nodiscard]] double exploration_constant() const;
- codex/align-wordfish-with-brainlearn-mcts-ux
-
-    // Output of results
-    [[nodiscard]] bool should_emit_pv(bool isMainThread) const;
-    void               emit_pv(Search::Worker* worker, Brainlearn::ThreadPool& threads);
-    void               print_children();
-    void               set_time_budget(TimePoint timeBudgetMs, bool useBudget);
-    [[nodiscard]] bool time_expired() const;
-    [[nodiscard]] TimePoint elapsed_ms() const;
-    [[nodiscard]] uint64_t playouts() const;
-    [[nodiscard]] int      max_ply() const;
-    [[nodiscard]] bool     no_legal_moves() const;
-
-   private:
-    [[nodiscard]] bool stop_requested() const;
-
-    Position&                   pos;  // The current position of the tree
-    Brainlearn::Search::Worker* thisThread;
-=======
     void                 set_time_budget(TimePoint allocated, bool useBudget);
     [[nodiscard]] int    max_ply() const;
     [[nodiscard]] uint64_t playouts() const;
@@ -295,12 +252,12 @@ codex/align-wordfish-with-brainlearn-mcts-ux
     [[nodiscard]] bool should_emit_pv(bool isMainThread) const;
     void               emit_pv(Search::Worker* worker, ThreadPool& threads);
     void               print_children();
-    bool               stop_requested(const ThreadPool& threads) const;
 
    private:
+    [[nodiscard]] bool stop_requested() const;
+
     Position&                   pos;  // The current position of the tree
     Search::Worker*             thisThread;
- main
     TranspositionTable&         tt;
     mctsNodeInfo*               root{};  // A pointer to the root
 
@@ -311,14 +268,9 @@ codex/align-wordfish-with-brainlearn-mcts-ux
     TimePoint lastOutputTime{};
     TimePoint timeBudget{};
     bool      useTimeBudget{};
- codex/align-wordfish-with-brainlearn-mcts-ux
     bool      noLegalMoves{};
     uint64_t  playoutsCount{};
-    Brainlearn::ThreadPool* threadsPtr{};
-=======
-    uint64_t  playoutCount{};
-    bool      noLegalMoves{};
- main
+    ThreadPool* threadsPtr{};
 
     [[maybe_unused]] double max_epsilon = 0.99;
     [[maybe_unused]] double min_epsilon = 0.00;
@@ -342,10 +294,6 @@ codex/align-wordfish-with-brainlearn-mcts-ux
     Search::Stack stackBuffer[MAX_PLY + 17]{}, *stack   = stackBuffer + 7;
     StateInfo     statesBuffer[MAX_PLY + 10]{}, *states = statesBuffer + 7;
 };
- codex/align-wordfish-with-brainlearn-mcts-ux
-}
-=======
 }  // namespace Brainlearn
 }  // namespace Stockfish
- main
 #endif  // #ifndef MONTECARLO_H_INCLUDED

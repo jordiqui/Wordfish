@@ -29,11 +29,7 @@
 #include <utility>
 #include <vector>
 
- codex/align-wordfish-with-brainlearn-mcts-ux
 #include "mcts/montecarlo.h"
-=======
-#include "mcts/brainlearn_mcts.h"
- main
 #include "evaluate.h"
 #include "experience.h"
 #include "misc.h"
@@ -248,11 +244,13 @@ void Engine::stop() {
 }
 
 void Engine::search_clear() {
+    Brainlearn::request_stop();
     wait_for_search_finished();
 
     tt.clear(threads);
     threads.clear();
     Brainlearn::clear();
+    Brainlearn::clear_stop();
 
     // @TODO wont work with multiple instances
     Tablebases::init(options["SyzygyPath"]);  // Free mapped files
