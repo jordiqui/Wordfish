@@ -41,10 +41,6 @@ bool CaseInsensitiveLess::operator()(const std::string& s1, const std::string& s
       });
 }
 
-static bool equals_case_insensitive(const std::string& s1, const std::string& s2) {
-    return !CaseInsensitiveLess()(s1, s2) && !CaseInsensitiveLess()(s2, s1);
-}
-
 void OptionsMap::add_info_listener(InfoListener&& message_func) { info = std::move(message_func); }
 
 void OptionsMap::setoption(std::istringstream& is) {
@@ -62,9 +58,6 @@ void OptionsMap::setoption(std::istringstream& is) {
 
     if (options_map.count(name))
     {
-        if (equals_case_insensitive(name, "Search Strategy")
-            && equals_case_insensitive(value, "BL-MCTS"))
-            value = "BrainLearnMCTS";
         options_map[name] = value;
     }
     else
