@@ -50,9 +50,9 @@ run_test() {
   else
     local exit_code=$?
     echo "FAILED (exit code: $exit_code)"
-    echo "===== Output for failed test ====="
+    echo "----- Output for failed test -----"
     cat "$tmp_file"
-    echo "=================================="
+    echo "----------------------------------"
     rm -f "$tmp_file"
     TESTS_FAILED=1
   fi

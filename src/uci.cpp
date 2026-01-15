@@ -400,7 +400,7 @@ void UCIEngine::bench(std::istream& args) {
 
     dbg_print();
 
-    std::cerr << "\n==========================="    //
+    std::cerr << "\n---------------------------"    //
               << "\nTotal time (ms) : " << elapsed  //
               << "\nNodes searched  : " << nodes    //
               << "\nNodes/second    : " << 1000 * nodes / elapsed << std::endl;
@@ -546,7 +546,7 @@ void UCIEngine::benchmark(std::istream& args) {
 
     // clang-format off
 
-    std::cerr << "==========================="
+    std::cerr << "---------------------------"
               << "\nVersion                    : "
               << engine_version_info()
               // "\nCompiled by                : "
