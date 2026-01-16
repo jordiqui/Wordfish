@@ -246,6 +246,7 @@ class MonteCarlo {
     [[nodiscard]] Reward evaluate_terminal(mctsNodeInfo* node) const;
     Reward               calculate_prior(Move m);
     void                 add_prior_to_node(mctsNodeInfo* node, Move m, Reward prior) const;
+    void                 generate_root_moves();
 
     // Tweaking the exploration algorithm
     void                 default_parameters();

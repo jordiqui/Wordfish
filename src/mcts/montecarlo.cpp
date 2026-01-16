@@ -352,7 +352,6 @@ MonteCarlo::MonteCarlo(Position&           p,
     thisThread(worker),
     tt(transpositionTable) {
     default_parameters();
-    create_root(worker);
 }
 
 /// MonteCarlo::create_root(Search::Worker* worker) initializes the Monte-Carlo tree with the given position
@@ -361,6 +360,11 @@ void MonteCarlo::create_root(Search::Worker* worker) {
     assert(ply == 0);
     assert(nodes[1] == nullptr);
     assert(root == nullptr);
+
+    const std::string fen = pos.fen();
+    const bool        isChess960 = pos.is_chess960();
+    worker->rootState           = StateInfo();
+    pos.set(fen, isChess960, &worker->rootState);
 
     // Initialize variables
     ply            = 1;
@@ -400,9 +404,8 @@ void MonteCarlo::create_root(Search::Worker* worker) {
 
     LOCK(this, root);
 
-    if (root->node_visits == 0)
-        generate_moves(root);
-    noLegalMoves = root->number_of_sons == 0;
+    generate_root_moves();
+    noLegalMoves = worker->root_moves().empty();
 }
 
 /// MonteCarlo::computational_budget() returns true the search is still
@@ -800,6 +803,25 @@ void MonteCarlo::undo_move() {
 /// generate moves if we want to have a decent order (captures first, then
 /// quiet moves, etc.). We have to pass various history tables to the MovePicker
 /// constructor, like in the alpha-beta implementation of move ordering.
+void MonteCarlo::generate_root_moves() {
+
+    assert(root != nullptr);
+
+    if (root->node_visits == 0)
+        generate_moves(root);
+
+    Search::RootMoves& rootMoves = thisThread->root_moves();
+    rootMoves.clear();
+
+    const int n = root->number_of_sons.load(std::memory_order_relaxed);
+    for (int k = 0; k < n; ++k)
+    {
+        const Move move = root->children[k]->move.load(std::memory_order_relaxed);
+        if (move.is_ok())
+            rootMoves.emplace_back(move);
+    }
+}
+
 void MonteCarlo::generate_moves(mctsNodeInfo* node) {
 
     LOCK(this, node);
