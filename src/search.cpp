@@ -241,7 +241,6 @@ void Search::Worker::start_searching() {
     kingSafetySetting = int(options["King Safety"]);
     mctsSummary = MctsSummary{};
     mctsInfoLogged = false;
-    const bool debugLog = mcts_debug_enabled();
 
     accumulatorStack.reset();
 
@@ -338,46 +337,6 @@ void Search::Worker::start_searching() {
                     helperWorker->kingSafetySetting = kingSafetySetting;
                     helperWorker->accumulatorStack.reset();
                     helperWorker->mctsSummary = MctsSummary{};
-
-                    MoveList<LEGAL> legalMoves(helperWorker->rootPos);
-                    const size_t    legalCount = legalMoves.size();
-                    if (debugLog)
-                    {
-                        std::string sampleMoves;
-                        int         samples = 0;
-                        for (const Move m : legalMoves)
-                        {
-                            if (samples >= 4)
-                                break;
-                            if (!sampleMoves.empty())
-                                sampleMoves += " ";
-                            sampleMoves += UCIEngine::move(m, chess960);
-                            ++samples;
-                        }
-
-                        log_mcts_debug("info string MCTS helper=" + std::to_string(idx + 1)
-                                       + " fen=" + fen + " legal_moves="
-                                       + std::to_string(legalCount) + " sample=[" + sampleMoves
-                                       + "]");
-                    }
-
-                    if (legalCount == 0)
-                    {
-                        const std::string stm = helperWorker->rootPos.side_to_move() == WHITE
-                                                  ? "white"
-                                                  : "black";
-                        sync_cout << "info string MCTS helper init failed: no legal moves fen=" << fen
-                                  << " side=" << stm << sync_endl;
-                        log_mcts_debug("info string MCTS helper init failed: no legal moves fen="
-                                       + fen + " side=" + stm);
-                        helperWorker->mctsSummary.playouts = 0;
-                        helperWorker->mctsSummary.elapsed  = TimePoint(0);
-                        helperWorker->mctsSummary.reason   = "nomoves";
-                        helperWorker->mctsSummary.ready    = true;
-                        std::lock_guard<std::mutex> lock(mctsHelperMutex);
-                        mctsHelperWorkers.emplace_back(std::move(helperWorker));
-                        continue;
-                    }
 
                     const bool emitOutput = idx == 0;
                     {
@@ -532,11 +491,31 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
         mctsLimits.depth    = 0;
     }
 
-    Move initialFallback = Move::none();
-    if (emitOutput && !rootMoves.empty() && !rootMoves[0].pv.empty())
-        initialFallback = rootMoves[0].pv[0];
+    const std::string fen = rootPos.fen();
+    const bool        isChess960 = rootPos.is_chess960();
+    rootState = StateInfo();
+    rootPos.set(fen, isChess960, &rootState);
 
     Brainlearn::MonteCarlo monteCarlo(rootPos, this, tt);
+    monteCarlo.create_root(this);
+    if (monteCarlo.no_legal_moves())
+    {
+        mctsSummary.playouts = 0;
+        mctsSummary.elapsed  = TimePoint(0);
+        mctsSummary.reason   = "nomoves";
+        mctsSummary.ready    = true;
+
+        if (debugLog)
+        {
+            log_mcts_debug("info string MCTS helper=" + std::to_string(threadIdx)
+                           + " exit playouts=0 elapsed=0 reason=nomoves");
+        }
+
+        nodes.store(Brainlearn::MCTSNodeCount.load(std::memory_order_relaxed),
+                    std::memory_order_relaxed);
+        tbHits.store(0, std::memory_order_relaxed);
+        return false;
+    }
 
     TimePoint allocatedTime = TimePoint(0);
     bool      useTimeBudget = false;
@@ -560,42 +539,12 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
 
     const uint64_t playouts = monteCarlo.playouts();
     const bool     noLegalMoves = monteCarlo.no_legal_moves();
-    bool           fallbackUsed = playouts == 0;
-    bool           hasMove = true;
+    bool           hasMove = !noLegalMoves;
     if (emitOutput)
     {
         const int maxPly = std::clamp(monteCarlo.max_ply(), 1, MAX_PLY - 1);
         completedDepth   = rootDepth = Depth(maxPly);
         selDepth                     = maxPly;
-
-        auto has_valid_move = [&]() {
-            return !rootMoves.empty() && !rootMoves[0].pv.empty()
-                && rootMoves[0].pv[0] != Move::none() && rootPos.legal(rootMoves[0].pv[0]);
-        };
-
-        if ((playouts == 0 || noLegalMoves) && !has_valid_move())
-        {
-            Move fallbackMove =
-              initialFallback != Move::none() && rootPos.legal(initialFallback) ? initialFallback
-                                                                                : Move::none();
-            if (fallbackMove == Move::none())
-            {
-                for (Move m : MoveList<LEGAL>(rootPos))
-                {
-                    fallbackMove = m;
-                    break;
-                }
-            }
-
-            if (fallbackMove != Move::none())
-            {
-                rootMoves.clear();
-                rootMoves.emplace_back(fallbackMove);
-            }
-
-            hasMove = fallbackMove != Move::none();
-            fallbackUsed = true;
-        }
     }
 
     const TimePoint elapsed = monteCarlo.elapsed_ms();
@@ -603,7 +552,6 @@ bool Search::Worker::run_mcts_search(bool emitOutput) {
       monteCarlo.time_expired()
       || (useTimeBudget && threads.stop.load(std::memory_order_relaxed));
     std::string_view reason = noLegalMoves ? "nomoves"
-                             : fallbackUsed ? "fallback"
                              : timeExpired  ? "time"
                                             : "stop";
 
