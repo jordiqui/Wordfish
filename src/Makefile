@@ -1033,6 +1033,15 @@ profile-build: net config-sanity objclean profileclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
+ifeq ($(target_windows),yes)
+ifneq ($(filter $(KERNEL),Linux Darwin FreeBSD OpenBSD NetBSD),)
+ifeq ($(WINE_PATH),)
+	@echo "Wine is required to run Windows binaries for profile-guided builds." && \
+	echo "Install wine or set WINE_PATH to its location before running profile-build." && \
+	exit 1
+endif
+endif
+endif
 	$(PGOBENCH) > PGOBENCH.out 2>&1
 	tail -n 4 PGOBENCH.out
 	@echo ""
