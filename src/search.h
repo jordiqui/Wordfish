@@ -280,6 +280,7 @@ class Worker {
     size_t thread_index() const { return threadIdx; }
     RootMoves& root_moves() { return rootMoves; }
     Depth completed_depth() const { return completedDepth; }
+    StateInfo& root_state() { return rootState; }
 
     void ensure_network_replicated();
     bool mcts_debug_enabled() const;

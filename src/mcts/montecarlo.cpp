@@ -363,8 +363,8 @@ void MonteCarlo::create_root(Search::Worker* worker) {
 
     const std::string fen = pos.fen();
     const bool        isChess960 = pos.is_chess960();
-    worker->rootState           = StateInfo();
-    pos.set(fen, isChess960, &worker->rootState);
+    worker->root_state()           = StateInfo();
+    pos.set(fen, isChess960, &worker->root_state());
 
     // Initialize variables
     ply            = 1;
