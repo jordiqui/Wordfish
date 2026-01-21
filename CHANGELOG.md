@@ -5,7 +5,7 @@
 - Nothing yet.
 
 ### Changed
-- Nothing yet.
+- Rebranded the engine to "Wordfish-4.0-210126" and kept architecture-aware executable and UCI suffixes so GUIs like Fritz 20 and CuteChess show `Wordfish-4.0-210126-sse41popcnt`, `Wordfish-4.0-210126-avx2`, `Wordfish-4.0-210126-bmi2`, `Wordfish-4.0-210126-FMA3`, or `Wordfish-4.0-210126-avx512` depending on the compiled target.
 
 ## [3.90-150126]
 ### Changed

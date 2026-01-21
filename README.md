@@ -4,9 +4,9 @@
 
 ## Overview
 
-Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable BrainLearn Monte Carlo search. The current release is **Wordfish-3.90-150126**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
+Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable BrainLearn Monte Carlo search. The current release is **Wordfish-4.0-210126**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
 
-## Wordfish-3.90-150126 — Release Notes (Fritz/Cutechess users)
+## Wordfish-4.0-210126 — Release Notes (Fritz/Cutechess users)
 
 ### Key changes
 
@@ -41,11 +41,11 @@ info string BL-MCTS playouts=<N> elapsed=<ms> reason=<time|stop|nomoves|fallback
 
 The engine reports an internal UCI name that includes the build suffix, so GUI search listings (Fritz 20, Cutechess) show the compiled target:
 
-- `Wordfish-3.90-150126-sse41popcnt`
-- `Wordfish-3.90-150126-avx2`
-- `Wordfish-3.90-150126-bmi2`
-- `Wordfish-3.90-150126-FMA3`
-- `Wordfish-3.90-150126-avx512`
+- `Wordfish-4.0-210126-sse41popcnt`
+- `Wordfish-4.0-210126-avx2`
+- `Wordfish-4.0-210126-bmi2`
+- `Wordfish-4.0-210126-FMA3`
+- `Wordfish-4.0-210126-avx512`
 
 ## Architecture and integrated modules
 
