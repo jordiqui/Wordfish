@@ -42,6 +42,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "misc.h"
+
 #if defined(__NetBSD__) || defined(__DragonFly__) || defined(__linux__)
     #include <limits.h>
     #define SF_MAX_SEM_NAME_LEN NAME_MAX
@@ -170,7 +172,7 @@ class SharedMemory: public detail::SharedMemoryBase {
     }
 
     static std::string make_sentinel_base(const std::string& name) {
-        uint64_t hash = std::hash<std::string>{}(name);
+        uint64_t hash = basic_hash(name);
         char     buf[32];
         std::snprintf(buf, sizeof(buf), "sfshm_%016" PRIx64, static_cast<uint64_t>(hash));
         return buf;
@@ -427,11 +429,10 @@ class SharedMemory: public detail::SharedMemoryBase {
     }
 
     std::string sentinel_full_path(pid_t pid) const {
-        std::string path = "/dev/shm/";
-        path += sentinel_base_;
-        path.push_back('.');
-        path += std::to_string(pid);
-        return path;
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "/dev/shm/%s.%ld", sentinel_base_.c_str(),
+                      static_cast<long>(pid));
+        return buf;
     }
 
     void decrement_refcount_relaxed() noexcept {

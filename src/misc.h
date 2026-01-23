@@ -298,6 +298,20 @@ inline uint64_t mul_hi64(uint64_t a, uint64_t b) {
 #endif
 }
 
+inline std::uint64_t basic_hash_bytes(const unsigned char* data, std::size_t size) noexcept {
+    std::uint64_t hash = 14695981039346656037ULL;
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        hash ^= data[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+inline std::uint64_t basic_hash(std::string_view data) noexcept {
+    return basic_hash_bytes(reinterpret_cast<const unsigned char*>(data.data()), data.size());
+}
+
 
 template<typename T>
 inline void hash_combine(std::size_t& seed, const T& v) {
@@ -312,8 +326,8 @@ inline void hash_combine(std::size_t& seed, const std::size_t& v) {
 
 template<typename T>
 inline std::size_t get_raw_data_hash(const T& value) {
-    return std::hash<std::string_view>{}(
-      std::string_view(reinterpret_cast<const char*>(&value), sizeof(value)));
+    return static_cast<std::size_t>(
+      basic_hash_bytes(reinterpret_cast<const unsigned char*>(&value), sizeof(value)));
 }
 
 template<std::size_t Capacity>
@@ -434,7 +448,7 @@ void move_to_front(std::vector<T>& vec, Predicate pred) {
 template<std::size_t N>
 struct std::hash<Stockfish::FixedString<N>> {
     std::size_t operator()(const Stockfish::FixedString<N>& fstr) const noexcept {
-        return std::hash<std::string_view>{}((std::string_view) fstr);
+        return static_cast<std::size_t>(Stockfish::basic_hash(std::string_view(fstr)));
     }
 };
 
