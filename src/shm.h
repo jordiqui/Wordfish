@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <iomanip>
@@ -44,6 +45,7 @@
     #define SF_MAX_SEM_NAME_LEN NAME_MAX
 #endif
 
+#include "misc.h"
 #include "types.h"
 
 #include "memory.h"
@@ -511,7 +513,7 @@ template<typename T>
 struct SystemWideSharedConstant {
    private:
     static std::string createHashString(const std::string& input) {
-        size_t hash = std::hash<std::string>{}(input);
+        std::uint64_t hash = basic_hash(input);
 
         std::stringstream ss;
         ss << std::hex << std::setfill('0') << hash;
@@ -533,11 +535,12 @@ struct SystemWideSharedConstant {
     // that are not present in the content, for example NUMA node allocation.
     SystemWideSharedConstant(const T& value, std::size_t discriminator = 0) {
         std::size_t content_hash    = std::hash<T>{}(value);
-        std::size_t executable_hash = std::hash<std::string>{}(getExecutablePathHash());
+        std::size_t executable_hash = static_cast<std::size_t>(basic_hash(getExecutablePathHash()));
 
-        std::string shm_name = std::string("Local\\sf_") + std::to_string(content_hash) + "$"
-                             + std::to_string(executable_hash) + "$"
-                             + std::to_string(discriminator);
+        char shm_name_buf[128];
+        std::snprintf(shm_name_buf, sizeof(shm_name_buf), "Local\\sf_%zu$%zu$%zu", content_hash,
+                      executable_hash, discriminator);
+        std::string shm_name = shm_name_buf;
 
 #if !defined(_WIN32)
         // POSIX shared memory names must start with a slash
