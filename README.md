@@ -4,52 +4,19 @@
 
 ## Overview
 
-Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable BrainLearn Monte Carlo search. The current release is **Wordfish-4.0-210126**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
+Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-3.70-070126**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
 
-## Wordfish-4.0-210126 — Release Notes (Fritz/Cutechess users)
+## What's new in 3.70-070126
 
-### Key changes
-
-- BrainLearnMCTS is now the only Monte-Carlo strategy available in Wordfish. The legacy Wordfish MCTS driver and its old options have been removed to avoid GUI confusion and option conflicts.
-- GUI-friendly `Search Strategy`: the combo now exposes only AlphaBeta and BrainLearnMCTS, so it is clear which mode is active.
-- Fritz/ChessBase fallback: if your GUI cannot set combo options reliably, you can enable BrainLearnMCTS using the BrainLearnMCTS checkbox (it safely switches the strategy for you).
-- Robust time/stop handling: BrainLearnMCTS honors `go movetime`, and `go infinite` responds reliably to `stop` across GUIs.
-
-### How to enable BrainLearnMCTS
-
-In your GUI options:
-
-1. Set `Search Strategy` = `BrainLearnMCTS`.
-2. Or, if the combo cannot be changed in your GUI, tick `BrainLearnMCTS`.
-
-### Recommended starting settings
-
-- `Threads`: set as you normally do for Wordfish (e.g., number of physical cores you allocate).
-- `BrainLearnMCTSThreads`: keep at `0` (stable default).
-- `BrainLearnMultiStrategy`: `20` (default).
-- `BrainLearnMultiMinVisits`: `5` (default).
-
-### UCI confirmation
-
-When BrainLearnMCTS is active, the engine will output a clean termination summary:
-
-```
-info string BL-MCTS playouts=<N> elapsed=<ms> reason=<time|stop|nomoves|fallback>
-```
-
-### Naming
-
-The engine reports an internal UCI name that includes the build suffix, so GUI search listings (Fritz 20, Cutechess) show the compiled target:
-
-- `Wordfish-4.0-210126-sse41popcnt`
-- `Wordfish-4.0-210126-avx2`
-- `Wordfish-4.0-210126-bmi2`
-- `Wordfish-4.0-210126-FMA3`
-- `Wordfish-4.0-210126-avx512`
+- Rebranded the engine to **Wordfish-3.70-070126** and expanded architecture-aware suffixes so GUI search listings display `Wordfish-3.70-070126-sse41popcnt` (SSE4.1/POPCNT builds), `Wordfish-3.70-070126-avx2` (AVX2 builds), `Wordfish-3.70-070126-bmi2` (BMI2 builds), `Wordfish-3.70-070126-FMA3` (FMA3 builds), or `Wordfish-3.70-070126-avx512` (AVX-512 builds) alongside the base name.
+- Updated the main NNUE evaluator to `nn-2962dca31855.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
+- Emphasized king safety, rook coordination, and supervised endgame patterns in recent network training and handcrafted heuristics.
+- Tightened king-safety heuristics around open files, rook lifts, and dark-square weaknesses while rewarding coordinated rooks and discouraging premature flank pawn storms.
+- Reduced aggressive pruning in sharp positions and introduced a verification search to confirm large swings in evaluation, improving stability in complicated lines.
 
 ## Architecture and integrated modules
 
-- **Search pipeline**: Classical alpha–beta search remains the default, with optional BrainLearn Monte Carlo Tree Search (MCTS) selectable through `Search Strategy`. Both strategies honour standard UCI limits (`depth`, `nodes`, `movetime`, `infinite`, and pondering) and share the same move generator and time manager.
+- **Search pipeline**: Classical alpha–beta search remains the default, with an alternative Monte Carlo Tree Search (MCTS) driver selectable through `Search Strategy`. Both strategies honour standard UCI limits (`depth`, `nodes`, `movetime`, `infinite`, and pondering) and share the same move generator and time manager.
 - **Neural evaluation**: A paired NNUE design keeps large and small networks in step. Networks are hot-swapped via `EvalFile` and `EvalFileSmall`, with `export_net` producing portable binaries. The `trace_eval` command prints a complete evaluation trace for the current position.
 - **Experience system**: Search outcomes are written to an `.exp` file when `Experience Enabled` is true. `Experience Readonly` permits analysis without mutating the store, while `Experience Sync` forces an immediate flush. Learned moves can be consulted as a lightweight book when `Experience Book` is active.
 - **NUMA and threading**: `Threads` resizes the worker pool, and `NumaPolicy` (`auto`, `system`, `hardware`, `none`, or a custom mask) governs thread placement. Changes are reflected immediately in shared network replicas and hash tables.
@@ -61,12 +28,12 @@ The engine reports an internal UCI name that includes the build suffix, so GUI s
 - **Session control**: `uci` announces identity and options; `isready` synchronises threads; `ucinewgame` clears experience buffers; `stop` halts search; `ponderhit` resumes after pondering; `quit` exits cleanly.
 - **Core options**: `Hash` (MB for the transposition table), `Clear Hash` (button), `Ponder`, `MultiPV`, `Skill Level`, `Move Overhead`, `Minimum Thinking Time`, `Panic Time Buffer`, `Slow Mover`, `nodestime`, `UCI_Chess960`, `UCI_LimitStrength` and `UCI_Elo`, `Contempt`/`Contemp`, and `King Safety`.
 - **Short-clock safety**: when the active clock drops under a second, the engine enters a panic regime that boosts `Move Overhead`, clamps thinking time to a fraction of the remaining clock, and caps it by `Panic Time Buffer` (default 200 ms). Raising `Minimum Thinking Time` or `Panic Time Buffer` increases the cushion for sudden disconnections or lag.
-- **Monte Carlo tuning**: `Search Strategy` accepts `AlphaBeta` or `BrainLearnMCTS` (plus the parsed alias `BL-MCTS`, even though it is not listed in GUI combos). The combo selection is authoritative: `BrainLearnMCTS` runs the BrainLearn driver, and all other values stay on alpha–beta. When a clock-based limit is provided (`wtime`, `btime`, or `movetime`), BrainLearn MCTS respects the same time manager and stop conditions.
-- **BrainLearn MCTS (experimental)**: Set `Search Strategy` to `BrainLearnMCTS` (or `BL-MCTS`) to activate the BrainLearn Monte Carlo Tree Search driver. It is OFF by default. The `BrainLearnMCTS` check option is a GUI fallback that sets `Search Strategy` to `BrainLearnMCTS` when enabled without overriding an explicit combo choice when disabled.
-  - `BrainLearnMCTSThreads`: Helper thread budget for BrainLearn MCTS (default 0, up to 512). The main thread remains alpha–beta unless `Search Strategy` is set to BrainLearn MCTS.
-  - `BrainLearnMultiStrategy`: Percentage threshold used by BrainLearn for mixing rollouts with minimax probes (default 20, range 0–100).
-  - `BrainLearnMultiMinVisits`: Visit threshold that unlocks expanded UCB logic in BrainLearn MCTS (default 5, range 0–1000).
-  - Note: helper-thread integration is limited to BrainLearn strategy searches and uses the engine-wide stop/ponder controls.
+- **Monte Carlo tuning**: `Search Strategy` accepts `AlphaBeta`, `MCTS`, or the alias `Montecarlo`. When a clock-based limit is provided (`wtime`, `btime`, or `movetime`), the MCTS driver prioritises that timer over the default simulation cap unless `nodes` is explicitly requested.
+- **MCTS configuration**: Enable the MCTS driver with `MCTS Enabled` or by selecting it via `Search Strategy`. Fine-tune behaviour with:
+  - `MCTS Rollout Depth`: Maximum plies explored during each rollout (default 12, range 4–128).
+  - `MCTS Simulations`: Target number of playouts; set to `0` to run until search limits expire (default 5000, up to 1,000,000).
+  - `MCTS Explore`: Exploration constant that balances exploitation of strong moves against broader sampling (default 35, range 1–200).
+  - Existing time controls (`wtime`, `btime`, `movetime`) and node limits still apply when provided.
 - **Experience controls**: `Experience Enabled`, `Experience File`, `Experience Readonly`, `Experience Book`, `Experience Book Width`, `Experience Book Eval Importance`, `Experience Book Min Depth`, `Experience Book Max Moves`, `Experience Status`, and `Experience Sync`.
 - **Neural networks**: `EvalFile` and `EvalFileSmall` accept external NNUE files and reload replicas on all threads.
 - **Tablebases**: `SyzygyPath`, `SyzygyProbeDepth`, `Syzygy50MoveRule`, and `SyzygyProbeLimit` configure probing depth, scope, and rule enforcement.
@@ -79,6 +46,7 @@ Use the following ranges to set the **time control** values in the Settings sect
   - **Bullet**: 60s + 0s up to 120s + 1s
   - **Blitz**: 180s + 0s up to 16 minutes + 3s
   - **Classical**: 16 minutes + 0s up to 120 minutes + 15s
+ codex/add-game-time-control-values-to-settings-page-8o68op
 
 ### Recommended UCI values for these time controls
 
@@ -92,6 +60,8 @@ These baseline values are tuned for online play and are safe defaults across the
 - `SyzygyProbeDepth`: **1**
 - `Syzygy50MoveRule`: **true**
 - `SyzygyProbeLimit`: **7**
+=======
+ main
 - **Lichess.org**
   - **Bullet**: 60s + 0s up to 120s + 1s
   - **Blitz**: 180s + 0s up to 16 minutes + 3s
@@ -133,26 +103,23 @@ Use `make help` for platform-specific targets. Bundled binaries embed default NN
 3. Provide a position via `position` (FEN or move list) and start calculation with `go` plus the desired limits.
 4. During analysis, monitor `info` strings for depth, score, nodes per second, and—when enabled—win/draw/loss figures.
 
-### How to enable BrainLearnMCTS in Fritz/Cutechess
-Enable in Fritz/Cutechess: set Search Strategy = BrainLearnMCTS (or tick BrainLearnMCTS if your GUI can’t change combos).
+## Suggested MCTS evaluation profile
 
-## Suggested BrainLearnMCTS evaluation profile
+For Monte Carlo analysis sessions, start from the following balanced configuration and adjust to taste:
 
-For BrainLearn analysis sessions, start from the following balanced configuration and adjust to taste:
-
-- `Search Strategy`: `BrainLearnMCTS`
-- `BrainLearnMCTSThreads`: `2` (adds helper search threads)
-- `BrainLearnMultiStrategy`: `25` (slightly more probing before rollout)
-- `BrainLearnMultiMinVisits`: `8` (requires more visits before expanding)
+- `Search Strategy`: `MCTS`
+- `MCTS Rollout Depth`: `20` (keeps playouts tactical without drifting too far from the frontier)
+- `MCTS Simulations`: `8000` (set to `0` to let the clock dictate stopping conditions)
+- `MCTS Explore`: `40` (slightly more exploratory than the default for broader coverage)
 - `Move Overhead`: `30` (ms buffer on fixed `movetime` runs to avoid time forfeits)
 
 Example commands:
 
 ```bash
-setoption name Search Strategy value BrainLearnMCTS
-setoption name BrainLearnMCTSThreads value 2
-setoption name BrainLearnMultiStrategy value 25
-setoption name BrainLearnMultiMinVisits value 8
+setoption name Search Strategy value MCTS
+setoption name MCTS Rollout Depth value 20
+setoption name MCTS Simulations value 8000
+setoption name MCTS Explore value 40
 setoption name Move Overhead value 30
 ```
 

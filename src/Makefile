@@ -15,9 +15,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-### --------------------------------------------------------------------------
+### ==========================================================================
 ### Section 1. General Configuration
-### --------------------------------------------------------------------------
+### ==========================================================================
 
 ### Establish the operating system name
 KERNEL  := $(shell uname -s)
@@ -39,7 +39,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ENGINE_BASE_NAME := Wordfish-4.0-210126
+ENGINE_BASE_NAME := Wordfish-3.80-120126
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -49,14 +49,14 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
-SRCS = benchmark.cpp bitboard.cpp mcts/montecarlo.cpp evaluate.cpp experience.cpp main.cpp \
-        misc.cpp movegen.cpp movepick.cpp polybook.cpp position.cpp \
+SRCS = benchmark.cpp bitboard.cpp evaluate.cpp experience.cpp main.cpp \
+        misc.cpp movegen.cpp movepick.cpp mcts.cpp polybook.cpp position.cpp \
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
         nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/network.cpp \
         nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp \
         engine.cpp score.cpp memory.cpp
 
-HEADERS = benchmark.h bitboard.h mcts/montecarlo.h evaluate.h experience.h experience_compat.h Wordfish_zobrist.h misc.h movegen.h movepick.h history.h polybook.h \
+HEADERS = benchmark.h bitboard.h evaluate.h experience.h experience_compat.h Wordfish_zobrist.h misc.h movegen.h movepick.h mcts.h history.h polybook.h \
                 nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/features/full_threats.h \
                 nnue/layers/affine_transform.h nnue/layers/affine_transform_sparse_input.h \
                 nnue/layers/clipped_relu.h nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h \
@@ -66,11 +66,11 @@ HEADERS = benchmark.h bitboard.h mcts/montecarlo.h evaluate.h experience.h exper
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features:mcts
+VPATH = syzygy:nnue:nnue/features
 
-### --------------------------------------------------------------------------
+### ==========================================================================
 ### Section 2. High-level Configuration
-### --------------------------------------------------------------------------
+### ==========================================================================
 #
 # flag                --- Comp switch        --- Description
 # ----------------------------------------------------------------------------
@@ -460,9 +460,9 @@ endif
 endif
 
 
-### --------------------------------------------------------------------------
+### ==========================================================================
 ### Section 3. Low-level Configuration
-### --------------------------------------------------------------------------
+### ==========================================================================
 
 ### 3.1 Selecting compiler (default = gcc)
 ifeq ($(MAKELEVEL),0)
@@ -472,7 +472,6 @@ ifeq ($(MAKELEVEL),0)
 endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
-CXXFLAGS += -I.
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
@@ -932,9 +931,9 @@ ifeq ($(OS), Android)
 	LDFLAGS += -fPIE -pie
 endif
 
-### --------------------------------------------------------------------------
+### ==========================================================================
 ### Section 4. Public Targets
-### --------------------------------------------------------------------------
+### ==========================================================================
 
 help:
 	@echo "" && \
@@ -1033,15 +1032,6 @@ profile-build: net config-sanity objclean profileclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-ifeq ($(target_windows),yes)
-ifneq ($(filter $(KERNEL),Linux Darwin FreeBSD OpenBSD NetBSD),)
-ifeq ($(WINE_PATH),)
-	@echo "Wine is required to run Windows binaries for profile-guided builds." && \
-	echo "Install wine or set WINE_PATH to its location before running profile-build." && \
-	exit 1
-endif
-endif
-endif
 	$(PGOBENCH) > PGOBENCH.out 2>&1
 	tail -n 4 PGOBENCH.out
 	@echo ""
@@ -1085,9 +1075,9 @@ net:
 format:
 	$(CLANG-FORMAT) -i $(SRCS) $(HEADERS) -style=file
 
-### --------------------------------------------------------------------------
+### ==========================================================================
 ### Section 5. Private Targets
-### --------------------------------------------------------------------------
+### ==========================================================================
 
 all: $(EXE) .depend
 
