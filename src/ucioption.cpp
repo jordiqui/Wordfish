@@ -57,9 +57,7 @@ void OptionsMap::setoption(std::istringstream& is) {
         value += (value.empty() ? "" : " ") + token;
 
     if (options_map.count(name))
-    {
         options_map[name] = value;
-    }
     else
         sync_cout << "No such option: " << name << sync_endl;
 }

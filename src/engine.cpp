@@ -29,7 +29,6 @@
 #include <utility>
 #include <vector>
 
-#include "mcts/montecarlo.h"
 #include "evaluate.h"
 #include "experience.h"
 #include "misc.h"
@@ -108,10 +107,12 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "MultiPV", Option(1, 1, MAX_MOVES));
 
-    options.add("MCTS", Option(false));
-    options.add("MCTSThreads", Option(0, 0, 512));
-    options.add("Multi Strategy", Option(20, 0, 100));
-    options.add("Multi MinVisits", Option(5, 0, 1000));
+    options.add("Search Strategy", Option("AlphaBeta MCTS Montecarlo", "AlphaBeta"));
+    options.add("MCTS Enabled", Option(false));
+
+    options.add("MCTS Rollout Depth", Option(12, 4, 128));
+    options.add("MCTS Simulations", Option(5000, 0, 1000000));
+    options.add("MCTS Explore", Option(35, 1, 200));
 
     options.add("Skill Level", Option(20, 0, 20));
 
@@ -238,22 +239,13 @@ void Engine::go(Search::LimitsType& limits) {
 
     threads.start_thinking(options, pos, states, limits);
 }
-void Engine::stop() {
-    threads.stop = true;
-    Brainlearn::request_stop();
-    wait_for_search_finished();
-    if (threads.main_thread() && threads.main_thread()->worker)
-        threads.main_thread()->worker->join_mcts_helpers();
-}
+void Engine::stop() { threads.stop = true; }
 
 void Engine::search_clear() {
-    Brainlearn::request_stop();
     wait_for_search_finished();
 
     tt.clear(threads);
     threads.clear();
-    Brainlearn::clear();
-    Brainlearn::clear_stop();
 
     // @TODO wont work with multiple instances
     Tablebases::init(options["SyzygyPath"]);  // Free mapped files

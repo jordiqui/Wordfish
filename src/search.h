@@ -27,10 +27,8 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 #include "history.h"
@@ -277,15 +275,8 @@ class Worker {
    void start_searching();
 
     bool is_mainthread() const { return threadIdx == 0; }
-    size_t thread_index() const { return threadIdx; }
-    RootMoves& root_moves() { return rootMoves; }
-    Depth completed_depth() const { return completedDepth; }
-    StateInfo& root_state() { return rootState; }
 
     void ensure_network_replicated();
-    bool mcts_debug_enabled() const;
-    void log_mcts_debug(std::string_view line) const;
-    void join_mcts_helpers();
 
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;
@@ -302,20 +293,9 @@ class Worker {
 
     TTMoveHistory ttMoveHistory;
 
-    Value minimax_value(Position& pos, Search::Stack* ss, Depth depth);
-    Value minimax_value(Position& pos, Search::Stack* ss, Depth depth, Value alpha, Value beta);
-
    private:
-    struct MctsSummary {
-        uint64_t   playouts = 0;
-        TimePoint  elapsed  = TimePoint(0);
-        std::string reason;
-        bool       ready = false;
-    };
-
    void iterative_deepening();
-    bool run_mcts_search(bool emitOutput);
-    void apply_mcts_root_ordering();
+    void run_monte_carlo();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
@@ -360,12 +340,6 @@ class Worker {
     RootMoves rootMoves;
     Depth     rootDepth, completedDepth;
     Value     rootDelta;
-
-    MctsSummary mctsSummary;
-    bool        mctsInfoLogged = false;
-    std::vector<std::unique_ptr<Search::Worker>> mctsHelperWorkers;
-    std::vector<std::thread>                     mctsHelperThreads;
-    std::mutex                                   mctsHelperMutex;
 
     size_t                    threadIdx;
     NumaReplicatedAccessToken numaAccessToken;
