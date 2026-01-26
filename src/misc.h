@@ -23,6 +23,7 @@
 #include <array>
 #include <cassert>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <exception>  // IWYU pragma: keep
@@ -135,6 +136,7 @@ class ValueList {
 
    public:
     std::size_t size() const { return size_; }
+    std::ptrdiff_t ssize() const { return static_cast<std::ptrdiff_t>(size_); }
     void        push_back(const T& value) {
         assert(size_ < MaxSize);
         values_[size_++] = value;

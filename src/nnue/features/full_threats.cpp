@@ -33,6 +33,8 @@
 
 namespace Stockfish::Eval::NNUE::Features {
 
+namespace {
+
 struct HelperOffsets {
     int cumulativePieceOffset, cumulativeOffset;
 };
@@ -42,8 +44,15 @@ constexpr std::array<Piece, 12> AllPieces = {
   B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING,
 };
 
+std::array<HelperOffsets, PIECE_NB>                    helper_offsets{};
+std::array<std::array<IndexType, SQUARE_NB>, PIECE_NB> offsets{};
+std::array<std::array<std::array<uint32_t, 2>, PIECE_NB>, PIECE_NB> index_lut1{};
+std::array<std::array<std::array<uint8_t, SQUARE_NB>, SQUARE_NB>, PIECE_NB> index_lut2{};
+
+bool threats_initialized = false;
+
 template<PieceType PT>
-constexpr auto make_piece_indices_type() {
+auto make_piece_indices_type() {
     static_assert(PT != PieceType::PAWN);
 
     std::array<std::array<uint8_t, SQUARE_NB>, SQUARE_NB> out{};
@@ -54,7 +63,7 @@ constexpr auto make_piece_indices_type() {
 
         for (Square to = SQ_A1; to <= SQ_H8; ++to)
         {
-            out[from][to] = constexpr_popcount(((1ULL << to) - 1) & attacks);
+            out[from][to] = popcount(((1ULL << to) - 1) & attacks);
         }
     }
 
@@ -62,7 +71,7 @@ constexpr auto make_piece_indices_type() {
 }
 
 template<Piece P>
-constexpr auto make_piece_indices_piece() {
+auto make_piece_indices_piece() {
     static_assert(type_of(P) == PieceType::PAWN);
 
     std::array<std::array<uint8_t, SQUARE_NB>, SQUARE_NB> out{};
@@ -75,19 +84,19 @@ constexpr auto make_piece_indices_piece() {
 
         for (Square to = SQ_A1; to <= SQ_H8; ++to)
         {
-            out[from][to] = constexpr_popcount(((1ULL << to) - 1) & attacks);
+            out[from][to] = popcount(((1ULL << to) - 1) & attacks);
         }
     }
 
     return out;
 }
 
-constexpr auto index_lut2_array() {
-    constexpr auto KNIGHT_ATTACKS = make_piece_indices_type<PieceType::KNIGHT>();
-    constexpr auto BISHOP_ATTACKS = make_piece_indices_type<PieceType::BISHOP>();
-    constexpr auto ROOK_ATTACKS   = make_piece_indices_type<PieceType::ROOK>();
-    constexpr auto QUEEN_ATTACKS  = make_piece_indices_type<PieceType::QUEEN>();
-    constexpr auto KING_ATTACKS   = make_piece_indices_type<PieceType::KING>();
+auto index_lut2_array() {
+    auto KNIGHT_ATTACKS = make_piece_indices_type<PieceType::KNIGHT>();
+    auto BISHOP_ATTACKS = make_piece_indices_type<PieceType::BISHOP>();
+    auto ROOK_ATTACKS   = make_piece_indices_type<PieceType::ROOK>();
+    auto QUEEN_ATTACKS  = make_piece_indices_type<PieceType::QUEEN>();
+    auto KING_ATTACKS   = make_piece_indices_type<PieceType::KING>();
 
     std::array<std::array<std::array<uint8_t, SQUARE_NB>, SQUARE_NB>, PIECE_NB> indices{};
 
@@ -112,9 +121,9 @@ constexpr auto index_lut2_array() {
     return indices;
 }
 
-constexpr auto init_threat_offsets() {
+auto init_threat_offset_data() {
     std::array<HelperOffsets, PIECE_NB>                    indices{};
-    std::array<std::array<IndexType, SQUARE_NB>, PIECE_NB> offsets{};
+    std::array<std::array<IndexType, SQUARE_NB>, PIECE_NB> offsets_local{};
 
     int cumulativeOffset = 0;
     for (Piece piece : AllPieces)
@@ -124,19 +133,19 @@ constexpr auto init_threat_offsets() {
 
         for (Square from = SQ_A1; from <= SQ_H8; ++from)
         {
-            offsets[pieceIdx][from] = cumulativePieceOffset;
+            offsets_local[pieceIdx][from] = cumulativePieceOffset;
 
             if (type_of(piece) != PAWN)
             {
                 Bitboard attacks = PseudoAttacks[type_of(piece)][from];
-                cumulativePieceOffset += constexpr_popcount(attacks);
+                cumulativePieceOffset += popcount(attacks);
             }
 
             else if (from >= SQ_A2 && from <= SQ_H7)
             {
                 Bitboard attacks = (pieceIdx < 8) ? pawn_attacks_bb<WHITE>(square_bb(from))
                                                   : pawn_attacks_bb<BLACK>(square_bb(from));
-                cumulativePieceOffset += constexpr_popcount(attacks);
+                cumulativePieceOffset += popcount(attacks);
             }
         }
 
@@ -145,14 +154,10 @@ constexpr auto init_threat_offsets() {
         cumulativeOffset += numValidTargets[pieceIdx] * cumulativePieceOffset;
     }
 
-    return std::pair{indices, offsets};
+    return std::pair{indices, offsets_local};
 }
 
-constexpr auto helper_offsets = init_threat_offsets().first;
-// Lookup array for indexing threats
-constexpr auto offsets = init_threat_offsets().second;
-
-constexpr auto init_index_luts() {
+auto init_index_luts() {
     std::array<std::array<std::array<uint32_t, 2>, PIECE_NB>, PIECE_NB> indices{};
 
     for (Piece attacker : AllPieces)
@@ -179,16 +184,30 @@ constexpr auto init_index_luts() {
     return indices;
 }
 
+}  // namespace
+
+void init_threat_offsets() {
+    if (threats_initialized)
+        return;
+
+    auto [indices, offsets_local] = init_threat_offset_data();
+    helper_offsets                = indices;
+    offsets                       = offsets_local;
+
+    index_lut1 = init_index_luts();
+    index_lut2 = index_lut2_array();
+
+    threats_initialized = true;
+}
+
 // The final index is calculated from summing data found in these two LUTs, as well
 // as offsets[attacker][from]
 
 // [attacker][attacked][from < to]
-constexpr auto index_lut1 = init_index_luts();
 // [attacker][from][to]
-constexpr auto index_lut2 = index_lut2_array();
 
 // Index of a feature for a given king position and another piece on some square
-inline sf_always_inline IndexType FullThreats::make_index(
+inline IndexType FullThreats::make_index(
   Color perspective, Piece attacker, Square from, Square to, Piece attacked, Square ksq) {
     const std::int8_t orientation   = OrientTBL[ksq] ^ (56 * perspective);
     unsigned          from_oriented = uint8_t(from) ^ orientation;

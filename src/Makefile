@@ -872,6 +872,16 @@ ifeq ($(pext),yes)
 	endif
 endif
 
+### NNUE embedding options (Revolution-compatible)
+NNUE_EMBEDDING_OFF ?= no
+ifneq ($(filter 1 yes true on,$(NNUE_EMBEDDING_OFF)),)
+	NNUE_EMBEDDING_OFF := yes
+	NNUE_TARGET :=
+	CXXFLAGS += -DNNUE_EMBEDDING_OFF
+else
+	NNUE_TARGET := net
+endif
+
 ### 3.8.1 Try to include git commit sha for versioning
 GIT_SHA := $(shell git rev-parse HEAD 2>/dev/null | cut -c 1-8)
 ifneq ($(GIT_SHA), )
@@ -1020,13 +1030,13 @@ endif
 	clang-profile-use clang-profile-make FORCE \
 	format analyze
 
-analyze: net config-sanity objclean
+analyze: $(NNUE_TARGET) config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
-build: net config-sanity
+build: $(NNUE_TARGET) config-sanity
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
 
-profile-build: net config-sanity objclean profileclean
+profile-build: $(NNUE_TARGET) config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
@@ -1081,7 +1091,7 @@ format:
 
 all: $(EXE) .depend
 
-config-sanity: net
+config-sanity: $(NNUE_TARGET)
 	@echo ""
 	@echo "Config:" && \
 	echo "debug: '$(debug)'" && \
