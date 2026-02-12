@@ -36,7 +36,9 @@
 #include <utility>
 #include <variant>
 
-#if !defined(_WIN32) && !defined(__ANDROID__)
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+    #include "shm_win.h"
+#elif !defined(__ANDROID__)
     #include "shm_linux.h"
 #endif
 
