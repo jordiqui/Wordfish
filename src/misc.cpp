@@ -157,8 +157,11 @@ std::string engine_version_info() {
 }
 
 std::string engine_info(bool to_uci) {
-    return engine_version_info() + (to_uci ? "\nid author " : " by ")
-         + "the Stockfish developers (see AUTHORS file)";
+    return engine_version_info() + (to_uci ? "" : " by " + engine_author_info());
+}
+
+std::string engine_author_info() {
+    return "Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
 }
 
 
