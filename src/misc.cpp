@@ -125,6 +125,10 @@ class Logger {
 // For releases (non-dev builds) we only include the version number:
 //      Stockfish version
 std::string engine_version_info() {
+#ifdef ENGINE_NAME
+    return ENGINE_NAME;
+#endif
+
     std::stringstream ss;
     ss << "Stockfish " << version << std::setfill('0');
 
@@ -157,7 +161,7 @@ std::string engine_version_info() {
 }
 
 std::string engine_info(bool to_uci) {
-    return engine_version_info() + (to_uci ? "" : " by " + engine_author_info());
+    return engine_version_info() + (to_uci ? "\nid author " : " by ") + engine_author_info();
 }
 
 std::string engine_author_info() {
