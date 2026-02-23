@@ -110,9 +110,10 @@ bool write_parameters(std::ostream& stream, const T& reference) {
 template<typename Arch, typename Transformer>
 void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::string evalfilePath) {
 #if defined(DEFAULT_NNUE_DIRECTORY)
-    std::vector<std::string> dirs = {"", rootDirectory, stringify(DEFAULT_NNUE_DIRECTORY)};
+    std::vector<std::string> dirs = {"<internal>", "", rootDirectory,
+                                     stringify(DEFAULT_NNUE_DIRECTORY)};
 #else
-    std::vector<std::string> dirs = {"", rootDirectory};
+    std::vector<std::string> dirs = {"<internal>", "", rootDirectory};
 #endif
 
     if (evalfilePath.empty())
@@ -120,15 +121,17 @@ void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
 
     for (const auto& directory : dirs)
     {
-        if (std::string(evalFile.current) == evalfilePath)
-            break;
-
-        load_user_net(directory, evalfilePath);
-
-        if (std::string(evalFile.current) != evalfilePath && directory.empty()
-            && evalfilePath == std::string(evalFile.defaultName))
+        if (std::string(evalFile.current) != evalfilePath)
         {
-            load_internal();
+            if (directory != "<internal>")
+            {
+                load_user_net(directory, evalfilePath);
+            }
+
+            if (directory == "<internal>" && evalfilePath == std::string(evalFile.defaultName))
+            {
+                load_internal();
+            }
         }
     }
 }
@@ -260,8 +263,10 @@ template<typename Arch, typename Transformer>
 void Network<Arch, Transformer>::load_user_net(const std::string& dir,
                                                const std::string& evalfilePath) {
     std::string fullPath = dir;
+
     if (!fullPath.empty() && fullPath.back() != '/' && fullPath.back() != '\\')
         fullPath += '/';
+
     fullPath += evalfilePath;
 
     std::ifstream stream(fullPath, std::ios::binary);
