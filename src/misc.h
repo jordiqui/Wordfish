@@ -46,9 +46,9 @@
 
 namespace Stockfish {
 
+std::string engine_author_info();
 std::string engine_version_info();
 std::string engine_info(bool to_uci = false);
-std::string engine_author_info();
 std::string compiler_info();
 
 // Prefetch hint enums for explicit call-site control.
