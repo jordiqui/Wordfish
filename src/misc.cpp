@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -34,27 +34,17 @@
 #include <string_view>
 
 #include "types.h"
-#include "version.h"
 
 namespace Stockfish {
 
 namespace {
 
-// Engine branding information.
-#if defined(ENGINE_ARCH_SUFFIX)
-constexpr std::string_view engine_arch_suffix = ENGINE_ARCH_SUFFIX;
-#else
-constexpr std::string_view engine_arch_suffix = "";
-#endif
-
-constexpr std::string_view engine_name = Version::Name;
-constexpr std::string_view engine_author_name =
-  "Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
-constexpr std::string_view engine_author_prefix = "Developed by ";
+// Version number or dev.
+constexpr std::string_view version = "dev";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
-// can toggle the logging of std::cout and std:cin at runtime whilst preserving
+// can toggle the logging of std::cout and std::cin at runtime whilst preserving
 // usual I/O functionality, all without changing a single line of code!
 // Idea from http://groups.google.com/group/comp.lang.c++/msg/1d941c0f26ea0d81
 
@@ -123,28 +113,52 @@ class Logger {
 }  // namespace
 
 
-// Returns the branding string that identifies the current Wordfish build.
+// Returns the full name of the current Stockfish version.
+//
+// For local dev compiles we try to append the commit SHA and
+// commit date from git. If that fails only the local compilation
+// date is set and "nogit" is specified:
+//      Stockfish dev-YYYYMMDD-SHA
+//      or
+//      Stockfish dev-YYYYMMDD-nogit
+//
+// For releases (non-dev builds) we only include the version number:
+//      Stockfish version
 std::string engine_version_info() {
-    std::string version(engine_name);
+    std::stringstream ss;
+    ss << "Stockfish " << version << std::setfill('0');
 
-    if (!engine_arch_suffix.empty() && version.find(engine_arch_suffix) == std::string::npos)
-        version.append(engine_arch_suffix);
+    if constexpr (version == "dev")
+    {
+        ss << "-";
+#ifdef GIT_DATE
+        ss << stringify(GIT_DATE);
+#else
+        constexpr std::string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
 
-    return version;
+        std::string       month, day, year;
+        std::stringstream date(__DATE__);  // From compiler, format is "Sep 21 2008"
+
+        date >> month >> day >> year;
+        ss << year << std::setw(2) << std::setfill('0') << (1 + months.find(month) / 4)
+           << std::setw(2) << std::setfill('0') << day;
+#endif
+
+        ss << "-";
+
+#ifdef GIT_SHA
+        ss << stringify(GIT_SHA);
+#else
+        ss << "nogit";
+#endif
+    }
+
+    return ss.str();
 }
 
 std::string engine_info(bool to_uci) {
-    const std::string version = engine_version_info();
-
-    if (to_uci)
-        return version;
-
-    return version + "\n" + std::string(engine_author_prefix) +
-           std::string(engine_author_name);
-}
-
-std::string engine_author_info() {
-    return std::string(engine_author_name);
+    return engine_version_info() + (to_uci ? "\nid author " : " by ")
+         + "the Stockfish developers (see AUTHORS file)";
 }
 
 
@@ -414,26 +428,48 @@ std::ostream& operator<<(std::ostream& os, SyncCout sc) {
 void sync_cout_start() { std::cout << IO_LOCK; }
 void sync_cout_end() { std::cout << IO_UNLOCK; }
 
+// Hash function based on public domain MurmurHash64A, by Austin Appleby.
+uint64_t hash_bytes(const char* data, size_t size) {
+    const uint64_t m = 0xc6a4a7935bd1e995ull;
+    const int      r = 47;
+
+    uint64_t h = size * m;
+
+    const char* end = data + (size & ~(size_t) 7);
+
+    for (const char* p = data; p != end; p += 8)
+    {
+        uint64_t k;
+        std::memcpy(&k, p, sizeof(k));
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h ^= k;
+        h *= m;
+    }
+
+    if (size & 7)
+    {
+        uint64_t k = 0;
+        for (int i = (size & 7) - 1; i >= 0; i--)
+            k = (k << 8) | (uint64_t) end[i];
+
+        h ^= k;
+        h *= m;
+    }
+
+    h ^= h >> r;
+    h *= m;
+    h ^= h >> r;
+
+    return h;
+}
+
 // Trampoline helper to avoid moving Logger to misc.h
 void start_logger(const std::string& fname) { Logger::start(fname); }
 
-
-#ifdef NO_PREFETCH
-
-void prefetch(const void*) {}
-
-#else
-
-void prefetch(const void* addr) {
-
-    #if defined(_MSC_VER)
-    _mm_prefetch((char const*) addr, _MM_HINT_T0);
-    #else
-    __builtin_prefetch(addr);
-    #endif
-}
-
-#endif
 
 #ifdef _WIN32
     #include <direct.h>

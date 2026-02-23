@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <new>
 #include <type_traits>
@@ -316,6 +317,17 @@ auto windows_try_with_large_page_priviliges([[maybe_unused]] FuncYesT&& fyes, Fu
 }
 
 #endif
+
+template<typename T, typename ByteT>
+T load_as(const ByteT* buffer) {
+    static_assert(std::is_trivially_copyable<T>::value, "Type must be trivially copyable");
+    static_assert(sizeof(ByteT) == 1);
+
+    T value;
+    std::memcpy(&value, buffer, sizeof(T));
+
+    return value;
+}
 
 }  // namespace Stockfish
 
