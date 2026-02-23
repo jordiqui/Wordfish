@@ -117,7 +117,6 @@ void UCIEngine::loop() {
         else if (token == "uci")
         {
             sync_cout << "id name " << engine_info(true) << "\n"
-                      << "id author " << engine_author_info() << "\n"
                       << engine.get_options() << sync_endl;
 
             print_info_string(Experience::status_summary());
