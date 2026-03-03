@@ -39,7 +39,8 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-RELEASE_TAG ?= 4.30-030326
+ENGINE_BASE := Brainlearnjrc
+ENGINE_VERSION := 1.70-030326
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -146,23 +147,25 @@ else
 endif
 
 ifeq ($(ARCH),x86-64-sse41-popcnt)
-        BUILD_ARCH_SUFFIX := -sse41popcnt
+	ARCH_SUFFIX := sse41popcnt
 else ifeq ($(ARCH),x86-64-avx2)
-        BUILD_ARCH_SUFFIX := -avx2
+	ARCH_SUFFIX := avx2
 else ifeq ($(ARCH),x86-64-bmi2)
-        BUILD_ARCH_SUFFIX := -bmi2
+	ARCH_SUFFIX := bmi2
 else ifeq ($(ARCH),x86-64-fma3)
-        BUILD_ARCH_SUFFIX := -FMA3
+	ARCH_SUFFIX := FMA3
 else ifeq ($(ARCH),x86-64-avx512)
-        BUILD_ARCH_SUFFIX := -avx512
+	ARCH_SUFFIX := avx512
 else
-        BUILD_ARCH_SUFFIX := -$(ARCH)
+	$(error Unsupported ARCH '$(ARCH)'. Supported: x86-64-sse41-popcnt x86-64-avx2 x86-64-bmi2 x86-64-fma3 x86-64-avx512)
 endif
 
+ENGINE_ID := $(ENGINE_BASE)-$(ENGINE_VERSION)-$(ARCH_SUFFIX)
+
 ifeq ($(target_windows),yes)
-	EXE = Wordfish-$(RELEASE_TAG)$(BUILD_ARCH_SUFFIX).exe
+	EXE = $(ENGINE_ID).exe
 else
-	EXE = Wordfish-$(RELEASE_TAG)$(BUILD_ARCH_SUFFIX)
+	EXE = $(ENGINE_ID)
 endif
 
 optimize = yes
@@ -467,6 +470,7 @@ ifeq ($(MAKELEVEL),0)
 endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
+CXXFLAGS += -DENGINE_ID_STRING=\"$(ENGINE_ID)\"
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 

@@ -212,6 +212,7 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
     verify_networks();
+    threads.ensure_network_replicated();
 
     const bool searchRequested = limits.depth || limits.nodes || limits.mate || limits.infinite
                                  || limits.ponderMode || !limits.searchmoves.empty();
@@ -268,6 +269,7 @@ void Engine::set_on_bestmove(std::function<void(std::string_view, std::string_vi
 
 void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
     onVerifyNetworks = std::move(f);
+    networksNeedVerification = true;
 }
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
@@ -334,6 +336,9 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 // network related
 
 void Engine::verify_networks() const {
+    if (!networksNeedVerification)
+        return;
+
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
     networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
 
@@ -366,6 +371,8 @@ void Engine::verify_networks() const {
 
         onVerifyNetworks(message);
     }
+
+    networksNeedVerification = false;
 }
 
 void Engine::load_networks() {
@@ -375,6 +382,7 @@ void Engine::load_networks() {
     });
     threads.clear();
     threads.ensure_network_replicated();
+    networksNeedVerification = true;
 }
 
 void Engine::load_big_network(const std::string& file) {
@@ -382,6 +390,7 @@ void Engine::load_big_network(const std::string& file) {
       [this, &file](NN::Networks& networks_) { networks_.big.load(binaryDirectory, file); });
     threads.clear();
     threads.ensure_network_replicated();
+    networksNeedVerification = true;
 }
 
 void Engine::load_small_network(const std::string& file) {
@@ -389,6 +398,7 @@ void Engine::load_small_network(const std::string& file) {
       [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
     threads.clear();
     threads.ensure_network_replicated();
+    networksNeedVerification = true;
 }
 
 void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
