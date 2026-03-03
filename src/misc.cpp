@@ -131,6 +131,9 @@ class Logger {
 
 
 std::string engine_version_info() {
+#ifdef ENGINE_ID_STRING
+    return ENGINE_ID_STRING;
+#endif
     return std::string(base) + "-" + std::string(arch_tag());
 }
 
