@@ -381,24 +381,24 @@ void Engine::load_networks() {
         networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
     });
     threads.clear();
-    threads.ensure_network_replicated();
     networksNeedVerification = true;
+    threads.ensure_network_replicated();
 }
 
 void Engine::load_big_network(const std::string& file) {
     networks.modify_and_replicate(
       [this, &file](NN::Networks& networks_) { networks_.big.load(binaryDirectory, file); });
     threads.clear();
-    threads.ensure_network_replicated();
     networksNeedVerification = true;
+    threads.ensure_network_replicated();
 }
 
 void Engine::load_small_network(const std::string& file) {
     networks.modify_and_replicate(
       [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
     threads.clear();
-    threads.ensure_network_replicated();
     networksNeedVerification = true;
+    threads.ensure_network_replicated();
 }
 
 void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
