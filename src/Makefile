@@ -39,7 +39,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ENGINE_BASE_NAME := Wordfish-4.20-230226
+RELEASE_TAG ?= 4.30-030326
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -145,30 +145,25 @@ else
    SUPPORTED_ARCH=false
 endif
 
-ENGINE_ARCH_SUFFIX :=
-ifneq (,$(findstring avx512,$(ARCH)))
-        ENGINE_ARCH_SUFFIX := -avx512
-else ifneq (,$(findstring bmi2,$(ARCH)))
-        ENGINE_ARCH_SUFFIX := -bmi2
-else ifneq (,$(findstring fma3,$(ARCH)))
-        ENGINE_ARCH_SUFFIX := -FMA3
-else ifneq (,$(findstring avx2,$(ARCH)))
-        ENGINE_ARCH_SUFFIX := -avx2
-else ifneq (,$(findstring sse41-popcnt,$(ARCH)))
-        ENGINE_ARCH_SUFFIX := -sse41popcnt
+ifeq ($(ARCH),x86-64-sse41-popcnt)
+        BUILD_ARCH_SUFFIX := -sse41popcnt
+else ifeq ($(ARCH),x86-64-avx2)
+        BUILD_ARCH_SUFFIX := -avx2
+else ifeq ($(ARCH),x86-64-bmi2)
+        BUILD_ARCH_SUFFIX := -bmi2
+else ifeq ($(ARCH),x86-64-fma3)
+        BUILD_ARCH_SUFFIX := -FMA3
+else ifeq ($(ARCH),x86-64-avx512)
+        BUILD_ARCH_SUFFIX := -avx512
+else
+        BUILD_ARCH_SUFFIX := -$(ARCH)
 endif
-ENGINE_FULL_NAME := $(ENGINE_BASE_NAME)$(ENGINE_ARCH_SUFFIX)
 
 ifeq ($(target_windows),yes)
-	EXE = $(ENGINE_FULL_NAME).exe
+	EXE = Wordfish-$(RELEASE_TAG)$(BUILD_ARCH_SUFFIX).exe
 else
-	EXE = $(ENGINE_FULL_NAME)
+	EXE = Wordfish-$(RELEASE_TAG)$(BUILD_ARCH_SUFFIX)
 endif
-
-### Propagate branding details to the binary
-CXXFLAGS += -DENGINE_BASE_NAME=\"$(ENGINE_BASE_NAME)\"
-CXXFLAGS += -DENGINE_ARCH_SUFFIX=\"$(ENGINE_ARCH_SUFFIX)\"
-CXXFLAGS += -DENGINE_NAME=\"$(ENGINE_FULL_NAME)\"
 
 optimize = yes
 debug = no
@@ -763,6 +758,7 @@ ifeq ($(avx2),yes)
 endif
 
 ifeq ($(fma3),yes)
+	CXXFLAGS += -DUSE_FMA3
         ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
                 CXXFLAGS += -mfma
         endif
