@@ -39,7 +39,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-RELEASE_TAG ?= 4.30-030326
+RELEASE_TAG ?= 4.40-100326
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -893,6 +893,10 @@ endif
 ### 3.8.3 Try to include architecture
 ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
+endif
+
+ifneq ($(BUILD_ARCH_SUFFIX), )
+	CXXFLAGS += -DBUILD_ARCH_SUFFIX=\"$(patsubst -%,%,$(BUILD_ARCH_SUFFIX))\"
 endif
 
 ### 3.9 Link Time Optimization
