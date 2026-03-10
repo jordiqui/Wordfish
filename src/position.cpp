@@ -1043,7 +1043,9 @@ inline void add_dirty_threat(
     if (PutPiece)
     {
         dts->threatenedSqs |= square_bb(threatenedSq);
-        dts->threateningSqs |= square_bb(s);
+        // A bit may only be set if that square actually produces a threat, so we
+        // must guard setting the square accordingly
+        dts->threateningSqs |= Bitboard(bool(threatened)) << s;
     }
 
     dts->list.push_back({pc, threatened, s, threatenedSq, PutPiece});
