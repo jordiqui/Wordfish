@@ -39,10 +39,12 @@ namespace Stockfish {
 
 namespace {
 
-constexpr std::string_view base = "Wordfish-4.30-030326";
+constexpr std::string_view base = "Wordfish-4.40-100326";
 
 constexpr std::string_view arch_tag() {
-#if defined(USE_AVX512ICL) || defined(USE_AVX512)
+#ifdef BUILD_ARCH_SUFFIX
+    return BUILD_ARCH_SUFFIX;
+#elif defined(USE_AVX512ICL) || defined(USE_AVX512)
     return "avx512";
 #else
     if constexpr (HasPext)
