@@ -266,7 +266,10 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
         for (const auto& m : legalmoves)
             rootMoves.emplace_back(m);
 
-    Tablebases::Config tbConfig = Tablebases::rank_root_moves(options, pos, rootMoves);
+    Tablebases::Config tbConfig;
+
+    if (!limits.infinite && !limits.ponderMode)
+        tbConfig = Tablebases::rank_root_moves(options, pos, rootMoves);
 
     Experience::on_new_position(pos, rootMoves);
 
