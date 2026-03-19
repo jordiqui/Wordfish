@@ -4,11 +4,11 @@
 
 ## Overview
 
-Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-4.40-100326**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
+Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-4.50-190326**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
 
-## What's new in 4.40-100326
+## What's new in 4.50-190326
 
-- Rebranded the engine to **Wordfish-4.40-100326** and expanded architecture-aware suffixes so GUI search listings display `Wordfish-4.40-100326-sse41popcnt` (SSE4.1/POPCNT builds), `Wordfish-4.40-100326-avx2` (AVX2 builds), `Wordfish-4.40-100326-bmi2` (BMI2 builds), `Wordfish-4.40-100326-FMA3` (FMA3 builds), or `Wordfish-4.40-100326-avx512` (AVX-512 builds) alongside the base name.
+- Rebranded the engine to **Wordfish-4.50-190326** so executable filenames and GUI analysis headers include the compiled-in architecture suffix, such as `Wordfish-4.50-190326-sse41popcnt`, `Wordfish-4.50-190326-avx2`, `Wordfish-4.50-190326-bmi2`, `Wordfish-4.50-190326-fma3`, or `Wordfish-4.50-190326-avx512`.
 - Updated the main NNUE evaluator to `nn-2962dca31855.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
 - Emphasized king safety, rook coordination, and supervised endgame patterns in recent network training and handcrafted heuristics.
 - Tightened king-safety heuristics around open files, rook lifts, and dark-square weaknesses while rewarding coordinated rooks and discouraging premature flank pawn storms.
@@ -46,11 +46,14 @@ Use the following ranges to set the **time control** values in the Settings sect
   - **Bullet**: 60s + 0s up to 120s + 1s
   - **Blitz**: 180s + 0s up to 16 minutes + 3s
   - **Classical**: 16 minutes + 0s up to 120 minutes + 15s
- codex/add-game-time-control-values-to-settings-page-8o68op
+- **Lichess.org**
+  - **Bullet**: 60s + 0s up to 120s + 1s
+  - **Blitz**: 180s + 0s up to 16 minutes + 3s
+  - **Classical**: 16 minutes + 0s up to 120 minutes + 15s
 
 ### Recommended UCI values for these time controls
 
-These baseline values are tuned for online play and are safe defaults across the Bullet, Blitz, and Classical ranges above. Apply them in your GUI’s engine options (UCI `setoption`).
+These baseline values are tuned for online play and are safe defaults across the Bullet, Blitz, and Classical ranges above. Apply them in your GUI's engine options (UCI `setoption`).
 
 - `Hash`: **256** (MB)
 - `Move Overhead`: **100** (ms)
@@ -60,12 +63,6 @@ These baseline values are tuned for online play and are safe defaults across the
 - `SyzygyProbeDepth`: **1**
 - `Syzygy50MoveRule`: **true**
 - `SyzygyProbeLimit`: **7**
-=======
- main
-- **Lichess.org**
-  - **Bullet**: 60s + 0s up to 120s + 1s
-  - **Blitz**: 180s + 0s up to 16 minutes + 3s
-  - **Classical**: 16 minutes + 0s up to 120 minutes + 15s
 
 ## Uso de libros Polyglot (alineado con Pullfish)
 

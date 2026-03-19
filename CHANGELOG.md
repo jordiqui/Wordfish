@@ -5,7 +5,8 @@
 - Nothing yet.
 
 ### Changed
-- Nothing yet.
+- Rebranded the engine to "Wordfish-4.50-190326" and aligned executable filenames and GUI analysis headers to show the compiled architecture suffix, such as `-sse41popcnt`, `-avx2`, `-bmi2`, `-fma3`, or `-avx512`.
+- Refreshed the GitHub front page README for the 4.50-190326 release and cleaned up stale merge-conflict text.
 
 ## [4.20-230226]
 ### Changed
