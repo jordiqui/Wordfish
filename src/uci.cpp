@@ -79,11 +79,11 @@ UCIEngine::UCIEngine(int argc, char** argv) :
 }
 
 void UCIEngine::init_search_update_listeners() {
-    engine.set_on_iter([](const auto& i) { on_iter(i); });
-    engine.set_on_update_no_moves([](const auto& i) { on_update_no_moves(i); });
+    engine.set_on_iter([this](const auto& i) { on_iter(i); });
+    engine.set_on_update_no_moves([this](const auto& i) { on_update_no_moves(i); });
     engine.set_on_update_full(
-      [this](const auto& i) { on_update_full(i, engine.get_options()["UCI_ShowWDL"]); });
-    engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
+      [this](const auto& i) { on_update_full(i); });
+    engine.set_on_bestmove([this](const auto& bm, const auto& p) { on_bestmove(bm, p); });
     engine.set_on_verify_networks([](const auto& s) { print_info_string(s); });
 }
 
@@ -332,6 +332,10 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
 void UCIEngine::go(std::istringstream& is) {
 
     Search::LimitsType limits = parse_limits(is);
+    suppressLowTimeInfo       = !limits.infinite && !limits.ponderMode
+                           && ((limits.time[WHITE] && limits.time[WHITE] <= 1000)
+                               || (limits.time[BLACK] && limits.time[BLACK] <= 1000)
+                               || (limits.movetime && limits.movetime <= 1000));
 
     if (limits.perft)
         perft(limits);
@@ -343,11 +347,9 @@ void UCIEngine::bench(std::istream& args) {
     std::string token;
     uint64_t    num, nodes = 0, cnt = 1;
     uint64_t    nodesSearched = 0;
-    const auto& options       = engine.get_options();
-
     engine.set_on_update_full([&](const auto& i) {
         nodesSearched = i.nodes;
-        on_update_full(i, options["UCI_ShowWDL"]);
+        on_update_full(i);
     });
 
     std::vector<std::string> list = Benchmark::setup_bench(engine.fen(), args);
@@ -405,7 +407,7 @@ void UCIEngine::bench(std::istream& args) {
               << "\nNodes/second    : " << 1000 * nodes / elapsed << std::endl;
 
     // reset callback, to not capture a dangling reference to nodesSearched
-    engine.set_on_update_full([&](const auto& i) { on_update_full(i, options["UCI_ShowWDL"]); });
+    engine.set_on_update_full([this](const auto& i) { on_update_full(i); });
 }
 
 void UCIEngine::benchmark(std::istream& args) {
@@ -730,10 +732,17 @@ Move UCIEngine::to_move(const Position& pos, std::string str) {
 }
 
 void UCIEngine::on_update_no_moves(const Engine::InfoShort& info) {
+    if (suppressLowTimeInfo)
+        return;
+
     sync_cout << "info depth " << info.depth << " score " << format_score(info.score) << sync_endl;
 }
 
-void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
+void UCIEngine::on_update_full(const Engine::InfoFull& info) {
+    if (suppressLowTimeInfo)
+        return;
+
+    const bool showWDL = engine.get_options()["UCI_ShowWDL"];
     std::stringstream ss;
 
     ss << "info";
@@ -759,6 +768,9 @@ void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
 }
 
 void UCIEngine::on_iter(const Engine::InfoIter& info) {
+    if (suppressLowTimeInfo)
+        return;
+
     std::stringstream ss;
 
     ss << "info";
@@ -770,10 +782,9 @@ void UCIEngine::on_iter(const Engine::InfoIter& info) {
 }
 
 void UCIEngine::on_bestmove(std::string_view bestmove, std::string_view ponder) {
-    sync_cout << "bestmove " << bestmove;
-    if (!ponder.empty())
-        std::cout << " ponder " << ponder;
-    std::cout << sync_endl;
+    sync_cout << "bestmove " << bestmove
+              << (ponder.empty() ? "" : " ponder ")
+              << (ponder.empty() ? std::string_view{} : ponder) << sync_endl;
 }
 
 }  // namespace Stockfish

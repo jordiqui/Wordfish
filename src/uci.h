@@ -58,6 +58,8 @@ class UCIEngine {
     Engine      engine;
     CommandLine cli;
 
+    bool suppressLowTimeInfo = false;
+
     static void print_info_string(std::string_view str);
 
     void          go(std::istringstream& is);
@@ -67,10 +69,10 @@ class UCIEngine {
     void          setoption(std::istringstream& is);
     std::uint64_t perft(const Search::LimitsType&);
 
-    static void on_update_no_moves(const Engine::InfoShort& info);
-    static void on_update_full(const Engine::InfoFull& info, bool showWDL);
-    static void on_iter(const Engine::InfoIter& info);
-    static void on_bestmove(std::string_view bestmove, std::string_view ponder);
+    void on_update_no_moves(const Engine::InfoShort& info);
+    void on_update_full(const Engine::InfoFull& info);
+    void on_iter(const Engine::InfoIter& info);
+    void on_bestmove(std::string_view bestmove, std::string_view ponder);
 
     void init_search_update_listeners();
 };
