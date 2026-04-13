@@ -4,11 +4,11 @@
 
 ## Overview
 
-Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-4.50-190326**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
+Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-4.70-130426**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
 
-## What's new in 4.50-190326
+## What's new in 4.70-130426
 
-- Rebranded the engine to **Wordfish-4.50-190326** so executable filenames and GUI analysis headers include the compiled-in architecture suffix, such as `Wordfish-4.50-190326-sse41popcnt`, `Wordfish-4.50-190326-avx2`, `Wordfish-4.50-190326-bmi2`, `Wordfish-4.50-190326-fma3`, or `Wordfish-4.50-190326-avx512`.
+- Rebranded the engine to **Wordfish-4.70-130426** so executable filenames and GUI analysis headers include the compiled-in architecture suffix, such as `Wordfish-4.70-130426-sse41popcnt`, `Wordfish-4.70-130426-avx2`, `Wordfish-4.70-130426-bmi2`, `Wordfish-4.70-130426-FMA3`, or `Wordfish-4.70-130426-avx512`.
 - Updated the main NNUE evaluator to `nn-2962dca31855.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
 - Emphasized king safety, rook coordination, and supervised endgame patterns in recent network training and handcrafted heuristics.
 - Tightened king-safety heuristics around open files, rook lifts, and dark-square weaknesses while rewarding coordinated rooks and discouraging premature flank pawn storms.
