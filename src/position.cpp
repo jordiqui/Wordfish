@@ -267,13 +267,22 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
     {
         st->epSquare = make_square(File(col - 'a'), Rank(row - '1'));
 
-        // En passant square will be considered only if
-        // a) side to move have a pawn threatening epSquare
-        // b) there is an enemy pawn in front of epSquare
-        // c) there is no piece on epSquare or behind epSquare
-        enpassant = attacks_bb<PAWN>(st->epSquare, ~sideToMove) & pieces(sideToMove, PAWN)
-                 && (pieces(~sideToMove, PAWN) & (st->epSquare + pawn_push(~sideToMove)))
-                 && !(pieces() & (st->epSquare | (st->epSquare + pawn_push(sideToMove))));
+        Bitboard pawns = attacks_bb<PAWN>(st->epSquare, ~sideToMove) & pieces(sideToMove, PAWN);
+
+        // En passant square will be considered only if it is fully legal and
+        // side to move can legally capture after the implied double pawn push.
+        while (pawns && !enpassant)
+        {
+            Square   ksq      = square<KING>(sideToMove);
+            Square   capsq    = st->epSquare + pawn_push(~sideToMove);
+            Square   from     = pop_lsb(pawns);
+            Bitboard occupied = (pieces() ^ from ^ capsq) | st->epSquare;
+
+            if (piece_on(capsq) == make_piece(~sideToMove, PAWN) && empty(st->epSquare)
+                && !(attacks_bb<ROOK>(ksq, occupied) & pieces(~sideToMove, QUEEN, ROOK))
+                && !(attacks_bb<BISHOP>(ksq, occupied) & pieces(~sideToMove, QUEEN, BISHOP)))
+                enpassant = true;
+        }
     }
 
     if (!enpassant)
@@ -517,24 +526,6 @@ bool Position::legal(Move m) const {
 
     assert(color_of(moved_piece(m)) == us);
     assert(piece_on(square<KING>(us)) == make_piece(us, KING));
-
-    // En passant captures are a tricky special case. Because they are rather
-    // uncommon, we do it simply by testing whether the king is attacked after
-    // the move is made.
-    if (m.type_of() == EN_PASSANT)
-    {
-        Square   ksq      = square<KING>(us);
-        Square   capsq    = to - pawn_push(us);
-        Bitboard occupied = (pieces() ^ from ^ capsq) | to;
-
-        assert(to == ep_square());
-        assert(moved_piece(m) == make_piece(us, PAWN));
-        assert(piece_on(capsq) == make_piece(~us, PAWN));
-        assert(piece_on(to) == NO_PIECE);
-
-        return !(attacks_bb<ROOK>(ksq, occupied) & pieces(~us, QUEEN, ROOK))
-            && !(attacks_bb<BISHOP>(ksq, occupied) & pieces(~us, QUEEN, BISHOP));
-    }
 
     // Castling moves generation does not check if the castling path is clear of
     // enemy attacks, it is delayed at a later time: now!
