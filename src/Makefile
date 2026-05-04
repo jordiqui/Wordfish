@@ -39,7 +39,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-RELEASE_TAG ?= 4.70-130426
+RELEASE_TAG ?= 4.80-040526
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -152,7 +152,7 @@ else ifeq ($(ARCH),x86-64-avx2)
 else ifeq ($(ARCH),x86-64-bmi2)
         BUILD_ARCH_SUFFIX := -bmi2
 else ifeq ($(ARCH),x86-64-fma3)
-        BUILD_ARCH_SUFFIX := -FMA3
+        BUILD_ARCH_SUFFIX := -fma3
 else ifeq ($(ARCH),x86-64-avx512)
         BUILD_ARCH_SUFFIX := -avx512
 else
