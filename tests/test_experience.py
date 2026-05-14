@@ -221,6 +221,31 @@ class PolyglotBookTests(EngineTestCase):
         self.engine.clear_output()
         return lines
 
+    def test_polyglot_key_ignores_non_capturable_ep_square(self):
+        fen_without_ep = "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"
+        fen_with_ep = "4k3/8/8/8/8/8/4P3/4K3 w - e6 0 1"
+
+        def read_for_fen(fen):
+            key_line = None
+
+            def parser(output):
+                nonlocal key_line
+                if output.startswith("info string polyglot key "):
+                    key_line = output
+                    return True
+
+            self.engine.send_command(f"position fen {fen}")
+            self.engine.send_command("book key")
+            self.engine.check_output(parser)
+            self.engine.clear_output()
+
+            if key_line is None:
+                self.fail("Engine did not report a polyglot key")
+
+            return int(key_line.rsplit(" ", 1)[-1])
+
+        self.assertEqual(read_for_fen(fen_without_ep), read_for_fen(fen_with_ep))
+
     def test_polyglot_book_generated_in_test(self):
         key       = self._read_polyglot_key()
         book_path = self._write_book(key)

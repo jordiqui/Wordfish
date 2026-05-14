@@ -229,7 +229,7 @@ void Search::Worker::start_searching() {
     const bool strategyRequestsMcts = options.count("Search Strategy")
                                       && (options["Search Strategy"] == "MCTS"
                                           || options["Search Strategy"] == "Montecarlo");
-    const bool useMcts = strategyRequestsMcts || mctsEnabled;
+    const bool useMcts = (strategyRequestsMcts || mctsEnabled) && !tbConfig.rootInTB;
 
     auto ensure_root_moves = [&]() {
         if (!rootMoves.empty())
@@ -316,7 +316,8 @@ void Search::Worker::start_searching() {
                                    bestScore,
                                    evalScore,
                                    bestThread->completedDepth,
-                                   bestThread->limits);
+                                   bestThread->limits,
+                                   bestThread->tbConfig.rootInTB);
 
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);

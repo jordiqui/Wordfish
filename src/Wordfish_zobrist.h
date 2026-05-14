@@ -7,6 +7,9 @@
   intentionally lightweight so it can be used in constexpr contexts when
   possible, but also keeps the interface header-only as in the upstream
   project.
+
+  Note: this auxiliary combiner is only for Experience bookkeeping and does
+  not replace Stockfish core Position/TT/pawn/material Zobrist keys.
 */
 
 #ifndef WORDFISH_ZOBRIST_H_INCLUDED
