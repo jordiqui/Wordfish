@@ -226,12 +226,28 @@ void Engine::go(Search::LimitsType& limits) {
 
         if (bookMove != Move::none())
         {
-            const auto bestmove = UCIEngine::move(bookMove, options["UCI_Chess960"]);
+            bool tbRootCovered = false;
+            if (!pos.can_castle(ANY_CASTLING)
+                && pos.count<ALL_PIECES>() <= std::min(int(options["SyzygyProbeLimit"]),
+                                                       Tablebases::MaxCardinality))
+            {
+                Search::RootMoves tbRootMoves;
+                for (const Move m : MoveList<LEGAL>(pos))
+                    tbRootMoves.emplace_back(m);
 
-            if (updateContext.onBestmove)
-                updateContext.onBestmove(bestmove, std::string_view{});
+                if (!tbRootMoves.empty())
+                    tbRootCovered = Tablebases::rank_root_moves(options, pos, tbRootMoves).rootInTB;
+            }
 
-            return;
+            if (!tbRootCovered)
+            {
+                const auto bestmove = UCIEngine::move(bookMove, options["UCI_Chess960"]);
+
+                if (updateContext.onBestmove)
+                    updateContext.onBestmove(bestmove, std::string_view{});
+
+                return;
+            }
         }
     }
 

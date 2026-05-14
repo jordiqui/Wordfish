@@ -271,7 +271,8 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
     if (!limits.infinite && !limits.ponderMode)
         tbConfig = Tablebases::rank_root_moves(options, pos, rootMoves);
 
-    Experience::on_new_position(pos, rootMoves);
+    if (!tbConfig.rootInTB)
+        Experience::on_new_position(pos, rootMoves);
 
     // After ownership transfer 'states' becomes empty, so if we stop the search
     // and call 'go' again without setting a new position states.get() == nullptr.

@@ -699,7 +699,8 @@ void on_search_complete(const Position& pos,
                         Value                                 bestScore,
                         Value                                 evalScore,
                         Depth                                 searchedDepth,
-                        const Search::LimitsType&) {
+                        const Search::LimitsType&,
+                        bool                                  rootInTB) {
     std::scoped_lock lock(mutex);
 
     if (!settings.enabled || rootMoves.empty())
@@ -708,6 +709,17 @@ void on_search_complete(const Position& pos,
     if (rootMoves.front().pv.empty())
         return;
 
+    if (rootInTB)
+        return;
+
+    if (searchedDepth <= 0)
+        return;
+
+    if (bestScore == VALUE_INFINITE || bestScore == -VALUE_INFINITE)
+        return;
+
+    if (rootMoves.front().scoreLowerbound || rootMoves.front().scoreUpperbound)
+        return;
     if (searchedDepth < settings.bookMinDepth)
         return;
 

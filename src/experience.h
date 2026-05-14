@@ -40,7 +40,8 @@ void on_search_complete(const Position&               pos,
                         Value                           bestScore,
                         Value                           evalScore,
                         Depth                           searchedDepth,
-                        const Search::LimitsType&       limits);
+                        const Search::LimitsType&       limits,
+                        bool                             rootInTB);
 
 // Called on ucinewgame/reset events to make sure the experience file is safely
 // written to disk.
