@@ -55,6 +55,22 @@ constexpr auto StartFEN   = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq 
 constexpr int  MaxHashMB  = Is64Bit ? 33554432 : 2048;
 int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
+namespace {
+
+const char* primary_default_network_file() { return NN::Adapter::active_eval_file_name(); }
+
+const char* secondary_default_network_file() { return EvalFileDefaultNameSmall; }
+
+void load_primary_network(NN::Networks& networks, const std::string& binaryDirectory, const std::string& file) {
+    networks.big.load(binaryDirectory, file);
+}
+
+void load_secondary_network(NN::Networks& networks, const std::string& binaryDirectory, const std::string& file) {
+    networks.small.load(binaryDirectory, file);
+}
+
+}  // namespace
+
 Engine::Engine(std::optional<std::string> path) :
     binaryDirectory(path ? CommandLine::get_binary_directory(*path) : ""),
     numaContext(NumaConfig::from_system()),
@@ -63,8 +79,8 @@ Engine::Engine(std::optional<std::string> path) :
     networks(
       numaContext,
       // Heap-allocate because sizeof(NN::Networks) is large
-      std::make_unique<NN::Networks>(NN::EvalFile{EvalFileDefaultNameBig, "None", ""},
-                                     NN::EvalFile{EvalFileDefaultNameSmall, "None", ""})) {
+      std::make_unique<NN::Networks>(NN::EvalFile{primary_default_network_file(), "None", ""},
+                                     NN::EvalFile{secondary_default_network_file(), "None", ""})) {
 
     pos.set(StartFEN, false, &states->back());
 
@@ -194,7 +210,7 @@ Engine::Engine(std::optional<std::string> path) :
       }));
 
     options.add(  //
-      "EvalFileSmall", Option(EvalFileDefaultNameSmall, [this](const Option& o) {
+      "EvalFileSmall", Option(secondary_default_network_file(), [this](const Option& o) {
           load_small_network(o);
           return std::nullopt;
       }));
@@ -406,8 +422,8 @@ void Engine::verify_networks() const {
 
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
-        networks_.big.load(binaryDirectory, options["EvalFile"]);
-        networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
+        load_primary_network(networks_, binaryDirectory, std::string(options["EvalFile"]));
+        load_secondary_network(networks_, binaryDirectory, std::string(options["EvalFileSmall"]));
     });
     threads.clear();
     networksNeedVerification = true;
@@ -419,16 +435,18 @@ void Engine::load_network(const std::string& file) {
 }
 
 void Engine::load_big_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) { networks_.big.load(binaryDirectory, file); });
+    networks.modify_and_replicate([this, &file](NN::Networks& networks_) {
+        load_primary_network(networks_, binaryDirectory, file);
+    });
     threads.clear();
     networksNeedVerification = true;
     threads.ensure_network_replicated();
 }
 
 void Engine::load_small_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
+    networks.modify_and_replicate([this, &file](NN::Networks& networks_) {
+        load_secondary_network(networks_, binaryDirectory, file);
+    });
     threads.clear();
     networksNeedVerification = true;
     threads.ensure_network_replicated();
