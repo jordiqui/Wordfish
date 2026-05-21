@@ -209,12 +209,6 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
-    options.add(  //
-      "EvalFileSmall", Option(secondary_default_network_file(), [this](const Option& o) {
-          load_small_network(o);
-          return std::nullopt;
-      }));
-
     load_networks();
     Experience::update_settings(options);
     resize_threads();
@@ -385,7 +379,7 @@ void Engine::verify_networks() const {
         return;
 
     networks->big.verify(options["EvalFile"], onVerifyNetworks);
-    networks->small.verify(options["EvalFileSmall"], onVerifyNetworks);
+    networks->small.verify(secondary_default_network_file(), onVerifyNetworks);
 
     auto statuses = networks.get_status_and_errors();
     for (size_t i = 0; i < statuses.size(); ++i)
@@ -423,7 +417,7 @@ void Engine::verify_networks() const {
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         load_primary_network(networks_, binaryDirectory, std::string(options["EvalFile"]));
-        load_secondary_network(networks_, binaryDirectory, std::string(options["EvalFileSmall"]));
+        load_secondary_network(networks_, binaryDirectory, secondary_default_network_file());
     });
     threads.clear();
     networksNeedVerification = true;
