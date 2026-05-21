@@ -289,6 +289,10 @@ void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
     networksNeedVerification = true;
 }
 
+void Engine::set_on_verify_network(std::function<void(std::string_view)>&& f) {
+    set_on_verify_networks(std::move(f));
+}
+
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
 
 void Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
