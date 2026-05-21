@@ -59,15 +59,11 @@ namespace {
 
 const char* primary_default_network_file() { return NN::Adapter::active_eval_file_name(); }
 
-const char* secondary_default_network_file() { return EvalFileDefaultNameSmall; }
 
 void load_primary_network(NN::Networks& networks, const std::string& binaryDirectory, const std::string& file) {
     networks.big.load(binaryDirectory, file);
 }
 
-void load_secondary_network(NN::Networks& networks, const std::string& binaryDirectory, const std::string& file) {
-    networks.small.load(binaryDirectory, file);
-}
 
 }  // namespace
 
@@ -80,7 +76,7 @@ Engine::Engine(std::optional<std::string> path) :
       numaContext,
       // Heap-allocate because sizeof(NN::Networks) is large
       std::make_unique<NN::Networks>(NN::EvalFile{primary_default_network_file(), "None", ""},
-                                     NN::EvalFile{secondary_default_network_file(), "None", ""})) {
+                                     NN::EvalFile{EvalFileDefaultNameSmall, "None", ""})) {
 
     pos.set(StartFEN, false, &states->back());
 
@@ -435,14 +431,6 @@ void Engine::load_big_network(const std::string& file) {
     threads.ensure_network_replicated();
 }
 
-void Engine::load_small_network(const std::string& file) {
-    networks.modify_and_replicate([this, &file](NN::Networks& networks_) {
-        load_secondary_network(networks_, binaryDirectory, file);
-    });
-    threads.clear();
-    networksNeedVerification = true;
-    threads.ensure_network_replicated();
-}
 
 void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
     networks.modify_and_replicate([&files](NN::Networks& networks_) {
