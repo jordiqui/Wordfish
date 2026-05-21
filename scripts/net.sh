@@ -147,4 +147,3 @@ fetch_network() {
 
 # PRIMARY and SMALL (bytes)
 fetch_network EvalFileDefaultName 50000000
-fetch_network EvalFileDefaultNameSmall 1000000
