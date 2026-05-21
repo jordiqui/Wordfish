@@ -73,7 +73,8 @@ link_or_copy() {
 
 get_nnue_filename() {
   # Extract nn-<12hex>.nnue from the macro line in evaluate.h
-  grep "$1" "$evaluate_file" | grep "#define" | sed -n 's/.*\(nn-[a-z0-9]\{12\}\.nnue\).*/\1/p'
+  grep -E "^#define[[:space:]]+$1[[:space:]]+\"[^\"]+\"" "$evaluate_file" \
+    | sed -n 's/.*"\(nn-[a-z0-9]\{12\}\.nnue\)".*/\1/p'
 }
 
 validate_network() {
@@ -144,6 +145,6 @@ fetch_network() {
   exit 1
 }
 
-# BIG and SMALL (bytes)
-fetch_network EvalFileDefaultNameBig 50000000
+# PRIMARY and SMALL (bytes)
+fetch_network EvalFileDefaultName 50000000
 fetch_network EvalFileDefaultNameSmall 1000000
