@@ -17,7 +17,7 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
 ## Architecture and integrated modules
 
 - **Search pipeline**: Classical alpha–beta search remains the default, with an alternative Monte Carlo Tree Search (MCTS) driver selectable through `Search Strategy`. Both strategies honour standard UCI limits (`depth`, `nodes`, `movetime`, `infinite`, and pondering) and share the same move generator and time manager.
-- **Neural evaluation**: A paired NNUE design keeps large and small networks in step. Networks are hot-swapped via `EvalFile` and `EvalFileSmall`, with `export_net` producing portable binaries. The `trace_eval` command prints a complete evaluation trace for the current position.
+- **Neural evaluation**: NNUE evaluation is hot-swapped via `EvalFile`, with `export_net` producing portable binaries. The `trace_eval` command prints a complete evaluation trace for the current position.
 - **Experience system**: Search outcomes are written to an `.exp` file when `Experience Enabled` is true. `Experience Readonly` permits analysis without mutating the store, while `Experience Sync` forces an immediate flush. Learned moves can be consulted as a lightweight book when `Experience Book` is active.
 - **NUMA and threading**: `Threads` resizes the worker pool, and `NumaPolicy` (`auto`, `system`, `hardware`, `none`, or a custom mask) governs thread placement. Changes are reflected immediately in shared network replicas and hash tables.
 - **Diagnostics and tooling**: Console commands include `bench`, `speedtest`, `d` (board dump), `compiler` (build metadata), and `export_net`. Info output can include win/draw/loss probabilities through `UCI_ShowWDL`.
@@ -35,7 +35,7 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
   - `MCTS Explore`: Exploration constant that balances exploitation of strong moves against broader sampling (default 35, range 1–200).
   - Existing time controls (`wtime`, `btime`, `movetime`) and node limits still apply when provided.
 - **Experience controls**: `Experience Enabled`, `Experience File`, `Experience Readonly`, `Experience Book`, `Experience Book Width`, `Experience Book Eval Importance`, `Experience Book Min Depth`, `Experience Book Max Moves`, `Experience Status`, and `Experience Sync`.
-- **Neural networks**: `EvalFile` and `EvalFileSmall` accept external NNUE files and reload replicas on all threads.
+- **Neural networks**: `EvalFile` accepts an external NNUE file and reloads replicas on all threads.
 - **Tablebases**: `SyzygyPath`, `SyzygyProbeDepth`, `Syzygy50MoveRule`, and `SyzygyProbeLimit` configure probing depth, scope, and rule enforcement.
 
 ## Settings: online time-control ranges (main page)
