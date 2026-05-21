@@ -117,15 +117,10 @@ class Network {
 };
 
 // Definitions of the network types
-using SmallFeatureTransformer = FeatureTransformer<TransformedFeatureDimensionsSmall>;
-using SmallNetworkArchitecture =
-  NetworkArchitecture<TransformedFeatureDimensionsSmall, L2Small, L3Small>;
-
 using BigFeatureTransformer  = FeatureTransformer<TransformedFeatureDimensionsBig>;
 using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsBig, L2Big, L3Big>;
 
-using NetworkBig   = Network<BigNetworkArchitecture, BigFeatureTransformer>;
-using NetworkSmall = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
+using NetworkBig = Network<BigNetworkArchitecture, BigFeatureTransformer>;
 
 
 struct Networks {
