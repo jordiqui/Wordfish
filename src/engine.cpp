@@ -35,6 +35,7 @@
 #include "nnue/network.h"
 #include "nnue/nnue_common.h"
 #include "nnue/nnue_misc.h"
+#include "nnue/singlenet_adapter.h"
 #include "numa.h"
 #include "perft.h"
 #include "polybook.h"
@@ -187,8 +188,8 @@ Engine::Engine(std::optional<std::string> path) :
     PolyBook::init(options);
 
     options.add(  //
-      "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
-          load_big_network(o);
+      "EvalFile", Option(NN::Adapter::active_eval_file_name(), [this](const Option& o) {
+          load_network(o);
           return std::nullopt;
       }));
 
@@ -351,6 +352,14 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 
 // network related
 
+std::string Engine::get_default_network() const {
+    return options["EvalFile"];
+}
+
+void Engine::verify_network() const {
+    verify_networks();
+}
+
 void Engine::verify_networks() const {
     if (!networksNeedVerification)
         return;
@@ -399,6 +408,10 @@ void Engine::load_networks() {
     threads.clear();
     networksNeedVerification = true;
     threads.ensure_network_replicated();
+}
+
+void Engine::load_network(const std::string& file) {
+    load_big_network(file);
 }
 
 void Engine::load_big_network(const std::string& file) {
