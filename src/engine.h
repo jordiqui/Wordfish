@@ -89,6 +89,11 @@ class Engine {
     void load_small_network(const std::string& file);
     void save_network(const std::pair<std::optional<std::string>, std::string> files[2]);
 
+    std::string get_default_network() const;
+    void        load_network(const std::string& file);
+    void        verify_network() const;
+    void        set_on_verify_network(std::function<void(std::string_view)>&&);
+
     // utility functions
 
     void trace_eval() const;

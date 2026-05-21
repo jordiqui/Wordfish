@@ -29,6 +29,7 @@
 #include <tuple>
 
 #include "nnue/network.h"
+#include "nnue/singlenet_adapter.h"
 #include "nnue/nnue_misc.h"
 #include "position.h"
 #include "types.h"
@@ -59,15 +60,18 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
     assert(!pos.checkers());
 
     bool smallNet           = use_smallnet(pos);
-    auto [psqt, positional] = smallNet ? networks.small.evaluate(pos, accumulators, caches.small)
-                                       : networks.big.evaluate(pos, accumulators, caches.big);
+    auto [psqt, positional] =
+      smallNet ? networks.small.evaluate(pos, accumulators, caches.small)
+               : NNUE::Adapter::active_network(networks).evaluate(
+                 pos, accumulators, NNUE::Adapter::active_cache(caches));
 
     Value nnue = (125 * psqt + 131 * positional) / 128;
 
     // Re-evaluate the position when higher eval accuracy is worth the time spent
     if (smallNet && (std::abs(nnue) < 236))
     {
-        std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, caches.big);
+        std::tie(psqt, positional) = NNUE::Adapter::active_network(networks).evaluate(
+          pos, accumulators, NNUE::Adapter::active_cache(caches));
         nnue                       = (125 * psqt + 131 * positional) / 128;
         smallNet                   = false;
     }
@@ -107,7 +111,8 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto [psqt, positional] = networks.big.evaluate(pos, *accumulators, caches->big);
+    auto [psqt, positional] = NNUE::Adapter::active_network(networks).evaluate(
+      pos, *accumulators, NNUE::Adapter::active_cache(*caches));
     Value v                 = psqt + positional;
     v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
