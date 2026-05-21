@@ -98,7 +98,6 @@ struct AccumulatorCaches {
     template<typename Networks>
     void clear(const Networks& networks) {
         big.clear(networks.big);
-        small.clear(networks.small);
     }
 
     Cache<TransformedFeatureDimensionsBig>   big;

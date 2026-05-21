@@ -129,12 +129,9 @@ using NetworkSmall = Network<SmallNetworkArchitecture, SmallFeatureTransformer>;
 
 
 struct Networks {
-    Networks(EvalFile bigFile, EvalFile smallFile) :
-        big(bigFile, EmbeddedNNUEType::BIG),
-        small(smallFile, EmbeddedNNUEType::SMALL) {}
+    Networks(EvalFile bigFile, EvalFile) : big(bigFile, EmbeddedNNUEType::BIG) {}
 
-    NetworkBig   big;
-    NetworkSmall small;
+    NetworkBig big;
 };
 
 
@@ -153,7 +150,6 @@ struct std::hash<Stockfish::Eval::NNUE::Networks> {
     std::size_t operator()(const Stockfish::Eval::NNUE::Networks& networks) const noexcept {
         std::size_t h = 0;
         Stockfish::hash_combine(h, networks.big);
-        Stockfish::hash_combine(h, networks.small);
         return h;
     }
 };
