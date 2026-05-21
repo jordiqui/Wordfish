@@ -1079,7 +1079,10 @@ profileclean:
 	@rm -f ./-lstdc++.res
 
 # evaluation network (nnue)
+PRIMARY_EVALFILE := $(shell sed -n 's/^#define[[:space:]]\+EvalFileDefaultName[[:space:]]\+"\([^"]\+\)"/\1/p' evaluate.h)
+
 net:
+	@test -n "$(PRIMARY_EVALFILE)"
 	@$(SHELL) ../scripts/net.sh
 
 format:
