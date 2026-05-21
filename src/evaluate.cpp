@@ -47,8 +47,6 @@ int Eval::simple_eval(const Position& pos) {
          + (pos.non_pawn_material(c) - pos.non_pawn_material(~c));
 }
 
-bool Eval::use_smallnet(const Position& pos) { return std::abs(simple_eval(pos)) > 962; }
-
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
 Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
@@ -59,23 +57,10 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     assert(!pos.checkers());
 
-    bool smallNet           = use_smallnet(pos);
-    auto [psqt, positional] =
-      smallNet ? NNUE::Adapter::secondary_network(networks).evaluate(
-                   pos, accumulators, NNUE::Adapter::secondary_cache(caches))
-               : NNUE::Adapter::active_network(networks).evaluate(
-                 pos, accumulators, NNUE::Adapter::active_cache(caches));
+    auto [psqt, positional] = NNUE::Adapter::active_network(networks).evaluate(
+      pos, accumulators, NNUE::Adapter::active_cache(caches));
 
     Value nnue = (125 * psqt + 131 * positional) / 128;
-
-    // Re-evaluate the position when higher eval accuracy is worth the time spent
-    if (smallNet && (std::abs(nnue) < 236))
-    {
-        std::tie(psqt, positional) = NNUE::Adapter::active_network(networks).evaluate(
-          pos, accumulators, NNUE::Adapter::active_cache(caches));
-        nnue                       = (125 * psqt + 131 * positional) / 128;
-        smallNet                   = false;
-    }
 
     // Blend optimism and eval with nnue complexity
     int nnueComplexity = std::abs(psqt - positional);
