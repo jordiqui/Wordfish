@@ -35,6 +35,7 @@
 #include "../uci.h"
 #include "network.h"
 #include "nnue_accumulator.h"
+#include "singlenet_adapter.h"
 
 namespace Stockfish::Eval::NNUE {
 
@@ -124,7 +125,8 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
 
     // We estimate the value of each piece by doing a differential evaluation from
     // the current base eval, simulating the removal of the piece from its square.
-    auto [psqt, positional] = networks.big.evaluate(pos, *accumulators, caches.big);
+    auto [psqt, positional] =
+      Adapter::active_network(networks).evaluate(pos, *accumulators, Adapter::active_cache(caches));
     Value base              = psqt + positional;
     base                    = pos.side_to_move() == WHITE ? base : -base;
 
@@ -140,7 +142,8 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
                 pos.remove_piece(sq);
 
                 accumulators->reset();
-                std::tie(psqt, positional) = networks.big.evaluate(pos, *accumulators, caches.big);
+                std::tie(psqt, positional) = Adapter::active_network(networks).evaluate(
+                  pos, *accumulators, Adapter::active_cache(caches));
                 Value eval                 = psqt + positional;
                 eval                       = pos.side_to_move() == WHITE ? eval : -eval;
                 v                          = base - eval;
@@ -157,7 +160,8 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     ss << '\n';
 
     accumulators->reset();
-    auto t = networks.big.trace_evaluate(pos, *accumulators, caches.big);
+    auto t = Adapter::active_network(networks).trace_evaluate(
+      pos, *accumulators, Adapter::active_cache(caches));
 
     ss << " NNUE network contributions "
        << (pos.side_to_move() == WHITE ? "(White to move)" : "(Black to move)") << std::endl
