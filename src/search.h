@@ -142,6 +142,10 @@ struct SharedState {
         tt(transpositionTable),
         networks(nets) {}
 
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& nnue_networks() const {
+        return networks;
+    }
+
     const OptionsMap&                                         options;
     ThreadPool&                                               threads;
     TranspositionTable&                                       tt;
@@ -356,6 +360,9 @@ class Worker {
     ThreadPool&                                               threads;
     TranspositionTable&                                       tt;
     const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& networks;
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& nnue_networks() const {
+        return networks;
+    }
 
     // Used by NNUE
     Eval::NNUE::AccumulatorStack  accumulatorStack;
