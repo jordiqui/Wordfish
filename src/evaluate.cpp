@@ -61,7 +61,8 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     bool smallNet           = use_smallnet(pos);
     auto [psqt, positional] =
-      smallNet ? networks.small.evaluate(pos, accumulators, caches.small)
+      smallNet ? NNUE::Adapter::secondary_network(networks).evaluate(
+                   pos, accumulators, NNUE::Adapter::secondary_cache(caches))
                : NNUE::Adapter::active_network(networks).evaluate(
                  pos, accumulators, NNUE::Adapter::active_cache(caches));
 
