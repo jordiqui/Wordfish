@@ -35,7 +35,7 @@ namespace Eval {
 // in the Makefile/Fishtest.
 #define EvalFileDefaultNameBig "nn-83a0d6daf7e5.nnue"
 #define EvalFileDefaultNameSmall "nn-47fc8b7fff06.nnue"
-#define EvalFileDefaultName EvalFileDefaultNameBig
+#define EvalFileDefaultName "nn-83a0d6daf7e5.nnue"
 
 namespace NNUE {
 struct Networks;
