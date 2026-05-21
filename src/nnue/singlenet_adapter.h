@@ -21,21 +21,6 @@ active_cache(const AccumulatorCaches& caches) noexcept {
 }
 
 
-inline NetworkSmall& secondary_network(Networks& networks) noexcept { return networks.small; }
-
-inline const NetworkSmall& secondary_network(const Networks& networks) noexcept {
-    return networks.small;
-}
-
-inline AccumulatorCaches::Cache<TransformedFeatureDimensionsSmall>&
-secondary_cache(AccumulatorCaches& caches) noexcept {
-    return caches.small;
-}
-
-inline const AccumulatorCaches::Cache<TransformedFeatureDimensionsSmall>&
-secondary_cache(const AccumulatorCaches& caches) noexcept {
-    return caches.small;
-}
 
 inline const char* active_eval_file_name() noexcept { return EvalFileDefaultName; }
 
