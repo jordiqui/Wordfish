@@ -122,8 +122,8 @@ class Network {
 struct Networks {
     Networks(EvalFile bigFile, EvalFile) : network(bigFile, EmbeddedNNUEType::BIG) {}
 
-    Network<NetworkArchitecture<TransformedFeatureDimensionsBig, L2Big, L3Big>,
-            FeatureTransformer<TransformedFeatureDimensionsBig>> network;
+    Network<NetworkArchitecture<TransformedFeatureDimensions, L2, L3>,
+            FeatureTransformer<TransformedFeatureDimensions>> network;
 };
 
 
