@@ -6,9 +6,9 @@
 
 namespace Stockfish::Eval::NNUE::Adapter {
 
-inline NetworkBig& active_network(Networks& networks) noexcept { return networks.big; }
+inline auto& active_network(Networks& networks) noexcept { return networks.big; }
 
-inline const NetworkBig& active_network(const Networks& networks) noexcept { return networks.big; }
+inline const auto& active_network(const Networks& networks) noexcept { return networks.big; }
 
 inline AccumulatorCaches::Cache<TransformedFeatureDimensionsBig>&
 active_cache(AccumulatorCaches& caches) noexcept {
