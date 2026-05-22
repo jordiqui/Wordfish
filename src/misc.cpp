@@ -39,7 +39,7 @@ namespace Stockfish {
 
 namespace {
 
-constexpr std::string_view base = "Wordfish-4.80-040526";
+constexpr std::string_view base = "Wordfish 4.90-220526";
 
 constexpr std::string_view arch_tag() {
 #ifdef BUILD_ARCH_SUFFIX
