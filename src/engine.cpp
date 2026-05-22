@@ -204,20 +204,20 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
-    load_networks();
+    load_network();
     Experience::update_settings(options);
     resize_threads();
 }
 
 std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
-    verify_networks();
+    verify_network();
 
     return Benchmark::perft(fen, depth, isChess960);
 }
 
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
-    verify_networks();
+    verify_network();
     threads.ensure_network_replicated();
 
     const bool searchRequested = limits.depth || limits.nodes || limits.mate || limits.infinite
@@ -289,13 +289,9 @@ void Engine::set_on_bestmove(std::function<void(std::string_view, std::string_vi
     updateContext.onBestmove = std::move(f);
 }
 
-void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
+void Engine::set_on_verify_network(std::function<void(std::string_view)>&& f) {
     onVerifyNetwork = std::move(f);
     networksNeedVerification = true;
-}
-
-void Engine::set_on_verify_network(std::function<void(std::string_view)>&& f) {
-    set_on_verify_networks(std::move(f));
 }
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
@@ -366,10 +362,6 @@ std::string Engine::get_default_network() const {
 }
 
 void Engine::verify_network() const {
-    verify_networks();
-}
-
-void Engine::verify_networks() const {
     if (!networksNeedVerification)
         return;
 
@@ -408,7 +400,7 @@ void Engine::verify_networks() const {
     networksNeedVerification = false;
 }
 
-void Engine::load_networks() {
+void Engine::load_network() {
     networks.modify_and_replicate([this](NN::Network& networks_) {
         load_primary_network(networks_, binaryDirectory, std::string(options["EvalFile"]));
     });
@@ -444,7 +436,7 @@ void Engine::trace_eval() const {
     Position     p;
     p.set(pos.fen(), options["UCI_Chess960"], &trace_states->back());
 
-    verify_networks();
+    verify_network();
 
     sync_cout << "\n" << Eval::trace(p, *networks) << sync_endl;
 }
