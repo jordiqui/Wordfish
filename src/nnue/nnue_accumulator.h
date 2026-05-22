@@ -100,50 +100,36 @@ struct AccumulatorCaches {
         big.clear(networks.big);
     }
 
-    Cache<TransformedFeatureDimensionsBig>   big;
-    Cache<TransformedFeatureDimensionsSmall> small;
+    Cache<TransformedFeatureDimensionsBig> big;
 };
 
 
 template<typename FeatureSet>
 struct AccumulatorState {
-    Accumulator<TransformedFeatureDimensionsBig>   accumulatorBig;
-    Accumulator<TransformedFeatureDimensionsSmall> accumulatorSmall;
+    Accumulator<TransformedFeatureDimensionsBig> accumulatorBig;
     typename FeatureSet::DiffType                  diff;
 
     template<IndexType Size>
     auto& acc() noexcept {
-        static_assert(Size == TransformedFeatureDimensionsBig
-                        || Size == TransformedFeatureDimensionsSmall,
-                      "Invalid size for accumulator");
+        static_assert(Size == TransformedFeatureDimensionsBig, "Invalid size for accumulator");
 
-        if constexpr (Size == TransformedFeatureDimensionsBig)
-            return accumulatorBig;
-        else if constexpr (Size == TransformedFeatureDimensionsSmall)
-            return accumulatorSmall;
+        return accumulatorBig;
     }
 
     template<IndexType Size>
     const auto& acc() const noexcept {
-        static_assert(Size == TransformedFeatureDimensionsBig
-                        || Size == TransformedFeatureDimensionsSmall,
-                      "Invalid size for accumulator");
+        static_assert(Size == TransformedFeatureDimensionsBig, "Invalid size for accumulator");
 
-        if constexpr (Size == TransformedFeatureDimensionsBig)
-            return accumulatorBig;
-        else if constexpr (Size == TransformedFeatureDimensionsSmall)
-            return accumulatorSmall;
+        return accumulatorBig;
     }
 
     void reset(const typename FeatureSet::DiffType& dp) noexcept {
         diff = dp;
         accumulatorBig.computed.fill(false);
-        accumulatorSmall.computed.fill(false);
     }
 
     typename FeatureSet::DiffType& reset() noexcept {
         accumulatorBig.computed.fill(false);
-        accumulatorSmall.computed.fill(false);
         return diff;
     }
 };
