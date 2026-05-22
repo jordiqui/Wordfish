@@ -29,7 +29,6 @@
 #include <tuple>
 
 #include "nnue/network.h"
-#include "nnue/singlenet_adapter.h"
 #include "nnue/nnue_misc.h"
 #include "position.h"
 #include "types.h"
@@ -58,7 +57,7 @@ Value Eval::evaluate(const Eval::NNUE::Network&    networks,
     assert(!pos.checkers());
 
     auto [psqt, positional] = networks.evaluate(
-      pos, accumulators, NNUE::Adapter::active_cache(caches));
+      pos, accumulators, caches.cache);
 
     Value nnue = (125 * psqt + 131 * positional) / 128;
 
@@ -98,7 +97,7 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Network& networks) {
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
     auto [psqt, positional] = networks.evaluate(
-      pos, *accumulators, NNUE::Adapter::active_cache(*caches));
+      pos, *accumulators, caches->cache);
     Value v                 = psqt + positional;
     v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";

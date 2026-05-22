@@ -35,7 +35,6 @@
 #include "../uci.h"
 #include "network.h"
 #include "nnue_accumulator.h"
-#include "singlenet_adapter.h"
 
 namespace Stockfish::Eval::NNUE {
 
@@ -126,7 +125,7 @@ trace(Position& pos, const Eval::NNUE::Network& networks, Eval::NNUE::Accumulato
     // We estimate the value of each piece by doing a differential evaluation from
     // the current base eval, simulating the removal of the piece from its square.
     auto [psqt, positional] =
-      networks.evaluate(pos, *accumulators, Adapter::active_cache(caches));
+      networks.evaluate(pos, *accumulators, caches.cache);
     Value base              = psqt + positional;
     base                    = pos.side_to_move() == WHITE ? base : -base;
 
@@ -143,7 +142,7 @@ trace(Position& pos, const Eval::NNUE::Network& networks, Eval::NNUE::Accumulato
 
                 accumulators->reset();
                 std::tie(psqt, positional) = networks.evaluate(
-                  pos, *accumulators, Adapter::active_cache(caches));
+                  pos, *accumulators, caches.cache);
                 Value eval                 = psqt + positional;
                 eval                       = pos.side_to_move() == WHITE ? eval : -eval;
                 v                          = base - eval;
@@ -161,7 +160,7 @@ trace(Position& pos, const Eval::NNUE::Network& networks, Eval::NNUE::Accumulato
 
     accumulators->reset();
     auto t = networks.trace_evaluate(
-      pos, *accumulators, Adapter::active_cache(caches));
+      pos, *accumulators, caches.cache);
 
     ss << " NNUE network contributions "
        << (pos.side_to_move() == WHITE ? "(White to move)" : "(Black to move)") << std::endl

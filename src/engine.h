@@ -126,7 +126,7 @@ class Engine {
     LazyNumaReplicatedSystemWide<Eval::NNUE::Network> networks;
 
     Search::SearchManager::UpdateContext  updateContext;
-    std::function<void(std::string_view)> onVerifyNetworks;
+    std::function<void(std::string_view)> onVerifyNetwork;
     mutable bool                           networksNeedVerification = true;
 };
 

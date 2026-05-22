@@ -35,7 +35,6 @@
 #include "nnue/network.h"
 #include "nnue/nnue_common.h"
 #include "nnue/nnue_misc.h"
-#include "nnue/singlenet_adapter.h"
 #include "numa.h"
 #include "perft.h"
 #include "polybook.h"
@@ -57,7 +56,7 @@ int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
 namespace {
 
-const char* primary_default_network_file() { return NN::Adapter::active_eval_file_name(); }
+const char* primary_default_network_file() { return EvalFileDefaultName; }
 
 
 void load_primary_network(NN::Network& networks, const std::string& binaryDirectory, const std::string& file) {
@@ -200,7 +199,7 @@ Engine::Engine(std::optional<std::string> path) :
     PolyBook::init(options);
 
     options.add(  //
-      "EvalFile", Option(NN::Adapter::active_eval_file_name(), [this](const Option& o) {
+      "EvalFile", Option(EvalFileDefaultName, [this](const Option& o) {
           load_network(o);
           return std::nullopt;
       }));
@@ -291,7 +290,7 @@ void Engine::set_on_bestmove(std::function<void(std::string_view, std::string_vi
 }
 
 void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
-    onVerifyNetworks = std::move(f);
+    onVerifyNetwork = std::move(f);
     networksNeedVerification = true;
 }
 
@@ -374,7 +373,7 @@ void Engine::verify_networks() const {
     if (!networksNeedVerification)
         return;
 
-    networks->verify(options["EvalFile"], onVerifyNetworks);
+    networks->verify(options["EvalFile"], onVerifyNetwork);
 
     auto statuses = networks.get_status_and_errors();
     for (size_t i = 0; i < statuses.size(); ++i)
@@ -403,7 +402,7 @@ void Engine::verify_networks() const {
             message += " " + *error;
         }
 
-        onVerifyNetworks(message);
+        onVerifyNetwork(message);
     }
 
     networksNeedVerification = false;
