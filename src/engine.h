@@ -79,19 +79,17 @@ class Engine {
     void set_on_update_full(std::function<void(const InfoFull&)>&&);
     void set_on_iter(std::function<void(const InfoIter&)>&&);
     void set_on_bestmove(std::function<void(std::string_view, std::string_view)>&&);
-    void set_on_verify_networks(std::function<void(std::string_view)>&&);
+    void set_on_verify_network(std::function<void(std::string_view)>&&);
 
     // network related
 
-    void verify_networks() const;
-    void load_networks();
+    void verify_network() const;
+    void load_network();
     void load_big_network(const std::string& file);
     void save_network(const std::pair<std::optional<std::string>, std::string> files[2]);
 
     std::string get_default_network() const;
     void        load_network(const std::string& file);
-    void        verify_network() const;
-    void        set_on_verify_network(std::function<void(std::string_view)>&&);
 
     // utility functions
 
