@@ -49,7 +49,7 @@ int Eval::simple_eval(const Position& pos) {
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
-Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
+Value Eval::evaluate(const Eval::NNUE::Network&    networks,
                      const Position&                pos,
                      Eval::NNUE::AccumulatorStack&  accumulators,
                      Eval::NNUE::AccumulatorCaches& caches,
@@ -57,7 +57,7 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     assert(!pos.checkers());
 
-    auto [psqt, positional] = NNUE::Adapter::active_network(networks).evaluate(
+    auto [psqt, positional] = networks.evaluate(
       pos, accumulators, NNUE::Adapter::active_cache(caches));
 
     Value nnue = (125 * psqt + 131 * positional) / 128;
@@ -83,7 +83,7 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
-std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
+std::string Eval::trace(Position& pos, const Eval::NNUE::Network& networks) {
 
     if (pos.checkers())
         return "Final evaluation: none (in check)";
@@ -97,7 +97,7 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto [psqt, positional] = NNUE::Adapter::active_network(networks).evaluate(
+    auto [psqt, positional] = networks.evaluate(
       pos, *accumulators, NNUE::Adapter::active_cache(*caches));
     Value v                 = psqt + positional;
     v                       = pos.side_to_move() == WHITE ? v : -v;
