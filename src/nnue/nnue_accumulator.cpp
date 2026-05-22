@@ -142,7 +142,7 @@ template<IndexType Dimensions>
 void AccumulatorStack::evaluate(const Position&                       pos,
                                 const FeatureTransformer<Dimensions>& featureTransformer,
                                 AccumulatorCaches::Cache<Dimensions>& cache) noexcept {
-    constexpr bool UseThreats = (Dimensions == TransformedFeatureDimensionsBig);
+    constexpr bool UseThreats = (Dimensions == TransformedFeatureDimensions);
 
     evaluate_side<PSQFeatureSet>(WHITE, pos, featureTransformer, cache);
 
@@ -279,10 +279,10 @@ void AccumulatorStack::backward_update_incremental(
 }
 
 // Explicit template instantiations
-template void AccumulatorStack::evaluate<TransformedFeatureDimensionsBig>(
+template void AccumulatorStack::evaluate<TransformedFeatureDimensions>(
   const Position&                                            pos,
-  const FeatureTransformer<TransformedFeatureDimensionsBig>& featureTransformer,
-  AccumulatorCaches::Cache<TransformedFeatureDimensionsBig>& cache) noexcept;
+  const FeatureTransformer<TransformedFeatureDimensions>& featureTransformer,
+  AccumulatorCaches::Cache<TransformedFeatureDimensions>& cache) noexcept;
 
 
 namespace {

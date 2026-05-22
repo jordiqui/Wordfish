@@ -10,14 +10,14 @@ inline auto& active_network(Networks& networks) noexcept { return networks.netwo
 
 inline const auto& active_network(const Networks& networks) noexcept { return networks.network; }
 
-inline AccumulatorCaches::Cache<TransformedFeatureDimensionsBig>&
+inline AccumulatorCaches::Cache<TransformedFeatureDimensions>&
 active_cache(AccumulatorCaches& caches) noexcept {
-    return caches.big;
+    return caches.cache;
 }
 
-inline const AccumulatorCaches::Cache<TransformedFeatureDimensionsBig>&
+inline const AccumulatorCaches::Cache<TransformedFeatureDimensions>&
 active_cache(const AccumulatorCaches& caches) noexcept {
-    return caches.big;
+    return caches.cache;
 }
 
 

@@ -81,7 +81,7 @@ void permute(std::array<T, N>& data, const std::array<std::size_t, OrderSize>& o
 template<IndexType TransformedFeatureDimensions>
 class FeatureTransformer {
     static constexpr bool UseThreats =
-      (TransformedFeatureDimensions == TransformedFeatureDimensionsBig);
+      (TransformedFeatureDimensions == ::Stockfish::Eval::NNUE::TransformedFeatureDimensions);
     // Number of output dimensions for one side
     static constexpr IndexType HalfDimensions = TransformedFeatureDimensions;
 

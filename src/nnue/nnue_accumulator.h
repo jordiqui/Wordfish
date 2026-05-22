@@ -97,39 +97,39 @@ struct AccumulatorCaches {
 
     template<typename Networks>
     void clear(const Networks& networks) {
-        big.clear(networks.network);
+        cache.clear(networks.network);
     }
 
-    Cache<TransformedFeatureDimensionsBig> big;
+    Cache<TransformedFeatureDimensions> cache;
 };
 
 
 template<typename FeatureSet>
 struct AccumulatorState {
-    Accumulator<TransformedFeatureDimensionsBig> accumulatorBig;
+    Accumulator<TransformedFeatureDimensions> accumulator;
     typename FeatureSet::DiffType                  diff;
 
     template<IndexType Size>
     auto& acc() noexcept {
-        static_assert(Size == TransformedFeatureDimensionsBig, "Invalid size for accumulator");
+        static_assert(Size == TransformedFeatureDimensions, "Invalid size for accumulator");
 
-        return accumulatorBig;
+        return accumulator;
     }
 
     template<IndexType Size>
     const auto& acc() const noexcept {
-        static_assert(Size == TransformedFeatureDimensionsBig, "Invalid size for accumulator");
+        static_assert(Size == TransformedFeatureDimensions, "Invalid size for accumulator");
 
-        return accumulatorBig;
+        return accumulator;
     }
 
     void reset(const typename FeatureSet::DiffType& dp) noexcept {
         diff = dp;
-        accumulatorBig.computed.fill(false);
+        accumulator.computed.fill(false);
     }
 
     typename FeatureSet::DiffType& reset() noexcept {
-        accumulatorBig.computed.fill(false);
+        accumulator.computed.fill(false);
         return diff;
     }
 };
