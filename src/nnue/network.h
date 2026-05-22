@@ -117,16 +117,13 @@ class Network {
 };
 
 // Definitions of the network types
-using BigFeatureTransformer  = FeatureTransformer<TransformedFeatureDimensionsBig>;
-using BigNetworkArchitecture = NetworkArchitecture<TransformedFeatureDimensionsBig, L2Big, L3Big>;
-
-using NetworkBig = Network<BigNetworkArchitecture, BigFeatureTransformer>;
 
 
 struct Networks {
     Networks(EvalFile bigFile, EvalFile) : big(bigFile, EmbeddedNNUEType::BIG) {}
 
-    NetworkBig big;
+    Network<NetworkArchitecture<TransformedFeatureDimensionsBig, L2Big, L3Big>,
+            FeatureTransformer<TransformedFeatureDimensionsBig>> big;
 };
 
 
