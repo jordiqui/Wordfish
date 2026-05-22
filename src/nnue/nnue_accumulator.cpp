@@ -283,10 +283,6 @@ template void AccumulatorStack::evaluate<TransformedFeatureDimensionsBig>(
   const Position&                                            pos,
   const FeatureTransformer<TransformedFeatureDimensionsBig>& featureTransformer,
   AccumulatorCaches::Cache<TransformedFeatureDimensionsBig>& cache) noexcept;
-template void AccumulatorStack::evaluate<TransformedFeatureDimensionsSmall>(
-  const Position&                                              pos,
-  const FeatureTransformer<TransformedFeatureDimensionsSmall>& featureTransformer,
-  AccumulatorCaches::Cache<TransformedFeatureDimensionsSmall>& cache) noexcept;
 
 
 namespace {
