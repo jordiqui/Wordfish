@@ -61,7 +61,7 @@ const char* primary_default_network_file() { return NN::Adapter::active_eval_fil
 
 
 void load_primary_network(NN::Networks& networks, const std::string& binaryDirectory, const std::string& file) {
-    networks.big.load(binaryDirectory, file);
+    networks.network.load(binaryDirectory, file);
 }
 
 
@@ -374,7 +374,7 @@ void Engine::verify_networks() const {
     if (!networksNeedVerification)
         return;
 
-    networks->big.verify(options["EvalFile"], onVerifyNetworks);
+    networks->network.verify(options["EvalFile"], onVerifyNetworks);
 
     auto statuses = networks.get_status_and_errors();
     for (size_t i = 0; i < statuses.size(); ++i)
@@ -434,7 +434,7 @@ void Engine::load_big_network(const std::string& file) {
 
 void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
     networks.modify_and_replicate([&files](NN::Networks& networks_) {
-        networks_.big.save(files[0].first);
+        networks_.network.save(files[0].first);
     });
 }
 
