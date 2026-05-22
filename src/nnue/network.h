@@ -120,10 +120,10 @@ class Network {
 
 
 struct Networks {
-    Networks(EvalFile bigFile, EvalFile) : big(bigFile, EmbeddedNNUEType::BIG) {}
+    Networks(EvalFile bigFile, EvalFile) : network(bigFile, EmbeddedNNUEType::BIG) {}
 
     Network<NetworkArchitecture<TransformedFeatureDimensionsBig, L2Big, L3Big>,
-            FeatureTransformer<TransformedFeatureDimensionsBig>> big;
+            FeatureTransformer<TransformedFeatureDimensionsBig>> network;
 };
 
 
@@ -141,7 +141,7 @@ template<>
 struct std::hash<Stockfish::Eval::NNUE::Networks> {
     std::size_t operator()(const Stockfish::Eval::NNUE::Networks& networks) const noexcept {
         std::size_t h = 0;
-        Stockfish::hash_combine(h, networks.big);
+        Stockfish::hash_combine(h, networks.network);
         return h;
     }
 };
