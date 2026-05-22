@@ -60,8 +60,8 @@ namespace {
 const char* primary_default_network_file() { return NN::Adapter::active_eval_file_name(); }
 
 
-void load_primary_network(NN::Networks& networks, const std::string& binaryDirectory, const std::string& file) {
-    networks.network.load(binaryDirectory, file);
+void load_primary_network(NN::Network& networks, const std::string& binaryDirectory, const std::string& file) {
+    networks.load(binaryDirectory, file);
 }
 
 
@@ -74,9 +74,9 @@ Engine::Engine(std::optional<std::string> path) :
     threads(),
     networks(
       numaContext,
-      // Heap-allocate because sizeof(NN::Networks) is large
-      std::make_unique<NN::Networks>(NN::EvalFile{primary_default_network_file(), "None", ""},
-                                     NN::EvalFile{primary_default_network_file(), "None", ""})) {
+      // Heap-allocate because sizeof(NN::Network) is large
+      std::make_unique<NN::Network>(NN::EvalFile{primary_default_network_file(), "None", ""},
+                                    NN::EmbeddedNNUEType::BIG)) {
 
     pos.set(StartFEN, false, &states->back());
 
@@ -374,7 +374,7 @@ void Engine::verify_networks() const {
     if (!networksNeedVerification)
         return;
 
-    networks->network.verify(options["EvalFile"], onVerifyNetworks);
+    networks->verify(options["EvalFile"], onVerifyNetworks);
 
     auto statuses = networks.get_status_and_errors();
     for (size_t i = 0; i < statuses.size(); ++i)
@@ -410,7 +410,7 @@ void Engine::verify_networks() const {
 }
 
 void Engine::load_networks() {
-    networks.modify_and_replicate([this](NN::Networks& networks_) {
+    networks.modify_and_replicate([this](NN::Network& networks_) {
         load_primary_network(networks_, binaryDirectory, std::string(options["EvalFile"]));
     });
     threads.clear();
@@ -423,7 +423,7 @@ void Engine::load_network(const std::string& file) {
 }
 
 void Engine::load_big_network(const std::string& file) {
-    networks.modify_and_replicate([this, &file](NN::Networks& networks_) {
+    networks.modify_and_replicate([this, &file](NN::Network& networks_) {
         load_primary_network(networks_, binaryDirectory, file);
     });
     threads.clear();
@@ -433,8 +433,8 @@ void Engine::load_big_network(const std::string& file) {
 
 
 void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
-    networks.modify_and_replicate([&files](NN::Networks& networks_) {
-        networks_.network.save(files[0].first);
+    networks.modify_and_replicate([&files](NN::Network& networks_) {
+        networks_.save(files[0].first);
     });
 }
 

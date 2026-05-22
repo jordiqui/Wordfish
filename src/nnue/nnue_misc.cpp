@@ -97,7 +97,7 @@ void format_cp_aligned_dot(Value v, std::stringstream& stream, const Position& p
 // Returns a string with the value of each piece on a board,
 // and a table for (PSQT, Layers) values bucket by bucket.
 std::string
-trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::AccumulatorCaches& caches) {
+trace(Position& pos, const Eval::NNUE::Network& networks, Eval::NNUE::AccumulatorCaches& caches) {
 
     std::stringstream ss;
 
@@ -126,7 +126,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     // We estimate the value of each piece by doing a differential evaluation from
     // the current base eval, simulating the removal of the piece from its square.
     auto [psqt, positional] =
-      Adapter::active_network(networks).evaluate(pos, *accumulators, Adapter::active_cache(caches));
+      networks.evaluate(pos, *accumulators, Adapter::active_cache(caches));
     Value base              = psqt + positional;
     base                    = pos.side_to_move() == WHITE ? base : -base;
 
@@ -142,7 +142,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
                 pos.remove_piece(sq);
 
                 accumulators->reset();
-                std::tie(psqt, positional) = Adapter::active_network(networks).evaluate(
+                std::tie(psqt, positional) = networks.evaluate(
                   pos, *accumulators, Adapter::active_cache(caches));
                 Value eval                 = psqt + positional;
                 eval                       = pos.side_to_move() == WHITE ? eval : -eval;
@@ -160,7 +160,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     ss << '\n';
 
     accumulators->reset();
-    auto t = Adapter::active_network(networks).trace_evaluate(
+    auto t = networks.trace_evaluate(
       pos, *accumulators, Adapter::active_cache(caches));
 
     ss << " NNUE network contributions "

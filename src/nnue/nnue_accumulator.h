@@ -60,9 +60,9 @@ struct alignas(CacheLineSize) Accumulator {
 // is commonly referred to as "Finny Tables".
 struct AccumulatorCaches {
 
-    template<typename Networks>
-    AccumulatorCaches(const Networks& networks) {
-        clear(networks);
+    template<typename NetType>
+    AccumulatorCaches(const NetType& network) {
+        clear(network);
     }
 
     template<IndexType Size>
@@ -95,9 +95,9 @@ struct AccumulatorCaches {
         std::array<std::array<Entry, COLOR_NB>, SQUARE_NB> entries;
     };
 
-    template<typename Networks>
-    void clear(const Networks& networks) {
-        cache.clear(networks.network);
+    template<typename NetType>
+    void clear(const NetType& network) {
+        cache.clear(network);
     }
 
     Cache<TransformedFeatureDimensions> cache;

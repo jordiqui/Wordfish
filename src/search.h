@@ -136,20 +136,20 @@ struct SharedState {
     SharedState(const OptionsMap&                                         optionsMap,
                 ThreadPool&                                               threadPool,
                 TranspositionTable&                                       transpositionTable,
-                const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& nets) :
+                const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& nets) :
         options(optionsMap),
         threads(threadPool),
         tt(transpositionTable),
         networks(nets) {}
 
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& nnue_networks() const {
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& nnue_networks() const {
         return networks;
     }
 
     const OptionsMap&                                         options;
     ThreadPool&                                               threads;
     TranspositionTable&                                       tt;
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& networks;
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& networks;
 };
 
 class Worker;
@@ -359,8 +359,8 @@ class Worker {
     const OptionsMap&                                         options;
     ThreadPool&                                               threads;
     TranspositionTable&                                       tt;
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& networks;
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Networks>& nnue_networks() const {
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& networks;
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& nnue_networks() const {
         return networks;
     }
 

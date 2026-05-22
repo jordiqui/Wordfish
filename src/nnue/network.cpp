@@ -104,7 +104,7 @@ bool write_parameters(std::ostream& stream, const T& reference) {
 }  // namespace Detail
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::string evalfilePath) {
+void NetworkImpl<Arch, Transformer>::load(const std::string& rootDirectory, std::string evalfilePath) {
 #if defined(DEFAULT_NNUE_DIRECTORY)
     std::vector<std::string> dirs = {"<internal>", "", rootDirectory,
                                      stringify(DEFAULT_NNUE_DIRECTORY)};
@@ -134,7 +134,7 @@ void Network<Arch, Transformer>::load(const std::string& rootDirectory, std::str
 
 
 template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::save(const std::optional<std::string>& filename) const {
+bool NetworkImpl<Arch, Transformer>::save(const std::optional<std::string>& filename) const {
     std::string actualFilename;
     std::string msg;
 
@@ -166,7 +166,7 @@ bool Network<Arch, Transformer>::save(const std::optional<std::string>& filename
 
 template<typename Arch, typename Transformer>
 NetworkOutput
-Network<Arch, Transformer>::evaluate(const Position&                         pos,
+NetworkImpl<Arch, Transformer>::evaluate(const Position&                         pos,
                                      AccumulatorStack&                       accumulatorStack,
                                      AccumulatorCaches::Cache<FTDimensions>& cache) const {
 
@@ -186,7 +186,7 @@ Network<Arch, Transformer>::evaluate(const Position&                         pos
 
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::verify(std::string                                  evalfilePath,
+void NetworkImpl<Arch, Transformer>::verify(std::string                                  evalfilePath,
                                         const std::function<void(std::string_view)>& f) const {
     if (evalfilePath.empty())
         evalfilePath = evalFile.defaultName;
@@ -228,7 +228,7 @@ void Network<Arch, Transformer>::verify(std::string                             
 
 template<typename Arch, typename Transformer>
 NnueEvalTrace
-Network<Arch, Transformer>::trace_evaluate(const Position&                         pos,
+NetworkImpl<Arch, Transformer>::trace_evaluate(const Position&                         pos,
                                            AccumulatorStack&                       accumulatorStack,
                                            AccumulatorCaches::Cache<FTDimensions>& cache) const {
 
@@ -256,7 +256,7 @@ Network<Arch, Transformer>::trace_evaluate(const Position&                      
 
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::load_user_net(const std::string& dir,
+void NetworkImpl<Arch, Transformer>::load_user_net(const std::string& dir,
                                                const std::string& evalfilePath) {
     std::string fullPath = dir;
 
@@ -277,7 +277,7 @@ void Network<Arch, Transformer>::load_user_net(const std::string& dir,
 
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::load_internal() {
+void NetworkImpl<Arch, Transformer>::load_internal() {
     // C++ way to prepare a buffer for a memory stream
     class MemoryBuffer: public std::basic_streambuf<char> {
        public:
@@ -304,13 +304,13 @@ void Network<Arch, Transformer>::load_internal() {
 
 
 template<typename Arch, typename Transformer>
-void Network<Arch, Transformer>::initialize() {
+void NetworkImpl<Arch, Transformer>::initialize() {
     initialized = true;
 }
 
 
 template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::save(std::ostream&      stream,
+bool NetworkImpl<Arch, Transformer>::save(std::ostream&      stream,
                                       const std::string& name,
                                       const std::string& netDescription) const {
     if (name.empty() || name == "None")
@@ -321,7 +321,7 @@ bool Network<Arch, Transformer>::save(std::ostream&      stream,
 
 
 template<typename Arch, typename Transformer>
-std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream) {
+std::optional<std::string> NetworkImpl<Arch, Transformer>::load(std::istream& stream) {
     initialize();
     std::string description;
 
@@ -330,7 +330,7 @@ std::optional<std::string> Network<Arch, Transformer>::load(std::istream& stream
 
 
 template<typename Arch, typename Transformer>
-std::size_t Network<Arch, Transformer>::get_content_hash() const {
+std::size_t NetworkImpl<Arch, Transformer>::get_content_hash() const {
     if (!initialized)
         return 0;
 
@@ -345,7 +345,7 @@ std::size_t Network<Arch, Transformer>::get_content_hash() const {
 
 // Read network header
 template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::read_header(std::istream&  stream,
+bool NetworkImpl<Arch, Transformer>::read_header(std::istream&  stream,
                                              std::uint32_t* hashValue,
                                              std::string*   desc) const {
     std::uint32_t version, size;
@@ -363,7 +363,7 @@ bool Network<Arch, Transformer>::read_header(std::istream&  stream,
 
 // Write network header
 template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::write_header(std::ostream&      stream,
+bool NetworkImpl<Arch, Transformer>::write_header(std::ostream&      stream,
                                               std::uint32_t      hashValue,
                                               const std::string& desc) const {
     write_little_endian<std::uint32_t>(stream, Version);
@@ -375,12 +375,12 @@ bool Network<Arch, Transformer>::write_header(std::ostream&      stream,
 
 
 template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
+bool NetworkImpl<Arch, Transformer>::read_parameters(std::istream& stream,
                                                  std::string&  netDescription) {
     std::uint32_t hashValue;
     if (!read_header(stream, &hashValue, &netDescription))
         return false;
-    if (hashValue != Network::hash)
+    if (hashValue != NetworkImpl<Arch, Transformer>::hash)
         return false;
     if (!Detail::read_parameters(stream, featureTransformer))
         return false;
@@ -394,9 +394,9 @@ bool Network<Arch, Transformer>::read_parameters(std::istream& stream,
 
 
 template<typename Arch, typename Transformer>
-bool Network<Arch, Transformer>::write_parameters(std::ostream&      stream,
+bool NetworkImpl<Arch, Transformer>::write_parameters(std::ostream&      stream,
                                                   const std::string& netDescription) const {
-    if (!write_header(stream, Network::hash, netDescription))
+    if (!write_header(stream, NetworkImpl<Arch, Transformer>::hash, netDescription))
         return false;
     if (!Detail::write_parameters(stream, featureTransformer))
         return false;
@@ -410,7 +410,7 @@ bool Network<Arch, Transformer>::write_parameters(std::ostream&      stream,
 
 // Explicit template instantiations
 
-template class Network<NetworkArchitecture<TransformedFeatureDimensions, L2, L3>,
+template class NetworkImpl<NetworkArchitecture<TransformedFeatureDimensions, L2, L3>,
                        FeatureTransformer<TransformedFeatureDimensions>>;
 
 

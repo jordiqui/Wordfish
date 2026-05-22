@@ -37,15 +37,15 @@ namespace Eval {
 #define EvalFileDefaultName "nn-83a0d6daf7e5.nnue"
 
 namespace NNUE {
-struct Networks;
+class Network;
 struct AccumulatorCaches;
 class AccumulatorStack;
 }
 
-std::string trace(Position& pos, const Eval::NNUE::Networks& networks);
+std::string trace(Position& pos, const Eval::NNUE::Network& networks);
 
 int   simple_eval(const Position& pos);
-Value evaluate(const NNUE::Networks&          networks,
+Value evaluate(const NNUE::Network&          networks,
                const Position&                pos,
                Eval::NNUE::AccumulatorStack&  accumulators,
                Eval::NNUE::AccumulatorCaches& caches,

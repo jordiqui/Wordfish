@@ -54,19 +54,19 @@ using NetworkOutput = std::tuple<Value, Value>;
 // This is required to allow sharing the network via shared memory, as
 // there is no way to run destructors.
 template<typename Arch, typename Transformer>
-class Network {
+class NetworkImpl {
     static constexpr IndexType FTDimensions = Arch::TransformedFeatureDimensions;
 
    public:
-    Network(EvalFile file, EmbeddedNNUEType type) :
+    NetworkImpl(EvalFile file, EmbeddedNNUEType type) :
         evalFile(file),
         embeddedType(type) {}
 
-    Network(const Network& other) = default;
-    Network(Network&& other)      = default;
+    NetworkImpl(const NetworkImpl& other) = default;
+    NetworkImpl(NetworkImpl&& other)      = default;
 
-    Network& operator=(const Network& other) = default;
-    Network& operator=(Network&& other)      = default;
+    NetworkImpl& operator=(const NetworkImpl& other) = default;
+    NetworkImpl& operator=(NetworkImpl&& other)      = default;
 
     void load(const std::string& rootDirectory, std::string evalfilePath);
     bool save(const std::optional<std::string>& filename) const;
@@ -119,30 +119,28 @@ class Network {
 // Definitions of the network types
 
 
-struct Networks {
-    Networks(EvalFile bigFile, EvalFile) : network(bigFile, EmbeddedNNUEType::BIG) {}
-
-    Network<NetworkArchitecture<TransformedFeatureDimensions, L2, L3>,
-            FeatureTransformer<TransformedFeatureDimensions>> network;
+class Network:
+    public NetworkImpl<NetworkArchitecture<TransformedFeatureDimensions, L2, L3>,
+                       FeatureTransformer<TransformedFeatureDimensions>> {
+   public:
+    using NetworkImpl::NetworkImpl;
 };
 
 
 }  // namespace Stockfish
 
 template<typename ArchT, typename FeatureTransformerT>
-struct std::hash<Stockfish::Eval::NNUE::Network<ArchT, FeatureTransformerT>> {
+struct std::hash<Stockfish::Eval::NNUE::NetworkImpl<ArchT, FeatureTransformerT>> {
     std::size_t operator()(
-      const Stockfish::Eval::NNUE::Network<ArchT, FeatureTransformerT>& network) const noexcept {
+      const Stockfish::Eval::NNUE::NetworkImpl<ArchT, FeatureTransformerT>& network) const noexcept {
         return network.get_content_hash();
     }
 };
 
 template<>
-struct std::hash<Stockfish::Eval::NNUE::Networks> {
-    std::size_t operator()(const Stockfish::Eval::NNUE::Networks& networks) const noexcept {
-        std::size_t h = 0;
-        Stockfish::hash_combine(h, networks.network);
-        return h;
+struct std::hash<Stockfish::Eval::NNUE::Network> {
+    std::size_t operator()(const Stockfish::Eval::NNUE::Network& network) const noexcept {
+        return network.get_content_hash();
     }
 };
 
