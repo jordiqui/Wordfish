@@ -43,11 +43,6 @@ class Position;
 
 namespace Stockfish::Eval::NNUE {
 
-enum class EmbeddedNNUEType {
-    BIG,
-    SMALL,
-};
-
 using NetworkOutput = std::tuple<Value, Value>;
 
 // The network must be a trivial type, i.e. the memory must be in-line.
@@ -58,9 +53,8 @@ class NetworkImpl {
     static constexpr IndexType FTDimensions = Arch::TransformedFeatureDimensions;
 
    public:
-    NetworkImpl(EvalFile file, EmbeddedNNUEType type) :
-        evalFile(file),
-        embeddedType(type) {}
+    NetworkImpl(EvalFile file) :
+        evalFile(file) {}
 
     NetworkImpl(const NetworkImpl& other) = default;
     NetworkImpl(NetworkImpl&& other)      = default;
@@ -104,8 +98,7 @@ class NetworkImpl {
     // Evaluation function
     Arch network[LayerStacks];
 
-    EvalFile         evalFile;
-    EmbeddedNNUEType embeddedType;
+    EvalFile evalFile;
 
     bool initialized = false;
 
