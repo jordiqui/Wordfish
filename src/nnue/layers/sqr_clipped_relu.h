@@ -30,7 +30,7 @@
 namespace Stockfish::Eval::NNUE::Layers {
 
 // Clipped ReLU
-template<IndexType InDims>
+template<IndexType InDims, int WeightScaleBitsLocal = WeightScaleBits>
 class SqrClippedReLU {
    public:
     // Input/output type
@@ -49,6 +49,8 @@ class SqrClippedReLU {
     static constexpr std::uint32_t get_hash_value(std::uint32_t prevHash) {
         std::uint32_t hashValue = 0x538D24C7u;
         hashValue += prevHash;
+        // TODO: consider including WeightScaleBitsLocal in the hash value.
+        // For now omitted on purpose because not written by trainer (yet)
         return hashValue;
     }
 
@@ -66,13 +68,16 @@ class SqrClippedReLU {
 
     // Forward propagation
     void propagate(const InputType* input, OutputType* output) const {
+        static_assert(WeightScaleBitsLocal >= 5 && WeightScaleBitsLocal <= 8,
+                      "SqrClippedReLU only support WeightScaleBitsLocal between 5 and 8");
+        // After squaring we need to shift by WeightScaleBitsLocal * 2 + 7
+        // MulHi strips the lower 16 bits (i.e. shift by 16) so we need to shift out the remaining.
+        [[maybe_unused]] constexpr int SimdShiftAmount = WeightScaleBitsLocal * 2 + 7 - 16;
 
 #if defined(USE_SSE2)
         constexpr IndexType NumChunks = InputDimensions / 16;
-
-        static_assert(WeightScaleBits == 6);
-        const auto in  = reinterpret_cast<const __m128i*>(input);
-        const auto out = reinterpret_cast<__m128i*>(output);
+        const auto          in        = reinterpret_cast<const __m128i*>(input);
+        const auto          out       = reinterpret_cast<__m128i*>(output);
         for (IndexType i = 0; i < NumChunks; ++i)
         {
             __m128i words0 =
@@ -80,11 +85,8 @@ class SqrClippedReLU {
             __m128i words1 =
               _mm_packs_epi32(_mm_load_si128(&in[i * 4 + 2]), _mm_load_si128(&in[i * 4 + 3]));
 
-            // We shift by WeightScaleBits * 2 = 12 and divide by 128
-            // which is an additional shift-right of 7, meaning 19 in total.
-            // MulHi strips the lower 16 bits so we need to shift out 3 more to match.
-            words0 = _mm_srli_epi16(_mm_mulhi_epi16(words0, words0), 3);
-            words1 = _mm_srli_epi16(_mm_mulhi_epi16(words1, words1), 3);
+            words0 = _mm_srli_epi16(_mm_mulhi_epi16(words0, words0), SimdShiftAmount);
+            words1 = _mm_srli_epi16(_mm_mulhi_epi16(words1, words1), SimdShiftAmount);
 
             _mm_store_si128(&out[i], _mm_packs_epi16(words0, words1));
         }
@@ -99,7 +101,8 @@ class SqrClippedReLU {
             output[i] = static_cast<OutputType>(
               // Really should be /127 but we need to make it fast so we right-shift
               // by an extra 7 bits instead. Needs to be accounted for in the trainer.
-              std::min(127ll, ((long long) (input[i]) * input[i]) >> (2 * WeightScaleBits + 7)));
+              std::min(127ll,
+                       ((long long) (input[i]) * input[i]) >> (2 * WeightScaleBitsLocal + 7)));
         }
     }
 };
