@@ -135,7 +135,7 @@ endif
 # explicitly check for the list of supported architectures (as listed with make help),
 # the user can override with `make ARCH=x86-64-avx512icl SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
-                 x86-64-avx512icl x86-64-vnni512 x86-64-avx512 x86-64-avxvnni x86-64-fma3 \
+                 x86-64-universal x86-64-avx512icl x86-64-vnni512 x86-64-avx512 x86-64-avxvnni x86-64-fma3 \
                  x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-64-altivec ppc-64-vsx ppc-32 e2k \
                  armv7 armv7-neon armv8 armv8-dotprod apple-silicon general-64 general-32 riscv64 \
@@ -143,6 +143,12 @@ ifeq ($(ARCH), $(filter $(ARCH), \
    SUPPORTED_ARCH=true
 else
    SUPPORTED_ARCH=false
+endif
+
+ifneq (,$(filter $(ARCH),x86-64-universal))
+   UNIVERSAL_BUILD=true
+else
+   UNIVERSAL_BUILD=false
 endif
 
 ifeq ($(ARCH),x86-64-sse41-popcnt)
@@ -542,6 +548,9 @@ ifeq ($(COMP),clang)
 
 	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
 	            -Wconditional-uninitialized
+	ifeq ($(UNIVERSAL_SLICE),true)
+		CXXFLAGS += -Wno-missing-prototypes
+	endif
 
 	ifeq ($(filter $(KERNEL),Darwin OpenBSD FreeBSD),)
 	ifeq ($(target_windows),)
@@ -964,6 +973,7 @@ help:
 	echo "Supported archs:" && \
 	echo "" && \
         echo "native                  > select the best architecture for the host processor (default)" && \
+        echo "x86-64-universal        > x86 64-bit with automatic runtime selection of the best architecture" && \
         echo "x86-64-avx512icl        > x86 64-bit with minimum avx512 support of Intel Ice Lake or AMD Zen 4" && \
         echo "x86-64-vnni512          > x86 64-bit with vnni 512bit support" && \
         echo "x86-64-avx512           > x86 64-bit with avx512 support" && \
@@ -1024,7 +1034,7 @@ endif
 
 
 .PHONY: help analyze build profile-build strip install clean net \
-	objclean profileclean config-sanity \
+	objclean profileclean universalclean config-sanity universal-object-nopgo \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
 	clang-profile-use clang-profile-make FORCE \
@@ -1033,6 +1043,7 @@ endif
 analyze: $(NNUE_TARGET) config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
+ifeq ($(UNIVERSAL_BUILD),false)
 build: $(NNUE_TARGET) config-sanity
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
 
@@ -1051,6 +1062,7 @@ profile-build: $(NNUE_TARGET) config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 4/4. Deleting profile data ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) profileclean
+endif
 
 strip:
 	$(STRIP) $(EXE)
@@ -1061,7 +1073,7 @@ install:
 	$(STRIP) $(BINDIR)/$(EXE)
 
 # clean all
-clean: objclean profileclean
+clean: objclean profileclean universalclean
 	@rm -f .depend *~ core
 
 # clean binaries and objects
@@ -1077,6 +1089,10 @@ profileclean:
 	@rm -f stockfish.*lt*
 	@rm -f stockfish.res
 	@rm -f ./-lstdc++.res
+
+universalclean:
+	@rm -rf $(CURDIR)/temp_builds
+	@rm -f universal/network_dump.inc
 
 # evaluation network (nnue)
 PRIMARY_EVALFILE := $(shell sed -n 's/^#define[[:space:]]\+EvalFileDefaultName[[:space:]]\+"\([^"]\+\)"/\1/p' evaluate.h)
@@ -1212,9 +1228,97 @@ icx-profile-use:
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 
+
+# Preserve each architecture as one LTO-optimized relocatable object for the
+# universal driver. Wordfish's main.cpp predates Stockfish's UNIVERSAL_BINARY
+# namespace wrapper, so rename main at compile time and alias it only for this
+# temporary per-architecture link.
+ifeq ($(KERNEL),Darwin)
+  LTO_OBJ_SUFFIX := .lto.o
+  SAVE_TEMPS := -Wl,-object_path_lto,wordfish.lto.o
+else ifeq ($(comp),clang)
+  LTO_OBJ_SUFFIX := .lto.o
+  SAVE_TEMPS := -Wl,--save-temps
+else
+  LTO_OBJ_SUFFIX := .ltrans0.ltrans.o
+  SAVE_TEMPS := -save-temps
+endif
+
+universal-main = Wordfish_$(subst -,_,$(1))_main
+universal-main-mangled = _Z$(shell printf %s '$(call universal-main,$(1))' | wc -c | tr -d ' ')$(call universal-main,$(1))iPPc
+
+universal-object-nopgo: objclean universalclean
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
+		ENV_LDFLAGS='$(ENV_LDFLAGS) $(SAVE_TEMPS) -Wl,--defsym=main=$(call universal-main-mangled,$(ARCH))' all
+	cp "$(EXE)$(LTO_OBJ_SUFFIX)" wordfish.o
+
+### ==========================================================================
+### Section 6. x86 universal binary driver
+### ==========================================================================
+
+TEMP_DIR              := $(CURDIR)/temp_builds
+UNIVERSAL_EXE         := $(CURDIR)/$(EXE)
+
+ifeq ($(UNIVERSAL_BUILD),true)
+
+UNIVERSAL_SRC_DIR     := $(CURDIR)/universal
+UNIVERSAL_ARCHES      := x86-64 x86-64-sse41-popcnt x86-64-avx2 x86-64-bmi2 \
+                         x86-64-avxvnni x86-64-avx512 x86-64-vnni512 x86-64-avx512icl
+UNIVERSAL_ENTRY_OBJ   := $(TEMP_DIR)/entry_x86.o
+UNIVERSAL_ENTRY_SRC   := $(UNIVERSAL_SRC_DIR)/entry_x86.cpp
+NNUE_EMBED_OBJ        := $(TEMP_DIR)/nnue_embed.o
+ARCH_OBJS             := $(patsubst %,$(TEMP_DIR)/%/wordfish.o,$(UNIVERSAL_ARCHES))
+TRACKED_TOP            = $(sort $(foreach f,$(SRCS) $(HEADERS) Makefile incbin shm.h shm_linux.h shm_win.h,\
+                                  $(firstword $(subst /, ,$(f)))))
+OBJCOPY               ?= objcopy
+
+arch-suffix     = $(subst -,_,$(1))
+arch-namespace  = Stockfish_$(call arch-suffix,$(1))
+arch-main       = Wordfish_$(call arch-suffix,$(1))_main
+arch-cxxflags   = -DStockfish=$(call arch-namespace,$(1)) -Dmain=$(call arch-main,$(1)) -Wno-missing-prototypes
+
+build: $(UNIVERSAL_EXE)
+profile-build: $(UNIVERSAL_EXE)
+
+$(TEMP_DIR):
+	@mkdir -p $@
+
+$(UNIVERSAL_ENTRY_OBJ): $(UNIVERSAL_ENTRY_SRC) | $(TEMP_DIR)
+	$(CXX) -O2 -std=c++20 -c $< -o $@
+
+# Kept as the Stockfish-compatible single-copy embedding path. The requested
+# validation matrix disables embedding, so slices retain Wordfish's existing
+# NNUE_EMBEDDING_OFF behavior and load EvalFileDefaultName from disk.
+$(NNUE_EMBED_OBJ): $(UNIVERSAL_SRC_DIR)/nnue_embed.cpp | $(TEMP_DIR)
+	$(CXX) -O2 -std=c++20 -Wno-c++26-extensions -c $< -o $@
+
+$(TEMP_DIR)/%/.setup: | $(TEMP_DIR)
+	@rm -rf $(TEMP_DIR)/$*
+	@mkdir -p $(TEMP_DIR)/$*
+	@$(foreach f,$(TRACKED_TOP),ln -s $(CURDIR)/$(f) $(TEMP_DIR)/$*/$(f);)
+	@touch $@
+
+.SECONDARY: $(patsubst %,$(TEMP_DIR)/%/.setup,$(UNIVERSAL_ARCHES))
+
+$(TEMP_DIR)/%/wordfish.o: $(TEMP_DIR)/%/.setup
+	+ENV_CXXFLAGS='$(ENV_CXXFLAGS) $(call arch-cxxflags,$*)' \
+		$(MAKE) -C $(TEMP_DIR)/$* universal-object-nopgo \
+			ARCH=$* CXX=$(CXX) COMP=$(COMP) UNIVERSAL_SLICE=true NNUE_EMBEDDING_OFF=$(NNUE_EMBEDDING_OFF)
+	$(OBJCOPY) -R .group $@
+	$(OBJCOPY) --rename-section .init_array=$(call arch-suffix,$*)_init $@
+	$(OBJCOPY) --set-section-flags $(call arch-suffix,$*)_init=alloc,data $@
+
+$(UNIVERSAL_EXE): $(UNIVERSAL_ENTRY_OBJ) $(ARCH_OBJS)
+	$(CXX) -o $@ $(UNIVERSAL_ENTRY_OBJ) $(ARCH_OBJS) $(LDFLAGS)
+	@echo "Universal Wordfish binary built: $@"
+
+endif
+
 .depend: $(SRCS)
 	-@$(CXX) $(DEPENDFLAGS) -MM $(SRCS) > $@ 2> /dev/null
 
-ifeq (, $(filter $(MAKECMDGOALS), help strip install clean net objclean profileclean format config-sanity))
+ifeq (, $(filter $(MAKECMDGOALS), help strip install clean net objclean profileclean universalclean format config-sanity))
+ifeq ($(UNIVERSAL_BUILD),false)
 -include .depend
+endif
 endif
