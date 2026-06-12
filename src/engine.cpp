@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <charconv>
 #include <deque>
 #include <iosfwd>
 #include <memory>
@@ -54,6 +55,10 @@ constexpr auto StartFEN   = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq 
 constexpr int  MaxHashMB  = Is64Bit ? 33554432 : 2048;
 int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
+// Preserve Wordfish's existing automatic/system behavior. L3-aware subdivisions
+// are available through explicit NumaPolicy values.
+constexpr NumaAutoPolicy DefaultNumaPolicy = SystemNumaPolicy{};
+
 namespace {
 
 const char* primary_default_network_file() { return EvalFileDefaultName; }
@@ -63,12 +68,20 @@ void load_primary_network(NN::Network& networks, const std::string& binaryDirect
     networks.load(binaryDirectory, file);
 }
 
+std::optional<size_t> parse_l3_bundle_size(std::string_view value) {
+    size_t size = 0;
+    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), size);
+    if (error != std::errc{} || end != value.data() + value.size() || size == 0)
+        return std::nullopt;
+    return size;
+}
+
 
 }  // namespace
 
 Engine::Engine(std::optional<std::string> path) :
     binaryDirectory(path ? CommandLine::get_binary_directory(*path) : ""),
-    numaContext(NumaConfig::from_system()),
+    numaContext(NumaConfig::from_system(DefaultNumaPolicy)),
     states(new std::deque<StateInfo>(1)),
     threads(),
     networks(
@@ -316,22 +329,22 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
 
 void Engine::set_numa_config_from_option(const std::string& o) {
     if (o == "auto" || o == "system")
-    {
-        numaContext.set_numa_config(NumaConfig::from_system());
-    }
+        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy));
     else if (o == "hardware")
+        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy, false));
+    else if (o == "l3")
+        numaContext.set_numa_config(NumaConfig::from_system(L3DomainsPolicy{}));
+    else if (o.rfind("l3:", 0) == 0)
     {
-        // Don't respect affinity set in the system.
-        numaContext.set_numa_config(NumaConfig::from_system(false));
+        const auto bundleSize = parse_l3_bundle_size(std::string_view(o).substr(3));
+        if (!bundleSize)
+            std::exit(EXIT_FAILURE);
+        numaContext.set_numa_config(NumaConfig::from_system(BundledL3Policy{*bundleSize}));
     }
     else if (o == "none")
-    {
         numaContext.set_numa_config(NumaConfig{});
-    }
     else
-    {
         numaContext.set_numa_config(NumaConfig::from_string(o));
-    }
 
     // Force reallocation of threads in case affinities need to change.
     resize_threads();
