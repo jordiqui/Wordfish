@@ -39,7 +39,7 @@ namespace Stockfish {
 
 namespace {
 
-constexpr std::string_view base = "Wordfish 4.90-220526";
+constexpr std::string_view base = "Wordfish-5.0-120626";
 
 constexpr std::string_view arch_tag() {
 #ifdef BUILD_ARCH_SUFFIX
@@ -137,7 +137,8 @@ std::string engine_version_info() {
 }
 
 std::string engine_info(bool to_uci) {
-    return engine_version_info() + (to_uci ? "\nid author " : " by ") + engine_author_info();
+    return (to_uci ? std::string(base) : engine_version_info())
+         + (to_uci ? "\nid author " : " by ") + engine_author_info();
 }
 
 std::string engine_author_info() {
