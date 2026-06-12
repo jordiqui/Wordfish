@@ -308,10 +308,19 @@ void Engine::set_on_verify_network(std::function<void(std::string_view)>&& f) {
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
 
-void Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
+std::optional<PositionSetError> Engine::set_position(const std::string&              fen,
+                                                       const std::vector<std::string>& moves) {
+    // Validate before replacing the active position, so rejected input leaves it unchanged.
+    Position  candidate;
+    StateInfo candidateState;
+    auto      error = candidate.set(fen, options["UCI_Chess960"], &candidateState);
+    if (error.has_value())
+        return error;
+
     // Drop the old state and create a new one
     states = StateListPtr(new std::deque<StateInfo>(1));
-    pos.set(fen, options["UCI_Chess960"], &states->back());
+    error  = pos.set(fen, options["UCI_Chess960"], &states->back());
+    assert(!error.has_value());
 
     for (const auto& move : moves)
     {
@@ -323,6 +332,8 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
         states->emplace_back();
         pos.do_move(m, states->back());
     }
+
+    return std::nullopt;
 }
 
 // modifiers

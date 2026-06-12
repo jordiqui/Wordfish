@@ -608,7 +608,8 @@ void UCIEngine::position(std::istringstream& is) {
         moves.push_back(token);
     }
 
-    engine.set_position(fen, moves);
+    if (auto error = engine.set_position(fen, moves))
+        print_info_string(error->what());
 }
 
 namespace {
