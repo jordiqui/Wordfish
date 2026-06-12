@@ -109,7 +109,7 @@ class FeatureTransformer {
         // |   1   |   3   |   5   |   7   | // Vector 1
         // | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | // Packed Result
         return {0, 2, 4, 6, 1, 3, 5, 7};
-#elif defined(USE_AVX2)
+#elif defined(USE_AVX2) || defined(USE_LASX)
         // _mm256_packus_epi16 after permutation:
         // |   0   |   2   |  |   4   |   6   | // Vector 0, 2
         // |   1   |   3   |  |   5   |   7   | // Vector 1, 3
@@ -252,7 +252,7 @@ class FeatureTransformer {
             static_assert((HalfDimensions / 2) % OutputChunkSize == 0);
             constexpr IndexType NumOutputChunks = HalfDimensions / 2 / OutputChunkSize;
 
-    #if !defined(USE_NEON)
+    #if !defined(USE_NEON) && !defined(USE_LSX) && !defined(USE_LASX)
             const vec_t   Zero  = vec_zero();
             const vec_t   FtMax = vec_set_16(FtMaxVal);
             constexpr int shift = 7;
@@ -326,6 +326,16 @@ class FeatureTransformer {
                   vuzpq_u8(vreinterpretq_u8_u16(mul0), vreinterpretq_u8_u16(mul1));
                 const uint8x16_t pab = vshrq_n_u8(uzp.val[1], 1);
                 out[j]               = reinterpret_cast<vec_t>(pab);
+
+    #elif defined(USE_LSX) || defined(USE_LASX)
+
+                static_assert(FtMaxVal == 255);
+
+                const vec_t pa = vec_packus_16(in0[j * 2 + 0], in0[j * 2 + 1]);
+                const vec_t pb = vec_packus_16(in1[j * 2 + 0], in1[j * 2 + 1]);
+
+                const vec_t hi = vec_mulhi_8(pa, pb);
+                out[j]         = vec_srli_8(hi, 1);
 
     #else
 
