@@ -18,6 +18,7 @@
 
 #include "tt.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -62,6 +63,7 @@ struct TTEntry {
 
    private:
     friend class TranspositionTable;
+    friend struct TTWriter;
 
     uint16_t key16;
     uint8_t  depth8;
@@ -110,8 +112,16 @@ void TTEntry::save(
         value16   = int16_t(v);
         eval16    = int16_t(ev);
     }
+    // Secondary aging. Important for elementary mate finding.
+    // (*Scaler) Secondary aging on entries relevant to singular extensions
+    // generally scales poorly and requires VVLTC verification.
     else if (depth8 + DEPTH_ENTRY_OFFSET >= 5 && Bound(genBound8 & 0x3) != BOUND_EXACT)
-        depth8--;
+    {
+        const auto v16 = value16;
+        if (std::abs(v16) < VALUE_INFINITE && is_decisive(v16))
+            depth8 = std::max(int(depth8) - 1,
+                              0);  // guard against racy underflows, default to "unoccupied"
+    }
 }
 
 
@@ -132,6 +142,11 @@ TTWriter::TTWriter(TTEntry* tte) :
 void TTWriter::write(
   Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev, uint8_t generation8) {
     entry->save(k, v, pv, b, d, m, ev, generation8);
+}
+
+void TTWriter::penalize(int penalty) {
+    // Guard against racy underflows, default to "unoccupied".
+    entry->depth8 = std::max(int(entry->depth8) - penalty, 0);
 }
 
 
