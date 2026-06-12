@@ -27,6 +27,7 @@
 #include <new>
 #include <string>
 
+#include "attacks.h"
 #include "bitboard.h"
 #include "types.h"
 
