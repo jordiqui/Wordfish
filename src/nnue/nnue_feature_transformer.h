@@ -252,8 +252,11 @@ class FeatureTransformer {
             static_assert((HalfDimensions / 2) % OutputChunkSize == 0);
             constexpr IndexType NumOutputChunks = HalfDimensions / 2 / OutputChunkSize;
 
-            const vec_t Zero = vec_zero();
-            const vec_t FtMax = vec_set_16(FtMaxVal);
+    #if !defined(USE_NEON)
+            const vec_t   Zero  = vec_zero();
+            const vec_t   FtMax = vec_set_16(FtMaxVal);
+            constexpr int shift = 7;
+    #endif
 
             const vec_t* in0 = reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][0]));
             const vec_t* in1 =
@@ -307,20 +310,25 @@ class FeatureTransformer {
             // 8 bits. Shifting it by 7 bits left will no longer occupy the
             // signed bit, so we are safe.
 
-            // Note that on NEON processors, we shift left by 6 instead
-            // because the instruction "vqdmulhq_s16" also doubles the
-            // return value after the multiplication, adding an extra shift
-            // to the left by 1, so we compensate by shifting less before
-            // the multiplication.
-
-            constexpr int shift =
-    #if defined(USE_SSE2)
-              7;
-    #else
-              6;
-    #endif
             for (IndexType j = 0; j < NumOutputChunks; ++j)
             {
+    #if defined(USE_NEON)
+
+                // The NEON path relies on unsigned saturation for crelu
+                static_assert(FtMaxVal == 255);
+
+                const uint16x8_t mul0 =
+                  vmull_u8(vqmovun_s16(in0[j * 2 + 0]), vqmovun_s16(in1[j * 2 + 0]));
+                const uint16x8_t mul1 =
+                  vmull_u8(vqmovun_s16(in0[j * 2 + 1]), vqmovun_s16(in1[j * 2 + 1]));
+
+                const uint8x16x2_t uzp =
+                  vuzpq_u8(vreinterpretq_u8_u16(mul0), vreinterpretq_u8_u16(mul1));
+                const uint8x16_t pab = vshrq_n_u8(uzp.val[1], 1);
+                out[j]               = reinterpret_cast<vec_t>(pab);
+
+    #else
+
                 const vec_t sum0a =
                   vec_slli_16(vec_max_16(vec_min_16(in0[j * 2 + 0], FtMax), Zero), shift);
                 const vec_t sum0b =
@@ -332,6 +340,8 @@ class FeatureTransformer {
                 const vec_t pb = vec_mulhi_16(sum0b, sum1b);
 
                 out[j] = vec_packus_16(pa, pb);
+
+    #endif
             }
 
 #else
