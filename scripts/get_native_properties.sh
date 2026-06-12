@@ -19,11 +19,11 @@ get_flags() {
   flags=$(awk '/^flags[ \t]*:|^Features[ \t]*:/{gsub(/^flags[ \t]*:[ \t]*|^Features[ \t]*:[ \t]*|[_.]/, ""); line=$0} END{print line}' /proc/cpuinfo)
 }
 
-# Check for gcc march "znver1" or "znver2" https://en.wikichip.org/wiki/amd/cpuid
-check_znver_1_2() {
+# Check for AMD Excavator/Zen1/2 slow BMI2 CPUs
+check_slow_bmi2() {
   vendor_id=$(awk '/^vendor_id/{print $3; exit}' /proc/cpuinfo)
   cpu_family=$(awk '/^cpu family/{print $4; exit}' /proc/cpuinfo)
-  [ "$vendor_id" = "AuthenticAMD" ] && [ "$cpu_family" = "23" ] && znver_1_2=true
+  [ "$vendor_id" = "AuthenticAMD" ] && { [ "$cpu_family" = "21" ] || [ "$cpu_family" = "23" ]; } && slow_bmi2=true
 }
 
 # Set the file CPU loongarch64 architecture
@@ -47,7 +47,7 @@ set_arch_x86_64() {
     true_arch='x86-64-avx512'
   elif check_flags 'avxvnni'; then
     true_arch='x86-64-avxvnni'
-  elif [ -z "${znver_1_2+1}" ] && check_flags 'bmi2'; then
+  elif [ -z "${slow_bmi2+1}" ] && check_flags 'bmi2'; then
     true_arch='x86-64-bmi2'
   elif check_flags 'avx2'; then
     true_arch='x86-64-avx2'
@@ -98,7 +98,7 @@ case $uname_s in
     case $uname_m in
       'x86_64')
         file_os='ubuntu'
-        check_znver_1_2
+        check_slow_bmi2
         set_arch_x86_64
         ;;
       'i686')
@@ -142,7 +142,7 @@ case $uname_s in
     ;;
   'CYGWIN'*|'MINGW'*|'MSYS'*) # Windows x86_64system with POSIX compatibility layer
     get_flags
-    check_znver_1_2
+    check_slow_bmi2
     set_arch_x86_64
     file_os='windows'
     file_ext='zip'
