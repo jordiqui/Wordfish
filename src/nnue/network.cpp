@@ -43,8 +43,12 @@
 //     const unsigned char *const gEmbeddedNNUEEnd;     // a marker to the end
 //     const unsigned int         gEmbeddedNNUESize;    // the size of the embedded file
 // Note that this does not work in Microsoft Visual Studio.
-#if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
+#if !defined(UNIVERSAL_BINARY) && !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUE, EvalFileDefaultName);
+#elif defined(UNIVERSAL_BINARY_MACOS_X86_SLICE)
+// Determined at runtime, see universal/nnue_embed.cpp
+extern const unsigned char* const gEmbeddedNNUEData;
+extern const unsigned int         gEmbeddedNNUESize;
 #else
 const unsigned char gEmbeddedNNUEData[1] = {0x0};
 const unsigned int  gEmbeddedNNUESize    = 1;
@@ -260,6 +264,11 @@ void NetworkImpl<Arch, Transformer>::load_internal() {
             setp(p, p + n);
         }
     };
+
+#ifdef UNIVERSAL_BINARY_MACOS_X86_SLICE
+    if (gEmbeddedNNUEData == nullptr)  // failed embedded load
+        return;
+#endif
 
     MemoryBuffer buffer(const_cast<char*>(reinterpret_cast<const char*>(gEmbeddedNNUEData)),
                         size_t(gEmbeddedNNUESize));

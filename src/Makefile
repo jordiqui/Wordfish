@@ -967,6 +967,7 @@ help:
 	echo "help                    > Display architecture details" && \
 	echo "profile-build           > standard build with profile-guided optimization" && \
 	echo "build                   > skip profile-guided optimization" && \
+	echo "macos-lipo              > macOS x86-64 + Apple silicon universal binary" && \
 	echo "net                     > Download the default nnue nets" && \
 	echo "strip                   > Strip executable" && \
 	echo "install                 > Install executable" && \
@@ -1035,7 +1036,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build strip install clean net \
+.PHONY: help analyze build profile-build macos-lipo strip install clean net \
 	objclean profileclean universalclean config-sanity universal-object-nopgo \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1065,6 +1066,33 @@ profile-build: $(NNUE_TARGET) config-sanity objclean profileclean
 	@echo "Step 4/4. Deleting profile data ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) profileclean
 endif
+
+# Build a Mach-O universal binary while keeping the existing Wordfish ISA-aware
+# executable names used by each thin slice.
+MACOS_X86_EXE   := Wordfish-$(RELEASE_TAG)-x86-64-universal
+MACOS_ARM64_EXE := Wordfish-$(RELEASE_TAG)-apple-silicon
+MACOS_LIPO_EXE  := Wordfish-$(RELEASE_TAG)-macos-universal
+
+# Default network filename, read from evaluate.h's EvalFileDefaultName.
+macos-lipo: NNUE_NET = $(shell grep -oE 'nn-[0-9a-f]+\.nnue' $(CURDIR)/evaluate.h | head -1)
+macos-lipo:
+	@echo ""
+	@echo "Step 1/4. Building x86-64 slice (network shared from Apple-silicon slice) ..."
+	$(MAKE) build ARCH=x86-64-universal COMP=$(COMP) MACOS_X86_SLICE=1
+	mv $(MACOS_X86_EXE) $(MACOS_X86_EXE).slice
+	@echo ""
+	@echo "Step 2/4. Building Apple silicon slice ..."
+	$(MAKE) profile-build ARCH=apple-silicon COMP=$(COMP)
+	mv $(MACOS_ARM64_EXE) $(MACOS_ARM64_EXE).slice
+	@echo ""
+	@echo "Step 3/4. Combining slices and locating the embedded network ..."
+	lipo -create $(MACOS_X86_EXE).slice $(MACOS_ARM64_EXE).slice -output $(MACOS_LIPO_EXE)
+	$(SHELL) universal/patch_x86_slice.sh $(MACOS_LIPO_EXE) $(MACOS_X86_EXE).slice $(NNUE_NET)
+	@echo ""
+	@echo "Step 4/4. Re-combining slices with the patched x86-64 slice ..."
+	lipo -create $(MACOS_X86_EXE).slice $(MACOS_ARM64_EXE).slice -output $(MACOS_LIPO_EXE)
+	@rm -f $(MACOS_X86_EXE).slice $(MACOS_ARM64_EXE).slice
+	@echo "Universal macOS Wordfish binary built: $(MACOS_LIPO_EXE)"
 
 strip:
 	$(STRIP) $(EXE)
@@ -1277,7 +1305,13 @@ OBJCOPY               ?= objcopy
 arch-suffix     = $(subst -,_,$(1))
 arch-namespace  = Stockfish_$(call arch-suffix,$(1))
 arch-main       = Wordfish_$(call arch-suffix,$(1))_main
-arch-cxxflags   = -DStockfish=$(call arch-namespace,$(1)) -Dmain=$(call arch-main,$(1)) -Wno-missing-prototypes
+ifeq ($(MACOS_X86_SLICE),1)
+  MACOS_SLICE_FLAGS := -DUNIVERSAL_BINARY -DUNIVERSAL_BINARY_MACOS_X86_SLICE
+  MACOS_NNUE_EMBED_OBJ := $(NNUE_EMBED_OBJ)
+endif
+
+arch-cxxflags   = -DStockfish=$(call arch-namespace,$(1)) -Dmain=$(call arch-main,$(1)) \
+                  $(MACOS_SLICE_FLAGS) -Wno-missing-prototypes
 
 build: $(UNIVERSAL_EXE)
 profile-build: $(UNIVERSAL_EXE)
@@ -1292,7 +1326,8 @@ $(UNIVERSAL_ENTRY_OBJ): $(UNIVERSAL_ENTRY_SRC) | $(TEMP_DIR)
 # validation matrix disables embedding, so slices retain Wordfish's existing
 # NNUE_EMBEDDING_OFF behavior and load EvalFileDefaultName from disk.
 $(NNUE_EMBED_OBJ): $(UNIVERSAL_SRC_DIR)/nnue_embed.cpp | $(TEMP_DIR)
-	$(CXX) -O2 -std=c++20 -Wno-c++26-extensions -c $< -o $@
+	$(CXX) -O2 -std=c++20 -Wno-c++26-extensions \
+		-DUNIVERSAL_BINARY_MACOS_X86_SLICE -c $< -o $@
 
 $(TEMP_DIR)/%/.setup: | $(TEMP_DIR)
 	@rm -rf $(TEMP_DIR)/$*
@@ -1310,8 +1345,8 @@ $(TEMP_DIR)/%/wordfish.o: $(TEMP_DIR)/%/.setup
 	$(OBJCOPY) --rename-section .init_array=$(call arch-suffix,$*)_init $@
 	$(OBJCOPY) --set-section-flags $(call arch-suffix,$*)_init=alloc,data $@
 
-$(UNIVERSAL_EXE): $(UNIVERSAL_ENTRY_OBJ) $(ARCH_OBJS)
-	$(CXX) -o $@ $(UNIVERSAL_ENTRY_OBJ) $(ARCH_OBJS) $(LDFLAGS)
+$(UNIVERSAL_EXE): $(UNIVERSAL_ENTRY_OBJ) $(ARCH_OBJS) $(MACOS_NNUE_EMBED_OBJ)
+	$(CXX) -o $@ $(UNIVERSAL_ENTRY_OBJ) $(ARCH_OBJS) $(MACOS_NNUE_EMBED_OBJ) $(LDFLAGS)
 	@echo "Universal Wordfish binary built: $@"
 
 endif
