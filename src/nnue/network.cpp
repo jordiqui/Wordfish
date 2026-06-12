@@ -98,7 +98,7 @@ void NetworkImpl<Arch, Transformer>::load(const std::string& rootDirectory, std:
                 load_user_net(directory, evalfilePath);
             }
 
-            if (directory == "<internal>" && evalfilePath == std::string(evalFile.defaultName))
+            else if (evalfilePath == std::string(evalFile.defaultName))
             {
                 load_internal();
             }
