@@ -193,7 +193,7 @@ class AffineTransformSparseInput {
     static constexpr IndexType PaddedOutputDimensions =
       ceil_to_multiple<IndexType>(OutputDimensions, MaxSimdWidth);
 
-#if (USE_SSSE3 | (USE_NEON >= 8))
+#if (defined(USE_SSSE3) || defined(USE_LSX) || defined(USE_LASX) || (USE_NEON >= 8))
     static constexpr IndexType ChunkSize = 4;
 #else
     static constexpr IndexType ChunkSize = 1;
@@ -216,7 +216,7 @@ class AffineTransformSparseInput {
     }
 
     static constexpr IndexType get_weight_index(IndexType i) {
-#if (USE_SSSE3 | (USE_NEON >= 8))
+#if (defined(USE_SSSE3) || defined(USE_LSX) || defined(USE_LASX) || (USE_NEON >= 8))
         return get_weight_index_scrambled(i);
 #else
         return i;
@@ -253,7 +253,7 @@ class AffineTransformSparseInput {
     // Forward propagation
     void propagate(const InputType* input, OutputType* output) const {
 
-#if (USE_SSSE3 | (USE_NEON >= 8))
+#if (defined(USE_SSSE3) || defined(USE_LSX) || defined(USE_LASX) || (USE_NEON >= 8))
     #if defined(USE_AVX512)
         using invec_t  = __m512i;
         using outvec_t = __m512i;
@@ -281,6 +281,18 @@ class AffineTransformSparseInput {
         using outvec_t = int32x4_t;
         #define vec_set_32(a) vreinterpretq_s8_u32(vdupq_n_u32(a))
         #define vec_add_dpbusd_32 SIMD::neon_m128_add_dpbusd_epi32
+    #elif defined(USE_LASX)
+        using invec_t  = __m256i;
+        using outvec_t = __m256i;
+        #define vec_add_32 __lasx_xvadd_w
+        #define vec_set_32 __lasx_xvreplgr2vr_w
+        #define vec_add_dpbusd_32 SIMD::lasx_m256_add_dpbusd_epi32
+    #elif defined(USE_LSX)
+        using invec_t  = __m128i;
+        using outvec_t = __m128i;
+        #define vec_add_32 __lsx_vadd_w
+        #define vec_set_32 __lsx_vreplgr2vr_w
+        #define vec_add_dpbusd_32 SIMD::lsx_m128_add_dpbusd_epi32
     #endif
         constexpr IndexType OutputSimdWidth = sizeof(outvec_t) / sizeof(OutputType);
         constexpr IndexType NumChunks = ceil_to_multiple<IndexType>(InputDimensions, 8) / ChunkSize;
@@ -288,7 +300,7 @@ class AffineTransformSparseInput {
         // If we're using high-latency dot product instructions, split the accumulators
         // to create 3 separate dependency chains and merge at the end
         constexpr IndexType NumRegs =
-    #if defined(USE_VNNI)
+    #if defined(USE_VNNI) || defined(USE_LASX)
           3 * NumAccums;
     #else
           NumAccums;
@@ -309,7 +321,7 @@ class AffineTransformSparseInput {
 
         // convince GCC to not do weird pointer arithmetic in the following loop
         const std::int8_t* weights_cp = weights;
-    #if defined(USE_VNNI)
+    #if defined(USE_VNNI) || defined(USE_LASX)
         for (IndexType k = NumAccums; k < NumRegs; ++k)
             acc[k] = vec_zero();
 
