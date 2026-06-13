@@ -27,6 +27,16 @@
 #include "types.h"
 #include "bitboard.h"
 
+#ifndef RESTRICT
+    #ifdef __GNUC__
+        #define RESTRICT __restrict__
+    #elif defined(_MSC_VER)
+        #define RESTRICT __restrict
+    #else
+        #define RESTRICT
+    #endif
+#endif
+
 #ifdef __aarch64__
     #include <arm_acle.h>
     #define USE_HYPERBOLA_QUINT
