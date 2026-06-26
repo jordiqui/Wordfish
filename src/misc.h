@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
@@ -316,6 +317,59 @@ class MultiArray {
 };
 
 
+// Wrapper around std::atomic<T> which uses relaxed accesses or plain
+// accesses, depending on the config. Intended use is e.g. wasm where
+// the overhead of atomic instructions can be significant, and we only
+// require non-tearing for the updates, while ensuring we use relaxed
+// accesses otherwise.
+template<typename T>
+class RelaxedAtomic {
+    static constexpr bool UseAtomic =
+#ifdef USE_SLOPPY_ATOMICS
+      !std::atomic<T>::is_always_lock_free || sizeof(T) > sizeof(size_t);
+#else
+      true;
+#endif
+
+   public:
+    RelaxedAtomic() = default;
+    RelaxedAtomic(T val) : inner(val) {}
+    RelaxedAtomic(const RelaxedAtomic& a) : inner(static_cast<T>(a)) {}
+
+    T operator=(T val) {
+        if constexpr (UseAtomic) inner.store(val, std::memory_order_relaxed);
+        else inner = val;
+        return val;
+    }
+    RelaxedAtomic& operator=(const RelaxedAtomic& a) {
+        store(static_cast<T>(a), std::memory_order_relaxed);
+        return *this;
+    }
+    operator T() const {
+        if constexpr (UseAtomic) return inner.load(std::memory_order_relaxed);
+        else return inner;
+    }
+    RelaxedAtomic& operator+=(int val) { store(load(std::memory_order_relaxed) + val, std::memory_order_relaxed); return *this; }
+    RelaxedAtomic& operator-=(int val) { store(load(std::memory_order_relaxed) - val, std::memory_order_relaxed); return *this; }
+    RelaxedAtomic& operator++() { store(load(std::memory_order_relaxed) + 1, std::memory_order_relaxed); return *this; }
+    RelaxedAtomic& operator--() { store(load(std::memory_order_relaxed) - 1, std::memory_order_relaxed); return *this; }
+    T operator++(int) { T val = load(std::memory_order_relaxed); store(val + 1, std::memory_order_relaxed); return val; }
+    T operator--(int) { T val = load(std::memory_order_relaxed); store(val - 1, std::memory_order_relaxed); return val; }
+    T load(std::memory_order order) const {
+        assert(order == std::memory_order_relaxed);
+        if constexpr (UseAtomic) return inner.load(order);
+        else return inner;
+    }
+    void store(T val, std::memory_order order) {
+        assert(order == std::memory_order_relaxed);
+        if constexpr (UseAtomic) inner.store(val, order);
+        else inner = val;
+    }
+
+   private:
+    std::conditional_t<UseAtomic, std::atomic<T>, T> inner;
+};
+
 // xorshift64star Pseudo-Random Number Generator
 // This class is based on original code written and dedicated
 // to the public domain by Sebastiano Vigna (2014).
@@ -361,7 +415,7 @@ class PRNG {
 };
 
 inline uint64_t mul_hi64(uint64_t a, uint64_t b) {
-#if defined(__GNUC__) && defined(IS_64BIT)
+#if defined(__GNUC__) && defined(IS_64BIT) && !defined(__wasm__)
     __extension__ using uint128 = unsigned __int128;
     return (uint128(a) * uint128(b)) >> 64;
 #else

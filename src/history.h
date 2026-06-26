@@ -62,13 +62,13 @@ inline uint16_t non_pawn_index(const Position& pos) {
 // the entry. The first template parameter T is the base type of the array,
 // and the second template parameter D limits the range of updates in [-D, D]
 // when we update values with the << operator
-template<typename T, int D>
+template<typename T, int D, bool Shared = false>
 class StatsEntry {
 
     static_assert(std::is_arithmetic_v<T>, "Not an arithmetic type");
     static_assert(D <= std::numeric_limits<T>::max(), "D overflows T");
 
-    T entry;
+    std::conditional_t<Shared, RelaxedAtomic<T>, T> entry;
 
    public:
     StatsEntry& operator=(const T& v) {
