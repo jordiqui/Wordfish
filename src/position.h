@@ -159,6 +159,7 @@ class Position {
 
     // Accessing hash keys
     Key key() const;
+    Key prefetch_key(Move m) const;
     Key material_key() const;
     Key pawn_key() const;
     Key minor_piece_key() const;
@@ -206,7 +207,8 @@ class Position {
                      Square&             rto,
                      DirtyThreats* const dts = nullptr,
                      DirtyPiece* const   dp  = nullptr);
-    Key  adjust_key50(Key k) const;
+    template<bool AfterMove = false>
+    Key adjust_key50(Key k) const;
 
     // Data members
     std::array<Piece, SQUARE_NB>        board;
@@ -312,8 +314,9 @@ inline Bitboard Position::check_squares(PieceType pt) const { return st->checkSq
 
 inline Key Position::key() const { return adjust_key50(st->key); }
 
+template<bool AfterMove>
 inline Key Position::adjust_key50(Key k) const {
-    return st->rule50 < 14 ? k : k ^ make_key((st->rule50 - 14) / 8);
+    return st->rule50 < 14 - AfterMove ? k : k ^ make_key((st->rule50 - (14 - AfterMove)) / 8);
 }
 
 inline Key Position::pawn_key() const { return st->pawnKey; }
