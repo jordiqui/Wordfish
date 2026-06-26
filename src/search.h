@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -141,10 +142,12 @@ struct SharedState {
     SharedState(const OptionsMap&                                         optionsMap,
                 ThreadPool&                                               threadPool,
                 TranspositionTable&                                       transpositionTable,
+                std::map<NumaIndex, SharedHistories>&                     sharedHistories,
                 const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& nets) :
         options(optionsMap),
         threads(threadPool),
         tt(transpositionTable),
+        sharedHistories(sharedHistories),
         networks(nets) {}
 
     const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& nnue_networks() const {
@@ -154,6 +157,7 @@ struct SharedState {
     const OptionsMap&                                         options;
     ThreadPool&                                               threads;
     TranspositionTable&                                       tt;
+    std::map<NumaIndex, SharedHistories>&                     sharedHistories;
     const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& networks;
 };
 
@@ -293,14 +297,13 @@ class Worker {
 
     CapturePieceToHistory captureHistory;
     ContinuationHistory   continuationHistory[2][2];
-    PawnHistory           pawnHistory;
-
     CorrectionHistory<Pawn>         pawnCorrectionHistory;
     CorrectionHistory<Minor>        minorPieceCorrectionHistory;
     CorrectionHistory<NonPawn>      nonPawnCorrectionHistory;
     CorrectionHistory<Continuation> continuationCorrectionHistory;
 
     TTMoveHistory ttMoveHistory;
+    SharedHistories& sharedHistory;
 
    private:
    void iterative_deepening();

@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -122,6 +123,7 @@ class Engine {
     OptionsMap                                         options;
     ThreadPool                                         threads;
     TranspositionTable                                 tt;
+    std::map<NumaIndex, SharedHistories>               sharedHists;
     LazyNumaReplicatedSystemWide<Eval::NNUE::Network> networks;
 
     Search::SearchManager::UpdateContext  updateContext;
