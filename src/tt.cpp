@@ -65,12 +65,12 @@ struct TTEntry {
     friend class TranspositionTable;
     friend struct TTWriter;
 
-    uint16_t key16;
-    uint8_t  depth8;
-    uint8_t  genBound8;
-    Move     move16;
-    int16_t  value16;
-    int16_t  eval16;
+    RelaxedAtomic<uint16_t> key16;
+    RelaxedAtomic<uint8_t>  depth8;
+    RelaxedAtomic<uint8_t>  genBound8;
+    RelaxedAtomic<Move>     move16;
+    RelaxedAtomic<int16_t>  value16;
+    RelaxedAtomic<int16_t>  eval16;
 };
 
 // `genBound8` is where most of the details are. We use the following constants to manipulate 5 leading generation bits
