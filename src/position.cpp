@@ -725,8 +725,6 @@ void Position::do_move(Move                      m,
     dp.from           = from;
     dp.to             = to;
     dp.add_sq         = SQ_NONE;
-    dts.us            = us;
-    dts.prevKsq       = square<KING>(us);
     dts.threatenedSqs = dts.threateningSqs = 0;
 
     assert(color_of(pc) == us);
@@ -966,7 +964,6 @@ void Position::do_move(Move                      m,
         }
     }
 
-    dts.ksq = square<KING>(us);
 
     assert(pos_is_ok());
 
