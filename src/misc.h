@@ -349,8 +349,8 @@ class RelaxedAtomic {
         if constexpr (UseAtomic) return inner.load(std::memory_order_relaxed);
         else return inner;
     }
-    RelaxedAtomic& operator+=(int val) { store(load(std::memory_order_relaxed) + val, std::memory_order_relaxed); return *this; }
-    RelaxedAtomic& operator-=(int val) { store(load(std::memory_order_relaxed) - val, std::memory_order_relaxed); return *this; }
+    RelaxedAtomic& operator+=(T val) { store(load(std::memory_order_relaxed) + val, std::memory_order_relaxed); return *this; }
+    RelaxedAtomic& operator-=(T val) { store(load(std::memory_order_relaxed) - val, std::memory_order_relaxed); return *this; }
     RelaxedAtomic& operator++() { store(load(std::memory_order_relaxed) + 1, std::memory_order_relaxed); return *this; }
     RelaxedAtomic& operator--() { store(load(std::memory_order_relaxed) - 1, std::memory_order_relaxed); return *this; }
     T operator++(int) { T val = load(std::memory_order_relaxed); store(val + 1, std::memory_order_relaxed); return val; }

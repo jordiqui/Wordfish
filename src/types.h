@@ -323,8 +323,6 @@ using DirtyThreatList = ValueList<DirtyThreat, 80>;
 
 struct DirtyThreats {
     DirtyThreatList list;
-    Color           us;
-    Square          prevKsq, ksq;
 
     Bitboard threatenedSqs, threateningSqs;
 };
