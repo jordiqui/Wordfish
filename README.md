@@ -4,12 +4,12 @@
 
 ## Overview
 
-Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-5.0-120626**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
+Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It retains the parent engine's search strength while adding dual-network neural evaluation, a persistent experience store, and configurable Monte Carlo search. The current release is **Wordfish-5.10-260626**, tuned around the latest Stockfish evaluation networks. The codebase is engineered for reproducible testing, efficient NUMA-aware threading, and transparent diagnostics.
 
-## What's new in 5.0-120626
+## What's new in 5.10-260626
 
-- Rebranded the engine to **Wordfish-5.0-120626** so executable filenames and GUI analysis headers include the compiled-in architecture suffix, such as `Wordfish-5.0-120626-sse41popcnt`, `Wordfish-5.0-120626-avx2`, `Wordfish-5.0-120626-bmi2`, `Wordfish-5.0-120626-fma3`, or `Wordfish-5.0-120626-avx512`.
-- Updated the main NNUE evaluator to `nn-2962dca31855.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
+- Rebranded the engine to **Wordfish-5.10-260626** so executable filenames and GUI analysis headers include the compiled-in architecture suffix, such as `Wordfish-5.10-260626-sse41popcnt`, `Wordfish-5.10-260626-avx2`, `Wordfish-5.10-260626-bmi2`, `Wordfish-5.10-260626-fma3`, or `Wordfish-5.10-260626-avx512`.
+- Updated the main NNUE evaluator to `nn-f8a759c05f9f.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
 - Emphasized king safety, rook coordination, and supervised endgame patterns in recent network training and handcrafted heuristics.
 - Tightened king-safety heuristics around open files, rook lifts, and dark-square weaknesses while rewarding coordinated rooks and discouraging premature flank pawn storms.
 - Reduced aggressive pruning in sharp positions and introduced a verification search to confirm large swings in evaluation, improving stability in complicated lines.
