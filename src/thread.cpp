@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cassert>
 #include <deque>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -37,6 +38,17 @@
 #include "ucioption.h"
 
 namespace Stockfish {
+
+namespace {
+
+size_t next_power_of_two(size_t n) {
+    size_t result = 1;
+    while (result < n)
+        result <<= 1;
+    return result;
+}
+
+}
 
 // Constructor launches the thread and waits until it goes to sleep
 // in idle_loop(). Note that 'searching' and 'exit' should be already set.
@@ -176,6 +188,30 @@ void ThreadPool::set(const NumaConfig&                           numaConfig,
         boundThreadToNumaNode = doBindThreads
                                 ? numaConfig.distribute_threads_among_numa_nodes(requested)
                                 : std::vector<NumaIndex>{};
+
+        std::map<NumaIndex, size_t> counts;
+        if (boundThreadToNumaNode.empty())
+            counts[0] = requested;
+        else
+        {
+            for (NumaIndex n : boundThreadToNumaNode)
+                counts[n]++;
+        }
+
+        sharedState.sharedHistories.clear();
+        for (const auto& countEntry : counts)
+        {
+            const NumaIndex numaIndex = countEntry.first;
+            const size_t    count     = countEntry.second;
+            auto allocate = [&]() {
+                sharedState.sharedHistories.try_emplace(numaIndex, next_power_of_two(count));
+            };
+
+            if (doBindThreads)
+                numaConfig.execute_on_numa_node(numaIndex, allocate);
+            else
+                allocate();
+        }
 
         while (threads.size() < requested)
         {
