@@ -198,7 +198,7 @@ void TranspositionTable::clear(ThreadPool& threads) {
             const size_t start  = stride * i;
             const size_t len    = i + 1 != threadCount ? stride : clusterCount - start;
 
-            std::memset(&table[start], 0, len * sizeof(Cluster));
+            std::memset(static_cast<void*>(&table[start]), 0, len * sizeof(Cluster));
         });
     }
 
