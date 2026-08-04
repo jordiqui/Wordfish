@@ -46,7 +46,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-RELEASE_TAG ?= 5.10-260626
+RELEASE_TAG ?= 5.20-040826
 
 ### Installation dir definitions
 PREFIX = /usr/local

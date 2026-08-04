@@ -4,7 +4,7 @@
 #include <string_view>
 
 #ifndef ENGINE_NAME
-    #define ENGINE_NAME "Wordfish 5.10-260626"
+    #define ENGINE_NAME "Wordfish-5.20-040826"
 #endif
 
 #ifndef ENGINE_BUILD_DATE
