@@ -1364,7 +1364,7 @@ UNIVERSAL_ENTRY_SRC   := $(UNIVERSAL_SRC_DIR)/entry_x86.cpp
 endif
 NNUE_EMBED_OBJ        := $(TEMP_DIR)/nnue_embed.o
 ARCH_OBJS             := $(patsubst %,$(TEMP_DIR)/%/wordfish.o,$(UNIVERSAL_ARCHES))
-TRACKED_TOP            = $(sort $(foreach f,$(SRCS) $(HEADERS) Makefile incbin shm.h shm_linux.h shm_win.h,\
+TRACKED_TOP            = $(sort $(foreach f,$(SRCS) $(HEADERS) Makefile incbin shm.h shm_unix.h shm_win.h,\
                                   $(firstword $(subst /, ,$(f)))))
 ifeq ($(COMP),clang)
 OBJCOPY               ?= llvm-objcopy
