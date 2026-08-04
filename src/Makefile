@@ -949,7 +949,8 @@ ifneq ($(GIT_DATE), )
 endif
 
 ### Detect tracked changes relative to HEAD for versioning
-GIT_DIFFINDEX := $(shell git diff-index --quiet HEAD -- 2>/dev/null; \
+GIT_DIFFINDEX := $(shell git update-index --refresh >/dev/null 2>&1; \
+	git -c core.filemode=false -c core.autocrlf=false diff-index --quiet HEAD -- 2>/dev/null; \
 	[ $$? -eq 1 ] && echo 1 || true)
 
 ifneq ($(GIT_DIFFINDEX), )

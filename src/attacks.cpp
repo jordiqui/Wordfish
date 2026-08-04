@@ -24,10 +24,6 @@
 
 namespace Stockfish::Attacks {
 
-#ifdef USE_DUAL_HYPERBOLA_QUINT
-alignas(64) DualMagic DualMagics[SQUARE_NB];
-#endif
-
 Bitboard LineBB[SQUARE_NB][SQUARE_NB];
 Bitboard BetweenBB[SQUARE_NB][SQUARE_NB];
 Bitboard RayPassBB[SQUARE_NB][SQUARE_NB];
@@ -40,12 +36,12 @@ alignas(64) Magic Magics[SQUARE_NB][2];
 
 }
 
-[[maybe_unused]] static Bitboard line_mask(Square sq, Direction d1, Direction d2) {
-    Bitboard mask = 0, dest;
+[[maybe_unused]] static constexpr Bitboard line_mask(Square sq, Direction d1, Direction d2) {
+    Bitboard mask = 0;
     for (Direction d : {d1, d2})
     {
         Square s = sq;
-        while ((dest = safe_destination(s, d)))
+        while (Bitboard dest = safe_destination(s, d))
         {
             mask |= dest;
             s += d;
@@ -71,12 +67,13 @@ static void init_magics(Magic magics[][2]) {
 #elif defined(USE_DUAL_HYPERBOLA_QUINT)
 
 // Sliding attacks within a rank, indexed by the slider's file and the
-// 8-bit rank occupancy, yielding the 8-bit attack set on that rank
-[[maybe_unused]] constexpr auto RankAttacks = []() {
-    std::array<std::array<std::uint8_t, 256>, FILE_NB> table{};
+// 6 inner bits of the rank occupancy (edge squares never affect the
+// attack set), yielding the 8-bit attack set on that rank
+alignas(64) constexpr auto RankAttacks = []() {
+    std::array<std::array<std::uint8_t, 64>, FILE_NB> table{};
     for (int file = 0; file < 8; ++file)
-        for (int occ = 0; occ < 256; ++occ)
-            table[file][occ] = std::uint8_t(sliding_attack(ROOK, Square(file), occ));
+        for (int occ6 = 0; occ6 < 64; ++occ6)
+            table[file][occ6] = std::uint8_t(sliding_attack(ROOK, Square(file), occ6 << 1));
     return table;
 }();
 
@@ -93,7 +90,10 @@ static void init_dual_magics(DualMagic magics[]) {
         m.rankAttacksLookup = RankAttacks[int(file_of(s))].data();
         m.shift             = 8 * int(rank_of(s));
     }
+    return magics;
 }
+
+alignas(64) extern constexpr std::array<DualMagic, SQUARE_NB> DualMagics = make_dual_magics();
 
 #else
 
@@ -164,9 +164,7 @@ void init() {
 
 #ifdef USE_HYPERBOLA_QUINT
     init_magics(Magics);
-#elif defined(USE_DUAL_HYPERBOLA_QUINT)
-    init_dual_magics(DualMagics);
-#else
+#elif !defined(USE_DUAL_HYPERBOLA_QUINT)
     init_magics(ROOK, RookTable.data(), Magics);
     init_magics(BISHOP, BishopTable.data(), Magics);
 #endif
