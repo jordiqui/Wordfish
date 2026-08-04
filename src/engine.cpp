@@ -22,6 +22,7 @@
 #include <cassert>
 #include <charconv>
 #include <deque>
+#include <filesystem>
 #include <iosfwd>
 #include <memory>
 #include <ostream>
@@ -61,11 +62,9 @@ constexpr NumaAutoPolicy DefaultNumaPolicy = SystemNumaPolicy{};
 
 namespace {
 
-const char* primary_default_network_file() { return EvalFileDefaultName; }
-
-
-void load_primary_network(NN::Network& networks, const std::string& binaryDirectory, const std::string& file) {
-    networks.load(binaryDirectory, file);
+void load_primary_network(NN::Network& network, const std::filesystem::path& binaryDirectory,
+                          const std::filesystem::path& file, NN::EvalFile& networkFile) {
+    network.load(binaryDirectory, file, networkFile);
 }
 
 std::optional<size_t> parse_l3_bundle_size(std::string_view value) {
@@ -79,21 +78,19 @@ std::optional<size_t> parse_l3_bundle_size(std::string_view value) {
 
 }  // namespace
 
-Engine::Engine(std::optional<std::string> path) :
-    binaryDirectory(path ? CommandLine::get_binary_directory(*path) : ""),
+Engine::Engine(std::optional<std::filesystem::path> path) :
+    binaryDirectory(path ? CommandLine::get_binary_directory(*path) : std::filesystem::path{}),
     numaContext(NumaConfig::from_system(DefaultNumaPolicy)),
     states(new std::deque<StateInfo>(1)),
     threads(),
-    networks(
-      numaContext,
-      // Heap-allocate because sizeof(NN::Network) is large
-      std::make_unique<NN::Network>(NN::EvalFile{primary_default_network_file(), "None", ""})) {
+    networkFile{std::nullopt, ""},
+    networks(numaContext) {
 
     pos.set(StartFEN, false, &states->back());
 
     options.add(  //
       "Debug Log File", Option("", [](const Option& o) {
-          start_logger(o);
+          start_logger(path_from_utf8(std::string(o)));
           return std::nullopt;
       }));
 
@@ -212,10 +209,11 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultName, [this](const Option& o) {
-          load_network(o);
+          load_network(path_from_utf8(std::string(o)));
           return std::nullopt;
       }));
 
+    networks = std::make_unique<NN::Network>();
     load_network();
     Experience::update_settings(options);
     resize_threads();
@@ -389,7 +387,8 @@ void Engine::verify_network() const {
     if (!networksNeedVerification)
         return;
 
-    networks->verify(options["EvalFile"], onVerifyNetwork);
+    networks->verify(onVerifyNetwork, networkFile,
+                     path_from_utf8(std::string(options["EvalFile"])));
 
     auto statuses = networks.get_status_and_errors();
     for (size_t i = 0; i < statuses.size(); ++i)
@@ -426,20 +425,21 @@ void Engine::verify_network() const {
 
 void Engine::load_network() {
     networks.modify_and_replicate([this](NN::Network& networks_) {
-        load_primary_network(networks_, binaryDirectory, std::string(options["EvalFile"]));
+        load_primary_network(networks_, binaryDirectory,
+                             path_from_utf8(std::string(options["EvalFile"])), networkFile);
     });
     threads.clear();
     networksNeedVerification = true;
     threads.ensure_network_replicated();
 }
 
-void Engine::load_network(const std::string& file) {
+void Engine::load_network(const std::filesystem::path& file) {
     load_big_network(file);
 }
 
-void Engine::load_big_network(const std::string& file) {
+void Engine::load_big_network(const std::filesystem::path& file) {
     networks.modify_and_replicate([this, &file](NN::Network& networks_) {
-        load_primary_network(networks_, binaryDirectory, file);
+        load_primary_network(networks_, binaryDirectory, file, networkFile);
     });
     threads.clear();
     networksNeedVerification = true;
@@ -447,10 +447,9 @@ void Engine::load_big_network(const std::string& file) {
 }
 
 
-void Engine::save_network(const std::pair<std::optional<std::string>, std::string> files[2]) {
-    networks.modify_and_replicate([&files](NN::Network& networks_) {
-        networks_.save(files[0].first);
-    });
+void Engine::save_network(const std::optional<std::filesystem::path>& file) {
+    networks.modify_and_replicate(
+      [this, &file](NN::Network& network) { network.save(networkFile, file); });
 }
 
 // utility functions
