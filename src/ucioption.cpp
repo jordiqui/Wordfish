@@ -90,9 +90,6 @@ void OptionsMap::add(const std::string& name, const Option& option) {
 
 std::size_t OptionsMap::count(const std::string& name) const { return options_map.count(name); }
 
-Option::Option(const OptionsMap* map) :
-    parent(map) {}
-
 Option::Option(const char* v, OnChange f) :
     type("string"),
     min(0),

@@ -32,6 +32,7 @@
 #include "layers/clipped_relu.h"
 #include "layers/sqr_clipped_relu.h"
 #include "nnue_common.h"
+#include "nnz_helper.h"
 
 namespace Stockfish::Eval::NNUE {
 
@@ -100,7 +101,8 @@ struct NetworkArchitecture {
             && fc_2.write_parameters(stream);
     }
 
-    std::int32_t propagate(const TransformedFeatureType* transformedFeatures) const {
+    std::int32_t propagate(const TransformedFeatureType* transformedFeatures,
+                           const NNZInfo<L1>&            nnzInfo) const {
         struct alignas(CacheLineSize) Buffer {
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
             alignas(CacheLineSize) typename decltype(ac_sqr_0)::OutputType
@@ -112,13 +114,23 @@ struct NetworkArchitecture {
 
         Buffer buffer;
 
-        fc_0.propagate(transformedFeatures, buffer.fc_0_out);
+        fc_0.propagate(transformedFeatures, buffer.fc_0_out, nnzInfo);
+#if defined(USE_PAIR_ACTIVATIONS)
+        ac_sqr_0.propagate_pair(buffer.fc_0_out, buffer.concat_buffer,
+                                buffer.concat_buffer + FC_0_OUTPUTS);
+#else
         ac_sqr_0.propagate(buffer.fc_0_out, buffer.concat_buffer);
         ac_0.propagate(buffer.fc_0_out, buffer.concat_buffer + FC_0_OUTPUTS);
+#endif
         fc_1.propagate(buffer.concat_buffer, buffer.fc_1_out);
+#if defined(USE_PAIR_ACTIVATIONS)
+        ac_sqr_1.propagate_pair(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2,
+                                buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
+#else
         ac_sqr_1.propagate(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2);
         ac_1.propagate(buffer.fc_1_out,
                        buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
+#endif
         fc_2.propagate(buffer.concat_buffer, buffer.fc_2_out);
 
         static_assert(FC_0_OUTPUTS >= 2);

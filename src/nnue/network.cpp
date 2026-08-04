@@ -36,6 +36,7 @@
 #include "nnue_architecture.h"
 #include "nnue_common.h"
 #include "nnue_misc.h"
+#include "nnz_helper.h"
 
 // Macro to embed the default efficiently updatable neural network (NNUE) file
 // data in the engine binary (using incbin.h, by Dale Weiler).
@@ -140,10 +141,11 @@ NetworkImpl<Arch, Transformer>::evaluate(const Position&                        
 
     ASSERT_ALIGNED(transformedFeatures, alignment);
 
+    NNZInfo<FTDimensions> nnzInfo;
     const int  bucket = (pos.count<ALL_PIECES>() - 1) / 4;
     const auto psqt =
-      featureTransformer.transform(pos, accumulatorStack, cache, transformedFeatures, bucket);
-    const auto positional = network[bucket].propagate(transformedFeatures);
+      featureTransformer.transform(pos, accumulatorStack, cache, transformedFeatures, bucket, nnzInfo);
+    const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo);
     return {static_cast<Value>(psqt / OutputScale), static_cast<Value>(positional / OutputScale)};
 }
 
@@ -207,9 +209,10 @@ NetworkImpl<Arch, Transformer>::trace_evaluate(const Position&                  
     t.correctBucket = (pos.count<ALL_PIECES>() - 1) / 4;
     for (IndexType bucket = 0; bucket < LayerStacks; ++bucket)
     {
-        const auto materialist =
-          featureTransformer.transform(pos, accumulatorStack, cache, transformedFeatures, bucket);
-        const auto positional = network[bucket].propagate(transformedFeatures);
+        NNZInfo<FTDimensions> nnzInfo;
+        const auto materialist = featureTransformer.transform(
+          pos, accumulatorStack, cache, transformedFeatures, bucket, nnzInfo);
+        const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo);
 
         t.psqt[bucket]       = static_cast<Value>(materialist / OutputScale);
         t.positional[bucket] = static_cast<Value>(positional / OutputScale);
