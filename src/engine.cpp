@@ -96,7 +96,8 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 
     options.add(  //
       "NumaPolicy", Option("auto", [this](const Option& o) {
-          set_numa_config_from_option(o);
+          if (!set_numa_config_from_option(o))
+              return "NumaPolicy: invalid value '" + std::string(o) + "', keeping previous config.";
           return numa_config_information_as_string() + "\n"
                + thread_allocation_information_as_string();
       }));
@@ -219,7 +220,8 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     resize_threads();
 }
 
-std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
+std::variant<std::uint64_t, PositionSetError>
+Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
     verify_network();
 
     return Benchmark::perft(fen, depth, isChess960);
@@ -336,7 +338,7 @@ std::optional<PositionSetError> Engine::set_position(const std::string&         
 
 // modifiers
 
-void Engine::set_numa_config_from_option(const std::string& o) {
+bool Engine::set_numa_config_from_option(const std::string& o) {
     if (o == "auto" || o == "system")
         numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy));
     else if (o == "hardware")
@@ -347,17 +349,23 @@ void Engine::set_numa_config_from_option(const std::string& o) {
     {
         const auto bundleSize = parse_l3_bundle_size(std::string_view(o).substr(3));
         if (!bundleSize)
-            std::exit(EXIT_FAILURE);
+            return false;
         numaContext.set_numa_config(NumaConfig::from_system(BundledL3Policy{*bundleSize}));
     }
     else if (o == "none")
         numaContext.set_numa_config(NumaConfig{});
     else
-        numaContext.set_numa_config(NumaConfig::from_string(o));
+    {
+        auto parsed = NumaConfig::from_string(o);
+        if (!parsed)
+            return false;
+        numaContext.set_numa_config(std::move(*parsed));
+    }
 
     // Force reallocation of threads in case affinities need to change.
     resize_threads();
     threads.ensure_network_replicated();
+    return true;
 }
 
 void Engine::resize_threads() {
@@ -469,7 +477,7 @@ OptionsMap&       Engine::get_options() { return options; }
 
 std::string Engine::fen() const { return pos.fen(); }
 
-void Engine::flip() { pos.flip(); }
+std::optional<PositionSetError> Engine::flip() { return pos.flip(); }
 
 std::string Engine::visualize() const {
     std::stringstream ss;

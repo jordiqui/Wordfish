@@ -117,8 +117,7 @@ void init_magics(PieceType pt, Bitboard table[], Magic magics[][2]) {
         m.attacks        = s == SQ_A1 ? table : magics[s - 1][pt - BISHOP].attacks + size;
         size             = 0;
 
-        Bitboard                  b           = 0;
-        [[maybe_unused]] Bitboard prevSliding = -1;
+        Bitboard b = 0;
         do
         {
             occupancy[size] = b;

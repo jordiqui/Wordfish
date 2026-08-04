@@ -107,8 +107,8 @@ inline int H1(Key h) { return h & 0x1fff; }
 inline int H2(Key h) { return (h >> 16) & 0x1fff; }
 
 // Cuckoo tables with Zobrist hashes of valid reversible moves, and the moves themselves
-std::array<Key, 8192>  cuckoo;
-std::array<Move, 8192> cuckooMove;
+static std::array<Key, 8192>  cuckoo;
+static std::array<Move, 8192> cuckooMove;
 
 // Initializes at startup the various arrays used to compute hash keys
 void Position::init() {
@@ -1452,7 +1452,7 @@ bool Position::upcoming_repetition(int ply) const {
 
 // Flips position with the white and black sides reversed. This
 // is only useful for debugging e.g. for finding evaluation symmetry bugs.
-void Position::flip() {
+std::optional<PositionSetError> Position::flip() {
 
     string            f, token;
     std::stringstream ss(fen());
@@ -1478,9 +1478,7 @@ void Position::flip() {
     std::getline(ss, token);  // Half and full moves
     f += token;
 
-    set(f, is_chess960(), st);
-
-    assert(pos_is_ok());
+    return set(f, is_chess960(), st);
 }
 
 
@@ -1518,7 +1516,6 @@ bool Position::pos_is_ok() const {
             if (p1 != p2 && (pieces(p1) & pieces(p2)))
                 assert(0 && "pos_is_ok: Bitboards");
 
-
     for (Piece pc : Pieces)
         if (pieceCount[pc] != popcount(pieces(color_of(pc), type_of(pc)))
             || pieceCount[pc] != std::count(board.begin(), board.end(), pc))
@@ -1530,7 +1527,7 @@ bool Position::pos_is_ok() const {
             if (!can_castle(cr))
                 continue;
 
-            if (piece_on(castlingRookSquare[cr]) != make_piece(c, ROOK)
+            if (piece_on(castling_rook_square(cr)) != make_piece(c, ROOK)
                 || castlingRightsMask[castlingRookSquare[cr]] != cr
                 || (castlingRightsMask[square<KING>(c)] & cr) != cr)
                 assert(0 && "pos_is_ok: Castling");

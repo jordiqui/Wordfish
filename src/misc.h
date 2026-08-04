@@ -118,7 +118,7 @@ void start_logger(const std::filesystem::path& fname);
 std::string           utf8_from_wstring(std::wstring_view s);
 std::filesystem::path path_from_utf8(const std::string& path);
 
-size_t str_to_size_t(const std::string& s);
+std::optional<size_t> str_to_size_t(const std::string& s);
 
 #if defined(__linux__)
 
