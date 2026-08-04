@@ -147,7 +147,16 @@ class Logger {
 
 
 std::string engine_version_info() {
-    return std::string(base) + "-" + std::string(arch_tag());
+    std::string version(base);
+
+#ifdef GIT_DIFFINDEX
+    version += "-m";
+#endif
+
+    version += "-";
+    version += arch_tag();
+
+    return version;
 }
 
 std::string engine_info(bool to_uci) {

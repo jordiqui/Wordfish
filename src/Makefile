@@ -951,6 +951,14 @@ ifneq ($(GIT_DATE), )
 	CXXFLAGS += -DGIT_DATE=$(GIT_DATE)
 endif
 
+### Detect tracked changes relative to HEAD for versioning
+GIT_DIFFINDEX := $(shell git diff-index --quiet HEAD -- 2>/dev/null; \
+	[ $$? -eq 1 ] && echo 1 || true)
+
+ifneq ($(GIT_DIFFINDEX), )
+	CXXFLAGS += -DGIT_DIFFINDEX=1
+endif
+
 ### 3.8.3 Try to include architecture
 ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
