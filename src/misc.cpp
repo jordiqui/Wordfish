@@ -526,7 +526,7 @@ std::optional<size_t> str_to_size_t(const std::string& s) {
     errno = 0;
     char* end = nullptr;
     const unsigned long long value = std::strtoull(s.c_str(), &end, 10);
-    if (errno == ERANGE || end == s.c_str() || *end != '\0'
+    if (errno == ERANGE || end == s.c_str() || (*end != '\0' && !std::isspace(static_cast<unsigned char>(*end)))
         || value > std::numeric_limits<size_t>::max())
         return std::nullopt;
     return static_cast<size_t>(value);
