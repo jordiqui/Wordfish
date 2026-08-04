@@ -549,6 +549,7 @@ endif
 
 ifeq ($(COMP),mingw)
 	comp=mingw
+	CXXFLAGS += -fno-ipa-cp-clone
 
 	ifeq ($(bits),64)
 		ifeq ($(shell which x86_64-w64-mingw32-c++-posix 2> /dev/null),)

@@ -21,7 +21,6 @@
 #include <utility>
 
 #include "attacks.h"
-#include "bitboard.h"
 #include "misc.h"
 #include "position.h"
 #include "tune.h"
@@ -33,7 +32,6 @@ int main(int argc, char* argv[]) {
     std::cout << engine_version_info() << std::endl;
     std::cout << "Developed by " << engine_author_info() << std::endl;
 
-    Bitboards::init();
     Attacks::init();
     Position::init();
 
