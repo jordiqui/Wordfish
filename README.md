@@ -9,7 +9,7 @@ Wordfish is a Universal Chess Interface (UCI) engine derived from Stockfish. It 
 ## What's new in 5.10-260626
 
 - Rebranded the engine to **Wordfish-5.10-260626** so executable filenames and GUI analysis headers include the compiled-in architecture suffix, such as `Wordfish-5.10-260626-sse41popcnt`, `Wordfish-5.10-260626-avx2`, `Wordfish-5.10-260626-bmi2`, `Wordfish-5.10-260626-fma3`, or `Wordfish-5.10-260626-avx512`.
-- Updated the main NNUE evaluator to `nn-af1339a6dea3.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
+- Updated the main NNUE evaluator to `nn-0ee0657fb25e.nnue` from Stockfish dev 20251130, keeping the paired small network in sync for dual-network evaluation.
 - Emphasized king safety, rook coordination, and supervised endgame patterns in recent network training and handcrafted heuristics.
 - Tightened king-safety heuristics around open files, rook lifts, and dark-square weaknesses while rewarding coordinated rooks and discouraging premature flank pawn storms.
 - Reduced aggressive pruning in sharp positions and introduced a verification search to confirm large swings in evaluation, improving stability in complicated lines.
