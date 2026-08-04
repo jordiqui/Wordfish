@@ -37,6 +37,23 @@ set_arch_loongarch64() {
   fi
 }
 
+# Populate $flags from the RISC-V ISA string.
+get_riscv_flags() {
+  isa=$(awk -F: '/^isa[ \t]*:/{print $2; exit}' /proc/cpuinfo 2>/dev/null || true)
+  flags=$(printf '%s\n' "$isa" | tr '[:upper:]' '[:lower:]' | awk '{
+    gsub(/^[ \t]*rv(32|64)/, ""); n=split($0, ext, "_"); out="";
+    for (i=1; i<=length(ext[1]); i++) out=out " " substr(ext[1],i,1);
+    for (i=2; i<=n; i++) out=out " " ext[i]; print out
+  }')
+  flags=$(normalize_ws "$flags")
+}
+
+set_arch_riscv64() {
+  get_riscv_flags
+  if check_flags 'v' 'zba' 'zbb' 'zbs' 'zicond'; then true_arch='riscv64-rva23';
+  else true_arch='riscv64'; fi
+}
+
 # Set the file CPU x86_64 architecture
 set_arch_x86_64() {
   if check_flags 'avx512f' 'avx512cd' 'avx512vl' 'avx512dq' 'avx512bw' 'avx512ifma' 'avx512vbmi' 'avx512vbmi2' 'avx512vpopcntdq' 'avx512bitalg' 'avx512vnni' 'vpclmulqdq' 'gfni' 'vaes'; then
@@ -126,6 +143,10 @@ case $uname_s in
       'loongarch64'*)
         file_os='linux'
         set_arch_loongarch64
+        ;;
+      'riscv64')
+        file_os='linux'
+        set_arch_riscv64
         ;;
       *) # Unsupported machine type, exit with error
         printf 'Unsupported machine type: %s\n' "$uname_m"

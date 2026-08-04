@@ -1045,6 +1045,10 @@ inline void add_dirty_threat(
     dts->list.push_back({pc, threatened, s, threatenedSq, PutPiece});
 }
 
+constexpr bool can_slider_threat(Piece threatened, Piece slider) {
+    return type_of(threatened) != QUEEN || type_of(slider) == QUEEN;
+}
+
 template<bool PutPiece, bool ComputeRay>
 void Position::update_piece_threats(Piece pc, Square s, DirtyThreats* const dts) {
     const Bitboard occupied     = pieces();
@@ -1085,7 +1089,19 @@ void Position::update_piece_threats(Piece pc, Square s, DirtyThreats* const dts)
         threatened = PseudoAttacks[type_of(pc)][s];
     }
 
-    threatened &= occupied;
+    switch (type_of(pc))
+    {
+    case PAWN :
+        threatened &= pieces(PAWN, KNIGHT, ROOK);
+        break;
+    case BISHOP :
+    case ROOK :
+        threatened &= pieces(PAWN, KNIGHT, BISHOP, ROOK);
+        break;
+    default :
+        threatened &= occupied ^ kings;
+        break;
+    }
 
     while (threatened)
     {
@@ -1115,10 +1131,12 @@ void Position::update_piece_threats(Piece pc, Square s, DirtyThreats* const dts)
             {
                 const Square threatenedSq = lsb(discovered);
                 const Piece  threatenedPc = piece_on(threatenedSq);
-                add_dirty_threat<!PutPiece>(dts, slider, threatenedPc, sliderSq, threatenedSq);
+                if (can_slider_threat(threatenedPc, slider))
+                    add_dirty_threat<!PutPiece>(dts, slider, threatenedPc, sliderSq, threatenedSq);
             }
 
-            add_dirty_threat<PutPiece>(dts, slider, pc, sliderSq, s);
+            if (can_slider_threat(pc, slider))
+                add_dirty_threat<PutPiece>(dts, slider, pc, sliderSq, s);
         }
     }
     else
@@ -1127,13 +1145,16 @@ void Position::update_piece_threats(Piece pc, Square s, DirtyThreats* const dts)
         {
             Square sliderSq = pop_lsb(sliders);
             Piece  slider   = piece_on(sliderSq);
-            add_dirty_threat<PutPiece>(dts, slider, pc, sliderSq, s);
+            if (can_slider_threat(pc, slider))
+                add_dirty_threat<PutPiece>(dts, slider, pc, sliderSq, s);
         }
     }
 
-    Bitboard incoming_threats =
-      (PseudoAttacks[KNIGHT][s] & knights) | (attacks_bb<PAWN>(s, WHITE) & blackPawns)
-      | (attacks_bb<PAWN>(s, BLACK) & whitePawns) | (PseudoAttacks[KING][s] & kings);
+    Bitboard pawnThreats = (attacks_bb<PAWN>(s, WHITE) & blackPawns)
+                         | (attacks_bb<PAWN>(s, BLACK) & whitePawns);
+    Bitboard incoming_threats = PseudoAttacks[KNIGHT][s] & knights;
+    if (type_of(pc) == PAWN || type_of(pc) == KNIGHT || type_of(pc) == ROOK)
+        incoming_threats |= pawnThreats;
 
     while (incoming_threats)
     {

@@ -211,6 +211,10 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
     Bitboard occupied = pos.pieces();
     Bitboard pawns    = pos.pieces(PAWN);
 
+    const Bitboard pawnTargets        = pos.pieces(PAWN, KNIGHT, ROOK);
+    const Bitboard minorSliderTargets = pos.pieces(PAWN, KNIGHT, BISHOP, ROOK);
+    const Bitboard queenTargets       = pos.pieces(PAWN, KNIGHT, BISHOP, ROOK, QUEEN);
+
     for (Color color : {WHITE, BLACK})
     {
         for (PieceType pt = PAWN; pt < KING; ++pt)
@@ -224,9 +228,9 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
                 auto right = (c == WHITE) ? NORTH_EAST : SOUTH_WEST;
                 auto left  = (c == WHITE) ? NORTH_WEST : SOUTH_EAST;
                 auto attacks_left =
-                  ((c == WHITE) ? shift<NORTH_EAST>(bb) : shift<SOUTH_WEST>(bb)) & occupied;
+                  ((c == WHITE) ? shift<NORTH_EAST>(bb) : shift<SOUTH_WEST>(bb)) & pawnTargets;
                 auto attacks_right =
-                  ((c == WHITE) ? shift<NORTH_WEST>(bb) : shift<SOUTH_EAST>(bb)) & occupied;
+                  ((c == WHITE) ? shift<NORTH_WEST>(bb) : shift<SOUTH_EAST>(bb)) & pawnTargets;
 
                 while (attacks_left)
                 {
@@ -266,7 +270,9 @@ void FullThreats::append_active_indices(Color perspective, const Position& pos, 
                 while (bb)
                 {
                     Square   from    = pop_lsb(bb);
-                    Bitboard attacks = (attacks_bb(pt, from, occupied)) & occupied;
+                    Bitboard targets =
+                      pt == KNIGHT || pt == QUEEN ? queenTargets : minorSliderTargets;
+                    Bitboard attacks = attacks_bb(pt, from, occupied) & targets;
 
                     while (attacks)
                     {
