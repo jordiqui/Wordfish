@@ -34,7 +34,6 @@
 
 #include "history.h"
 #include "misc.h"
-#include "nnue/network.h"
 #include "nnue/nnue_accumulator.h"
 #include "numa.h"
 #include "position.h"
@@ -55,6 +54,10 @@ enum NodeType {
 class TranspositionTable;
 class ThreadPool;
 class OptionsMap;
+
+namespace Eval::NNUE {
+class Network;
+}
 
 namespace Search {
 

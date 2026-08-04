@@ -299,6 +299,13 @@ class AffineTransformSparseInput {
         #define vec_set_32 __lsx_vreplgr2vr_w
         #define vec_add_dpbusd_32 SIMD::lsx_m128_add_dpbusd_epi32
     #endif
+    #if defined(USE_LASX)
+        #define vec_load_32(a) __lasx_xvldrepl_w(reinterpret_cast<const void*>(a), 0)
+    #elif defined(USE_LSX)
+        #define vec_load_32(a) __lsx_vldrepl_w(reinterpret_cast<const void*>(a), 0)
+    #else
+        #define vec_load_32(a) vec_set_32(load_as<std::int32_t>(a))
+    #endif
         constexpr IndexType OutputSimdWidth = sizeof(outvec_t) / sizeof(OutputType);
         constexpr IndexType NumChunks = ceil_to_multiple<IndexType>(InputDimensions, 8) / ChunkSize;
         constexpr IndexType NumAccums = OutputDimensions / OutputSimdWidth;
@@ -400,6 +407,7 @@ class AffineTransformSparseInput {
             outptr[k] = acc[k];
 
     #undef vec_set_32
+    #undef vec_load_32
     #undef vec_add_dpbusd_32
     #ifdef vec_add_32
         #undef vec_add_32

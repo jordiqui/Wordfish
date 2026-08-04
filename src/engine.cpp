@@ -84,7 +84,7 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     states(new std::deque<StateInfo>(1)),
     threads(),
     networkFile{std::nullopt, ""},
-    networks(numaContext) {
+    networks(numaContext, std::make_unique<NN::Network>()) {
 
     pos.set(StartFEN, false, &states->back());
 
@@ -214,7 +214,6 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
           return std::nullopt;
       }));
 
-    networks = std::make_unique<NN::Network>();
     load_network();
     Experience::update_settings(options);
     resize_threads();

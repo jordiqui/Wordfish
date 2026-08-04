@@ -127,7 +127,8 @@ class AccumulatorStack {
     void evaluate_side(Color                                 perspective,
                        const Position&                       pos,
                        const FeatureTransformer<Dimensions>& featureTransformer,
-                       AccumulatorCaches::Cache<Dimensions>& cache) noexcept;
+                       AccumulatorCaches::Cache<Dimensions>& cache,
+                       std::size_t                            last_usable_accum) noexcept;
 
     [[nodiscard]] std::size_t find_last_usable_accumulator(Color perspective) const noexcept;
 
@@ -142,6 +143,13 @@ class AccumulatorStack {
                                      const Position&                       pos,
                                      const FeatureTransformer<Dimensions>& featureTransformer,
                                      std::size_t                            end) noexcept;
+
+    template<IndexType Dimensions>
+    void forward_update_incremental_both(
+      const Position&                       pos,
+      const FeatureTransformer<Dimensions>& featureTransformer,
+      std::size_t                           white_begin,
+      std::size_t                           black_begin) noexcept;
 
     std::array<AccumulatorState, MaxSize> accumulators;
     std::size_t                           size = 1;
