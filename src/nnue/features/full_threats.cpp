@@ -21,7 +21,6 @@
 #include "full_threats.h"
 
 #include <array>
-#include <cassert>
 #include <cstdint>
 #include <initializer_list>
 #include <utility>
@@ -72,7 +71,7 @@ constexpr auto make_piece_indices_piece() {
 
     for (Square from = SQ_A1; from <= SQ_H8; ++from)
     {
-        Bitboard attacks = PawnPushOrAttacks[C][from];
+        Bitboard attacks = PseudoAttacks[C][from];
 
         for (Square to = SQ_A1; to <= SQ_H8; ++to)
         {
