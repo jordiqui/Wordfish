@@ -892,7 +892,7 @@ void Search::Worker::clear() {
 // Main search function for both PV and non-PV nodes
 template<NodeType nodeType>
 Value Search::Worker::search(
-  Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode) {
+  Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, const bool cutNode) {
 
     constexpr bool PvNode   = nodeType != NonPV;
     constexpr bool rootNode = nodeType == Root;
@@ -1176,8 +1176,8 @@ Value Search::Worker::search(
     {
         assert((ss - 1)->currentMove != Move::null());
 
-        // Null move dynamic reduction based on depth
-        Depth R = 7 + depth / 3;
+        // Null move dynamic reduction based on depth and evaluation margin
+        Depth R = 7 + depth / 3 + std::max(0, (ss->staticEval - beta) / 256);
         do_null_move(pos, st, ss);
 
         Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, depth - R, false);
@@ -1494,7 +1494,7 @@ moves_loop:  // When in check, search starts here
 
         // For first picked move (ttMove) reduce reduction
         if (move == ttData.move)
-            r = std::max(0, r - 2018);
+            r -= 2018;
 
         if (capture)
             ss->statScore = 803 * int(PieceValue[pos.captured_piece()]) / 128
@@ -1587,12 +1587,32 @@ moves_loop:  // When in check, search starts here
 
             rm.effort += nodes - nodeCount;
 
-            rm.averageScore =
-              rm.averageScore != -VALUE_INFINITE ? (value + rm.averageScore) / 2 : value;
+            std::uint64_t N      = nodes - nodeCount;
+            std::uint64_t E_prev = std::max(std::uint64_t(1), rm.effort - N);
 
-            rm.meanSquaredScore = rm.meanSquaredScore != -VALUE_INFINITE * VALUE_INFINITE
-                                  ? (value * std::abs(value) + rm.meanSquaredScore) / 2
-                                  : value * std::abs(value);
+            // Dynamic EMA parameters for root move
+            constexpr std::uint64_t Scale          = 32;
+            constexpr std::uint64_t ChiNumerator   = 3;
+            constexpr std::uint64_t ChiDenominator = 2;   // Chi = 3/2 = 1.5
+            constexpr std::uint64_t MinWeight      = 12;  // 37.5% minimum weight
+            constexpr std::uint64_t MaxWeight      = 24;  // 75% maximum weight
+
+            std::uint64_t w     = std::clamp((Scale * N * ChiDenominator)
+                                     / (N * ChiDenominator + ChiNumerator * E_prev),
+                                   MinWeight, MaxWeight);
+            std::uint64_t w_mss = std::min(w, std::uint64_t(16));
+            std::int64_t v2    = std::int64_t(value) * std::abs(value);
+
+            if (rm.averageScore == -VALUE_INFINITE)
+                rm.averageScore = value;
+            else
+                rm.averageScore = Value((value * w + rm.averageScore * (Scale - w)) / Scale);
+
+            if (rm.meanSquaredScore == -VALUE_INFINITE * VALUE_INFINITE)
+                rm.meanSquaredScore = value * std::abs(value);
+            else
+                rm.meanSquaredScore =
+                  Value((v2 * w_mss + int64_t(rm.meanSquaredScore) * (Scale - w_mss)) / Scale);
 
             // PV move or new best move?
             if (moveCount == 1 || value > alpha)
@@ -2189,9 +2209,15 @@ void update_quiet_histories(
 Move Skill::pick_best(const RootMoves& rootMoves, size_t multiPV) {
     static PRNG rng(now());  // PRNG sequence should be non-deterministic
 
-    // RootMoves are already sorted by score in descending order
-    Value  topScore = rootMoves[0].score;
-    int    delta    = std::min(topScore - rootMoves[multiPV - 1].score, int(PawnValue));
+    // With tablebases at the root, RootMoves may not be sorted by score.
+    Value topScore = rootMoves[0].score;
+    Value minScore = rootMoves[0].score;
+    for (size_t i = 1; i < multiPV; ++i)
+    {
+        topScore = std::max(topScore, rootMoves[i].score);
+        minScore = std::min(minScore, rootMoves[i].score);
+    }
+    int    delta    = std::min(topScore - minScore, int(PawnValue));
     int    maxScore = -VALUE_INFINITE;
     double weakness = 120 - 2 * level;
 
@@ -2419,7 +2445,7 @@ void syzygy_extend_pv(const OptionsMap&         options,
     // Finding a draw in this function is an exceptional case, that cannot happen when rule50 is false or
     // during engine game play, since we have a winning score, and play correctly
     // with TB support. However, it can be that a position is draw due to the 50 move
-    // rule if it has been been reached on the board with a non-optimal 50 move counter
+    // rule if it has been reached on the board with a non-optimal 50 move counter
     // (e.g. 8/8/6k1/3B4/3K4/4N3/8/8 w - - 54 106 ) which TB with dtz counter rounding
     // cannot always correctly rank. See also
     // https://github.com/official-stockfish/Stockfish/issues/5175#issuecomment-2058893495
@@ -2441,9 +2467,9 @@ void syzygy_extend_pv(const OptionsMap&         options,
 }
 
 void SearchManager::pv(Search::Worker&           worker,
-                       const ThreadPool&         threads,
-                       const TranspositionTable& tt,
-                       Depth                     depth) {
+                              const ThreadPool&         threads,
+                              const TranspositionTable& tt,
+                              Depth                     depth) {
 
     const auto nodes     = threads.nodes_searched();
     auto&      rootMoves = worker.rootMoves;

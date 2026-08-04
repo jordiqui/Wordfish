@@ -50,13 +50,14 @@ class UCIEngine {
     static std::string to_lower(std::string str);
     static Move        to_move(const Position& pos, std::string str);
 
-    static Search::LimitsType parse_limits(std::istream& is);
+    Search::LimitsType parse_limits(std::istream& is);
 
     auto& engine_options() { return engine.get_options(); }
 
    private:
     Engine      engine;
     CommandLine cli;
+    std::string currentCmd;
 
     bool suppressLowTimeInfo = false;
 
@@ -75,6 +76,8 @@ class UCIEngine {
     void on_bestmove(std::string_view bestmove, std::string_view ponder);
 
     void init_search_update_listeners();
+
+    [[noreturn]] void terminate_on_critical_error(const std::string& message);
 };
 
 }  // namespace Stockfish
