@@ -124,7 +124,7 @@ static void affine_transform_non_ssse3(std::int32_t*       output,
 
 #endif  // !ENABLE_SEQ_OPT
 
-template<IndexType InDims, IndexType OutDims>
+template<IndexType InDims, IndexType OutDims, bool ScrambledInput = false>
 class AffineTransform {
    public:
     // Input/output type
@@ -152,8 +152,22 @@ class AffineTransform {
     }
 
     static constexpr IndexType get_weight_index_scrambled(IndexType i) {
-        return (i / 4) % (PaddedInputDimensions / 4) * OutputDimensions * 4
-             + i / PaddedInputDimensions * 4 + i % 4;
+        IndexType inputIndex = i % PaddedInputDimensions;
+
+#if defined(USE_SCRAMBLED_ACTIVATIONS)
+        if constexpr (ScrambledInput)
+        {
+            // AVX2 and LASX packs operate independently on 128-bit lanes. Keep their interleaved
+            // output order and rearrange the following layer's weights instead of issuing a
+            // runtime permutation.
+            const IndexType block = inputIndex / 32;
+            const IndexType chunk = (inputIndex % 32) / 4;
+            inputIndex = block * 32 + ((chunk % 2) * 4 + chunk / 2) * 4 + inputIndex % 4;
+        }
+#endif
+
+        return inputIndex / 4 * OutputDimensions * 4 + i / PaddedInputDimensions * 4
+             + inputIndex % 4;
     }
 
     static constexpr IndexType get_weight_index(IndexType i) {
@@ -229,6 +243,13 @@ class AffineTransform {
         #define vec_add_32 __lsx_vadd_w
         #define vec_add_dpbusd_32 SIMD::lsx_m128_add_dpbusd_epi32
     #endif
+    #if defined(USE_LASX)
+        #define vec_load_32(a) __lasx_xvldrepl_w(reinterpret_cast<const void*>(a), 0)
+    #elif defined(USE_LSX)
+        #define vec_load_32(a) __lsx_vldrepl_w(reinterpret_cast<const void*>(a), 0)
+    #else
+        #define vec_load_32(a) vec_set_32(load_as<std::int32_t>(a))
+    #endif
 
             static constexpr IndexType OutputSimdWidth = sizeof(vec_t) / sizeof(OutputType);
 
@@ -256,9 +277,9 @@ class AffineTransform {
             for (; i < NumChunks; i += 2)
             {
                 const vec_t in0 =
-                  vec_set_32(load_as<std::int32_t>(input + i * sizeof(std::int32_t)));
+                  vec_load_32(input + i * sizeof(std::int32_t));
                 const vec_t in1 =
-                  vec_set_32(load_as<std::int32_t>(input + (i + 1) * sizeof(std::int32_t)));
+                  vec_load_32(input + (i + 1) * sizeof(std::int32_t));
                 const auto col0 =
                   reinterpret_cast<const vec_t*>(&weights[i * OutputDimensions * 4]);
                 const auto col1 =
@@ -282,7 +303,7 @@ class AffineTransform {
             for (; i < NumChunks; ++i)
             {
                 const vec_t in0 =
-                  vec_set_32(load_as<std::int32_t>(input + i * sizeof(std::int32_t)));
+                  vec_load_32(input + i * sizeof(std::int32_t));
                 const auto col0 =
                   reinterpret_cast<const vec_t*>(&weights[i * OutputDimensions * 4]);
 
@@ -295,6 +316,7 @@ class AffineTransform {
                 outptr[k] = acc[k];
 
     #undef vec_set_32
+    #undef vec_load_32
     #undef vec_add_32
     #undef vec_add_dpbusd_32
         }
