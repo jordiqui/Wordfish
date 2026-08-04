@@ -21,6 +21,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <optional>
@@ -30,6 +31,7 @@
 #include <vector>
 
 #include "nnue/network.h"
+#include "nnue/nnue_misc.h"
 #include "numa.h"
 #include "position.h"
 #include "search.h"
@@ -46,7 +48,7 @@ class Engine {
     using InfoFull  = Search::InfoFull;
     using InfoIter  = Search::InfoIteration;
 
-    Engine(std::optional<std::string> path = std::nullopt);
+    Engine(std::optional<std::filesystem::path> path = std::nullopt);
 
     // Cannot be movable due to components holding backreferences to fields
     Engine(const Engine&)            = delete;
@@ -87,11 +89,11 @@ class Engine {
 
     void verify_network() const;
     void load_network();
-    void load_big_network(const std::string& file);
-    void save_network(const std::pair<std::optional<std::string>, std::string> files[2]);
+    void load_big_network(const std::filesystem::path& file);
+    void save_network(const std::optional<std::filesystem::path>& file);
 
     std::string get_default_network() const;
-    void        load_network(const std::string& file);
+    void        load_network(const std::filesystem::path& file);
 
     // utility functions
 
@@ -113,7 +115,7 @@ class Engine {
     Position&                              access_position() { return pos; }
 
    private:
-    const std::string binaryDirectory;
+    const std::filesystem::path binaryDirectory;
 
     NumaReplicationContext numaContext;
 
@@ -124,6 +126,7 @@ class Engine {
     ThreadPool                                         threads;
     TranspositionTable                                 tt;
     std::map<NumaIndex, SharedHistories>               sharedHists;
+    Eval::NNUE::EvalFile                               networkFile;
     LazyNumaReplicatedSystemWide<Eval::NNUE::Network> networks;
 
     Search::SearchManager::UpdateContext  updateContext;

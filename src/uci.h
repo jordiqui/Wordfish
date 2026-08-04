@@ -38,7 +38,7 @@ using Value = int;
 
 class UCIEngine {
    public:
-    UCIEngine(int argc, char** argv);
+    UCIEngine(CommandLine cli);
 
     void loop();
 

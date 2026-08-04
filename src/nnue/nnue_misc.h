@@ -20,11 +20,14 @@
 #define NNUE_MISC_H_INCLUDED
 
 #include <cstddef>
-#include <memory>
+#include <filesystem>
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include "../misc.h"
 #include "../types.h"
+#include "../evaluate.h"
 #include "nnue_architecture.h"
 
 namespace Stockfish {
@@ -33,15 +36,16 @@ class Position;
 
 namespace Eval::NNUE {
 
-// EvalFile uses fixed string types because it's part of the network structure which must be trivial.
+// NNUE file metadata uses fixed string types so it stays trivially copyable and cheap to move
+// around between the engine and the network loader.
 struct EvalFile {
     // Default net name, will use one of the EvalFileDefaultName* macros defined
     // in evaluate.h
-    FixedString<256> defaultName;
+    constexpr static std::string_view defaultName = EvalFileDefaultName;
     // Selected net name, either via uci option or default
-    FixedString<256> current;
+    std::optional<std::filesystem::path> current;
     // Net description extracted from the net file
-    FixedString<256> netDescription;
+    std::string netDescription;
 };
 
 struct NnueEvalTrace {
@@ -59,16 +63,5 @@ std::string trace(Position& pos, const Network& networks, AccumulatorCaches& cac
 
 }  // namespace Stockfish::Eval::NNUE
 }  // namespace Stockfish
-
-template<>
-struct std::hash<Stockfish::Eval::NNUE::EvalFile> {
-    std::size_t operator()(const Stockfish::Eval::NNUE::EvalFile& evalFile) const noexcept {
-        std::size_t h = 0;
-        Stockfish::hash_combine(h, evalFile.defaultName);
-        Stockfish::hash_combine(h, evalFile.current);
-        Stockfish::hash_combine(h, evalFile.netDescription);
-        return h;
-    }
-};
 
 #endif  // #ifndef NNUE_MISC_H_INCLUDED

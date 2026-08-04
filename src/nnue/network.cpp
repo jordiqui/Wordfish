@@ -24,6 +24,7 @@
 #include <optional>
 #include <type_traits>
 #include <vector>
+#include <filesystem>
 
 #define INCBIN_SILENCE_BITCODE_WARNING
 #include "../incbin/incbin.h"
@@ -57,6 +58,8 @@ const unsigned int  gEmbeddedNNUESize    = 1;
 
 namespace Stockfish::Eval::NNUE {
 
+namespace fs = std::filesystem;
+
 
 namespace Detail {
 
@@ -82,65 +85,47 @@ bool write_parameters(std::ostream& stream, const T& reference) {
 }  // namespace Detail
 
 template<typename Arch, typename Transformer>
-void NetworkImpl<Arch, Transformer>::load(const std::string& rootDirectory, std::string evalfilePath) {
+void NetworkImpl<Arch, Transformer>::load(const fs::path& rootDirectory, fs::path evalfilePath,
+                                           EvalFile& evalFile) {
 #if defined(DEFAULT_NNUE_DIRECTORY)
-    std::vector<std::string> dirs = {"<internal>", "", rootDirectory,
-                                     stringify(DEFAULT_NNUE_DIRECTORY)};
+    const std::vector<fs::path> dirs = {"<internal>", fs::path{}, rootDirectory,
+                                        stringify(DEFAULT_NNUE_DIRECTORY)};
 #else
-    std::vector<std::string> dirs = {"<internal>", "", rootDirectory};
+    const std::vector<fs::path> dirs = {"<internal>", fs::path{}, rootDirectory};
 #endif
-
     if (evalfilePath.empty())
-        evalfilePath = evalFile.defaultName;
-
+        evalfilePath = EvalFile::defaultName;
     for (const auto& directory : dirs)
-    {
-        if (std::string(evalFile.current) != evalfilePath)
+        if (!evalFile.current || *evalFile.current != evalfilePath)
         {
-            if (directory != "<internal>")
-            {
-                load_user_net(directory, evalfilePath);
-            }
-
-            else if (evalfilePath == std::string(evalFile.defaultName))
-            {
-                load_internal();
-            }
+            if (directory != fs::path("<internal>"))
+                load_user_net(directory, evalfilePath, evalFile);
+            else if (evalfilePath == fs::path(EvalFile::defaultName))
+                load_internal(evalFile);
         }
-    }
 }
-
 
 template<typename Arch, typename Transformer>
-bool NetworkImpl<Arch, Transformer>::save(const std::optional<std::string>& filename) const {
-    std::string actualFilename;
-    std::string msg;
-
-    if (filename.has_value())
-        actualFilename = filename.value();
+bool NetworkImpl<Arch, Transformer>::save(
+  const EvalFile& evalFile, const std::optional<fs::path>& filename) const {
+    fs::path actualFilename;
+    if (filename)
+        actualFilename = *filename;
     else
     {
-        if (std::string(evalFile.current) != std::string(evalFile.defaultName))
+        if (!evalFile.current || *evalFile.current != fs::path(EvalFile::defaultName))
         {
-            msg = "Failed to export a net. "
-                  "A non-embedded net can only be saved if the filename is specified";
-
-            sync_cout << msg << sync_endl;
+            sync_cout << "Failed to export a net. A non-embedded net can only be saved if the filename is specified" << sync_endl;
             return false;
         }
-
-        actualFilename = evalFile.defaultName;
+        actualFilename = EvalFile::defaultName;
     }
-
     std::ofstream stream(actualFilename, std::ios_base::binary);
-    bool          saved = save(stream, evalFile.current, evalFile.netDescription);
-
-    msg = saved ? "Network saved successfully to " + actualFilename : "Failed to export a net";
-
-    sync_cout << msg << sync_endl;
+    const bool saved = save(stream, *evalFile.current, evalFile.netDescription);
+    sync_cout << (saved ? "Network saved successfully to " + actualFilename.string()
+                        : "Failed to export a net") << sync_endl;
     return saved;
 }
-
 
 template<typename Arch, typename Transformer>
 NetworkOutput
@@ -164,23 +149,24 @@ NetworkImpl<Arch, Transformer>::evaluate(const Position&                        
 
 
 template<typename Arch, typename Transformer>
-void NetworkImpl<Arch, Transformer>::verify(std::string                                  evalfilePath,
-                                        const std::function<void(std::string_view)>& f) const {
+void NetworkImpl<Arch, Transformer>::verify(
+  const std::function<void(std::string_view)>& f, const EvalFile& evalFile,
+  fs::path evalfilePath) const {
     if (evalfilePath.empty())
-        evalfilePath = evalFile.defaultName;
+        evalfilePath = EvalFile::defaultName;
 
-    if (std::string(evalFile.current) != evalfilePath)
+    if (!evalFile.current || *evalFile.current != evalfilePath)
     {
         if (f)
         {
             std::string msg1 =
               "Network evaluation parameters compatible with the engine must be available.";
-            std::string msg2 = "The network file " + evalfilePath + " was not loaded successfully.";
+            std::string msg2 = "The network file " + evalfilePath.string() + " was not loaded successfully.";
             std::string msg3 = "The UCI option EvalFile might need to specify the full path, "
                                "including the directory name, to the network file.";
             std::string msg4 = "The default net can be downloaded from: "
                                "https://tests.stockfishchess.org/api/nn/"
-                             + std::string(evalFile.defaultName);
+                             + std::string(EvalFile::defaultName);
             std::string msg5 = "The engine will be terminated now.";
 
             std::string msg = "ERROR: " + msg1 + '\n' + "ERROR: " + msg2 + '\n' + "ERROR: " + msg3
@@ -195,7 +181,7 @@ void NetworkImpl<Arch, Transformer>::verify(std::string                         
     if (f)
     {
         size_t size = sizeof(featureTransformer) + sizeof(Arch) * LayerStacks;
-        f("NNUE evaluation using " + evalfilePath + " (" + std::to_string(size / (1024 * 1024))
+        f("NNUE evaluation using " + evalfilePath.string() + " (" + std::to_string(size / (1024 * 1024))
           + "MiB, (" + std::to_string(featureTransformer.TotalInputDimensions) + ", "
           + std::to_string(network[0].TransformedFeatureDimensions) + ", "
           + std::to_string(network[0].FC_0_OUTPUTS) + ", " + std::to_string(network[0].FC_1_OUTPUTS)
@@ -234,55 +220,38 @@ NetworkImpl<Arch, Transformer>::trace_evaluate(const Position&                  
 
 
 template<typename Arch, typename Transformer>
-void NetworkImpl<Arch, Transformer>::load_user_net(const std::string& dir,
-                                               const std::string& evalfilePath) {
-    std::string fullPath = dir;
-
-    if (!fullPath.empty() && fullPath.back() != '/' && fullPath.back() != '\\')
-        fullPath += '/';
-
-    fullPath += evalfilePath;
-
-    std::ifstream stream(fullPath, std::ios::binary);
-    auto          description = load(stream);
-
-    if (description.has_value())
+void NetworkImpl<Arch, Transformer>::load_user_net(const fs::path& dir,
+                                                    const fs::path& evalfilePath,
+                                                    EvalFile& evalFile) {
+    std::ifstream stream(dir / evalfilePath, std::ios::binary);
+    auto description = load(stream);
+    if (description)
     {
-        evalFile.current        = evalfilePath;
-        evalFile.netDescription = description.value();
+        evalFile.current = evalfilePath;
+        evalFile.netDescription = *description;
     }
 }
-
 
 template<typename Arch, typename Transformer>
-void NetworkImpl<Arch, Transformer>::load_internal() {
-    // C++ way to prepare a buffer for a memory stream
+void NetworkImpl<Arch, Transformer>::load_internal(EvalFile& evalFile) {
     class MemoryBuffer: public std::basic_streambuf<char> {
        public:
-        MemoryBuffer(char* p, size_t n) {
-            setg(p, p, p + n);
-            setp(p, p + n);
-        }
+        MemoryBuffer(char* p, size_t n) { setg(p, p, p + n); setp(p, p + n); }
     };
-
 #ifdef UNIVERSAL_BINARY_MACOS_X86_SLICE
-    if (gEmbeddedNNUEData == nullptr)  // failed embedded load
+    if (gEmbeddedNNUEData == nullptr)
         return;
 #endif
-
     MemoryBuffer buffer(const_cast<char*>(reinterpret_cast<const char*>(gEmbeddedNNUEData)),
                         size_t(gEmbeddedNNUESize));
-
     std::istream stream(&buffer);
-    auto         description = load(stream);
-
-    if (description.has_value())
+    auto description = load(stream);
+    if (description)
     {
-        evalFile.current        = evalFile.defaultName;
-        evalFile.netDescription = description.value();
+        evalFile.current = fs::path(EvalFile::defaultName);
+        evalFile.netDescription = *description;
     }
 }
-
 
 template<typename Arch, typename Transformer>
 void NetworkImpl<Arch, Transformer>::initialize() {
@@ -292,9 +261,9 @@ void NetworkImpl<Arch, Transformer>::initialize() {
 
 template<typename Arch, typename Transformer>
 bool NetworkImpl<Arch, Transformer>::save(std::ostream&      stream,
-                                      const std::string& name,
+                                      const fs::path& name,
                                       const std::string& netDescription) const {
-    if (name.empty() || name == "None")
+    if (name.empty())
         return false;
 
     return write_parameters(stream, netDescription);
@@ -319,7 +288,6 @@ std::size_t NetworkImpl<Arch, Transformer>::get_content_hash() const {
     hash_combine(h, featureTransformer);
     for (auto&& layerstack : network)
         hash_combine(h, layerstack);
-    hash_combine(h, evalFile);
     return h;
 }
 
