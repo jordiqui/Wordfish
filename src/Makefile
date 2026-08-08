@@ -564,14 +564,14 @@ ifeq ($(COMP),mingw)
 			CXX=i686-w64-mingw32-c++-posix
 		endif
 	endif
-	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-declarations
+	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-declarations -fconstexpr-ops-limit=500000000
 endif
 
 ifeq ($(COMP),icx)
 	comp=icx
 	CXX=icpx
 	CXXFLAGS += --intel -pedantic -Wextra -Wshadow -Wmissing-prototypes \
-		-Wconditional-uninitialized -Wabi -Wdeprecated
+		-Wconditional-uninitialized -Wabi -Wdeprecated -fconstexpr-steps=500000000
 endif
 
 ifeq ($(COMP),clang)
@@ -582,7 +582,7 @@ ifeq ($(COMP),clang)
 	endif
 
 	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
-	            -Wconditional-uninitialized
+	            -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000
 	ifeq ($(UNIVERSAL_SLICE),true)
 		CXXFLAGS += -Wno-missing-prototypes
 	endif
@@ -689,8 +689,9 @@ ifeq ($(COMP),gcc)
 	ifneq ($(gccisclang),)
 		profile_make = clang-profile-make
 		profile_use = clang-profile-use
+		CXXFLAGS += -fconstexpr-steps=500000000
 	else
-		CXXFLAGS += -Wstack-usage=128000
+		CXXFLAGS += -Wstack-usage=128000 -fno-ipa-cp-clone -fconstexpr-ops-limit=500000000
 	endif
 endif
 
