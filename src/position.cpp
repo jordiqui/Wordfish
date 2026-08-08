@@ -32,6 +32,7 @@
 #include <utility>
 
 #include "bitboard.h"
+#include "history.h"
 #include "misc.h"
 #include "movegen.h"
 #include "syzygy/tbprobe.h"
@@ -691,7 +692,8 @@ void Position::do_move(Move                      m,
                        StateInfo&                newSt,
                        bool                      givesCheck,
                        Dirties&                  dirties,
-                       const TranspositionTable* tt = nullptr) {
+                       const TranspositionTable* tt      = nullptr,
+                       const SharedHistories*    history = nullptr) {
     (void) tt;
 
     assert(m.is_ok());
@@ -838,6 +840,7 @@ void Position::do_move(Move                      m,
             k ^= Zobrist::psq[promotion][to];
             st->materialKey ^= Zobrist::psq[promotion][8 + pieceCount[promotion]]
                              ^ Zobrist::psq[pc][8 + pieceCount[pc] - 1];
+            st->nonPawnKey[us] ^= Zobrist::psq[promotion][to];
 
             if (promotionType <= BISHOP)
                 st->minorPieceKey ^= Zobrist::psq[promotion][to];
@@ -880,6 +883,15 @@ void Position::do_move(Move                      m,
             remove_piece(from, &dts);
             put_piece(toPc, to, &dts);
         }
+    }
+
+    if (history)
+    {
+        prefetch(&history->pawn_entry(*this)[pc][to]);
+        prefetch(&history->pawn_correction_entry(*this));
+        prefetch(&history->minor_piece_correction_entry(*this));
+        prefetch(&history->nonpawn_correction_entry<WHITE>(*this));
+        prefetch(&history->nonpawn_correction_entry<BLACK>(*this));
     }
 
     // Set capture piece

@@ -283,7 +283,12 @@ class NullSearchManager: public ISearchManager {
 // of the search history, and storing data required for the search.
 class Worker {
    public:
-    Worker(SharedState&, std::unique_ptr<ISearchManager>, size_t, NumaReplicatedAccessToken);
+    Worker(SharedState&,
+           std::unique_ptr<ISearchManager>,
+           size_t,
+           size_t,
+           size_t,
+           NumaReplicatedAccessToken);
 
     // Called at instantiation to initialize reductions tables.
     // Reset histories, usually before a new game.
@@ -360,7 +365,7 @@ class Worker {
 
     std::vector<Move> lastIterationIdxPV;
 
-    size_t                    threadIdx;
+    size_t                    threadIdx, numaThreadIdx, numaTotal;
     NumaReplicatedAccessToken numaAccessToken;
 
     // Reductions lookup table initialized at startup

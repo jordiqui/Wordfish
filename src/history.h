@@ -110,11 +110,12 @@ struct DynStats {
         data = make_unique_large_page<T[]>(size);
     }
 
-    void clear_range(size_t start, size_t end) {
+    void clear_range(int value, size_t start, size_t end) {
         assert(start < size);
         assert(end <= size);
-        T* fill_start = &(*this)[start];
-        std::memset(reinterpret_cast<char*>(fill_start), 0, sizeof(T) * (end - start));
+
+        while (start < end)
+            data[start++].fill(value);
     }
 
     size_t get_size() const { return size; }

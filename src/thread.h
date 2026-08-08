@@ -76,6 +76,8 @@ class Thread {
     Thread(Search::SharedState&,
            std::unique_ptr<Search::ISearchManager>,
            size_t,
+           size_t,
+           size_t,
            OptionalThreadToNumaNodeBinder);
     virtual ~Thread();
 
