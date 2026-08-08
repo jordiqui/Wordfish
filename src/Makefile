@@ -582,7 +582,7 @@ ifeq ($(COMP),clang)
 	endif
 
 	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
-	            -Wconditional-uninitialized
+	            -Wconditional-uninitialized -flax-vector-conversions=none
 	ifeq ($(UNIVERSAL_SLICE),true)
 		CXXFLAGS += -Wno-missing-prototypes
 	endif
