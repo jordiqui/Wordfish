@@ -70,10 +70,10 @@ static void init_magics(Magic magics[][2]) {
 // 6 inner bits of the rank occupancy (edge squares never affect the
 // attack set), yielding the 8-bit attack set on that rank
 alignas(64) constexpr auto RankAttacks = []() {
-    std::array<std::array<std::uint8_t, 64>, FILE_NB> table{};
+    std::array<std::array<u8, 64>, FILE_NB> table{};
     for (int file = 0; file < 8; ++file)
         for (int occ6 = 0; occ6 < 64; ++occ6)
-            table[file][occ6] = std::uint8_t(sliding_attack(ROOK, Square(file), occ6 << 1));
+            table[file][occ6] = u8(sliding_attack(ROOK, Square(file), occ6 << 1));
     return table;
 }();
 

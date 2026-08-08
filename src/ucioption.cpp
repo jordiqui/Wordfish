@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -34,12 +34,8 @@ namespace Stockfish {
 bool CaseInsensitiveLess::operator()(const std::string& s1, const std::string& s2) const {
 
     return std::lexicographical_compare(
-      s1.begin(), s1.end(), s2.begin(), s2.end(), [](char c1, char c2) {
-          const auto c1Lower = std::tolower(static_cast<unsigned char>(c1));
-          const auto c2Lower = std::tolower(static_cast<unsigned char>(c2));
-
-          return c1Lower < c2Lower;
-      });
+      s1.begin(), s1.end(), s2.begin(), s2.end(),
+      [](unsigned char c1, unsigned char c2) { return std::tolower(c1) < std::tolower(c2); });
 }
 
 void OptionsMap::add_info_listener(InfoListener&& message_func) { info = std::move(message_func); }
@@ -73,7 +69,7 @@ const Option& OptionsMap::operator[](const std::string& name) const {
 void OptionsMap::add(const std::string& name, const Option& option) {
     if (!options_map.count(name))
     {
-        static size_t insert_order = 0;
+        static usize insert_order = 0;
 
         options_map[name] = option;
 
@@ -88,7 +84,7 @@ void OptionsMap::add(const std::string& name, const Option& option) {
 }
 
 
-std::size_t OptionsMap::count(const std::string& name) const { return options_map.count(name); }
+usize OptionsMap::count(const std::string& name) const { return options_map.count(name); }
 
 Option::Option(const char* v, OnChange f) :
     type("string"),
@@ -166,7 +162,7 @@ Option& Option::operator=(const std::string& v) {
 
     if ((type != "button" && type != "string" && v.empty())
         || (type == "check" && v != "true" && v != "false")
-        || (type == "spin" && v != "default" && !value_in_range(v, min, max)))
+        || (type == "spin" && !value_in_range(v, min, max)))
         return *this;
 
     if (type == "combo")
@@ -182,8 +178,6 @@ Option& Option::operator=(const std::string& v) {
 
     if (type == "string")
         currentValue = v == "<empty>" ? "" : v;
-    else if (type == "spin" && v == "default")
-        currentValue = defaultValue;
     else if (type != "button")
         currentValue = v;
 
@@ -199,7 +193,7 @@ Option& Option::operator=(const std::string& v) {
 }
 
 std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
-    for (size_t idx = 0; idx < om.options_map.size(); ++idx)
+    for (usize idx = 0; idx < om.options_map.size(); ++idx)
         for (const auto& it : om.options_map)
             if (it.second.idx == idx)
             {

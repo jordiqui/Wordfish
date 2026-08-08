@@ -55,14 +55,14 @@
 
 namespace Stockfish::Eval::NNUE {
 
-using BiasType         = std::int16_t;
-using ThreatWeightType = std::int8_t;
-using WeightType       = std::int16_t;
-using PSQTWeightType   = std::int32_t;
-using IndexType        = std::uint32_t;
+using BiasType         = i16;
+using ThreatWeightType = i8;
+using WeightType       = i16;
+using PSQTWeightType   = i32;
+using IndexType        = u32;
 
 // Version of the evaluation file
-constexpr std::uint32_t Version = 0x6A448AFAu;
+constexpr u32 Version = 0x6A448AFAu;
 
 // Constant used in evaluation value calculation
 constexpr int OutputScale     = 16;
@@ -71,32 +71,32 @@ constexpr int FtMaxVal        = 255;
 constexpr int HiddenOneVal    = 128;
 
 // Size of cache line (in bytes)
-constexpr std::size_t CacheLineSize = 64;
+constexpr usize CacheLineSize = 64;
 
-constexpr const char        Leb128MagicString[]   = "COMPRESSED_LEB128";
-constexpr const std::size_t Leb128MagicStringSize = sizeof(Leb128MagicString) - 1;
+constexpr const char  Leb128MagicString[]   = "COMPRESSED_LEB128";
+constexpr const usize Leb128MagicStringSize = sizeof(Leb128MagicString) - 1;
 
 // SIMD width (in bytes)
 #if defined(USE_AVX2)
-constexpr std::size_t SimdWidth = 32;
+constexpr usize SimdWidth = 32;
 
 #elif defined(USE_LASX)
-constexpr std::size_t SimdWidth = 32;
+constexpr usize SimdWidth = 32;
 
 #elif defined(USE_SSE2)
-constexpr std::size_t SimdWidth = 16;
+constexpr usize SimdWidth = 16;
 
 #elif defined(USE_NEON)
-constexpr std::size_t SimdWidth = 16;
+constexpr usize SimdWidth = 16;
 
 #elif defined(USE_LSX)
-constexpr std::size_t SimdWidth = 16;
+constexpr usize SimdWidth = 16;
 #endif
 
-constexpr std::size_t MaxSimdWidth = 32;
+constexpr usize MaxSimdWidth = 32;
 
 // Type of input feature after conversion
-using TransformedFeatureType = std::uint8_t;
+using TransformedFeatureType = u8;
 
 // Round n up to be a multiple of base
 template<typename IntType>
@@ -116,11 +116,11 @@ inline IntType read_little_endian(std::istream& stream) {
         stream.read(reinterpret_cast<char*>(&result), sizeof(IntType));
     else
     {
-        std::uint8_t                  u[sizeof(IntType)];
+        u8                            u[sizeof(IntType)];
         std::make_unsigned_t<IntType> v = 0;
 
         stream.read(reinterpret_cast<char*>(u), sizeof(IntType));
-        for (std::size_t i = 0; i < sizeof(IntType); ++i)
+        for (usize i = 0; i < sizeof(IntType); ++i)
             v = (v << 8) | u[sizeof(IntType) - i - 1];
 
         std::memcpy(&result, &v, sizeof(IntType));
@@ -141,20 +141,20 @@ inline void write_little_endian(std::ostream& stream, IntType value) {
         stream.write(reinterpret_cast<const char*>(&value), sizeof(IntType));
     else
     {
-        std::uint8_t                  u[sizeof(IntType)];
+        u8                            u[sizeof(IntType)];
         std::make_unsigned_t<IntType> v = value;
 
-        std::size_t i = 0;
+        usize i = 0;
         // if constexpr to silence the warning about shift by 8
         if constexpr (sizeof(IntType) > 1)
         {
             for (; i + 1 < sizeof(IntType); ++i)
             {
-                u[i] = std::uint8_t(v);
+                u[i] = u8(v);
                 v >>= 8;
             }
         }
-        u[i] = std::uint8_t(v);
+        u[i] = u8(v);
 
         stream.write(reinterpret_cast<char*>(u), sizeof(IntType));
     }
@@ -164,11 +164,11 @@ inline void write_little_endian(std::ostream& stream, IntType value) {
 // Read integers in bulk from a little-endian stream.
 // This reads N integers from stream s and puts them in array out.
 template<typename IntType>
-inline void read_little_endian(std::istream& stream, IntType* out, std::size_t count) {
+inline void read_little_endian(std::istream& stream, IntType* out, usize count) {
     if (IsLittleEndian)
         stream.read(reinterpret_cast<char*>(out), sizeof(IntType) * count);
     else
-        for (std::size_t i = 0; i < count; ++i)
+        for (usize i = 0; i < count; ++i)
             out[i] = read_little_endian<IntType>(stream);
 }
 
@@ -176,11 +176,11 @@ inline void read_little_endian(std::istream& stream, IntType* out, std::size_t c
 // Write integers in bulk to a little-endian stream.
 // This takes N integers from array values and writes them on stream s.
 template<typename IntType>
-inline void write_little_endian(std::ostream& stream, const IntType* values, std::size_t count) {
+inline void write_little_endian(std::ostream& stream, const IntType* values, usize count) {
     if (IsLittleEndian)
         stream.write(reinterpret_cast<const char*>(values), sizeof(IntType) * count);
     else
-        for (std::size_t i = 0; i < count; ++i)
+        for (usize i = 0; i < count; ++i)
             write_little_endian<IntType>(stream, values[i]);
 }
 
@@ -188,28 +188,24 @@ inline void write_little_endian(std::ostream& stream, const IntType* values, std
 // The stream is assumed to be compressed using the signed LEB128 format.
 // See https://en.wikipedia.org/wiki/LEB128 for a description of the compression scheme.
 template<typename BufType, typename IntType>
-inline void read_leb_128_detail(std::istream& stream,
-                                IntType* out,
-                                std::size_t Count,
-                                std::uint32_t& bytes_left,
-                                BufType& buf,
-                                std::uint32_t& buf_pos) {
+inline void read_leb_128_detail(
+  std::istream& stream, IntType* out, usize Count, u32& bytes_left, BufType& buf, u32& buf_pos) {
 
     static_assert(std::is_signed_v<IntType>, "Not implemented for unsigned types");
     static_assert(sizeof(IntType) <= 4, "Not implemented for types larger than 32 bit");
 
     IntType result = 0;
-    size_t  shift = 0, i = 0;
+    usize   shift = 0, i = 0;
     while (i < Count)
     {
         if (buf_pos == buf.size())
         {
             stream.read(reinterpret_cast<char*>(buf.data()),
-                        std::min(std::size_t(bytes_left), buf.size()));
+                        std::min(usize(bytes_left), buf.size()));
             buf_pos = 0;
         }
 
-        std::uint8_t byte = buf[buf_pos++];
+        u8 byte = buf[buf_pos++];
         --bytes_left;
         result |= (byte & 0x7f) << (shift % 32);
         shift += 7;
@@ -230,9 +226,9 @@ inline void read_leb_128(std::istream& stream, Arrays&... outs) {
     stream.read(leb128MagicString, Leb128MagicStringSize);
     assert(strncmp(Leb128MagicString, leb128MagicString, Leb128MagicStringSize) == 0);
 
-    auto                           bytes_left = read_little_endian<std::uint32_t>(stream);
-    std::array<std::uint8_t, 8192> buf;
-    std::uint32_t                  buf_pos = std::uint32_t(buf.size());
+    auto                 bytes_left = read_little_endian<u32>(stream);
+    std::array<u8, 8192> buf;
+    u32                  buf_pos = u32(buf.size());
 
     (read_leb_128_detail(stream, outs.data(), outs.size(), bytes_left, buf, buf_pos), ...);
 
@@ -241,15 +237,15 @@ inline void read_leb_128(std::istream& stream, Arrays&... outs) {
 
 
 template<typename IntType>
-inline void read_leb_128(std::istream& stream, IntType* out, std::size_t expected) {
+inline void read_leb_128(std::istream& stream, IntType* out, usize expected) {
     // Check the presence of our LEB128 magic string
     char leb128MagicString[Leb128MagicStringSize];
     stream.read(leb128MagicString, Leb128MagicStringSize);
     assert(strncmp(Leb128MagicString, leb128MagicString, Leb128MagicStringSize) == 0);
 
-    auto                 bytes_left = read_little_endian<std::uint32_t>(stream);
-    std::array<std::uint8_t, 8192> buf;
-    std::uint32_t                  buf_pos = std::uint32_t(buf.size());
+    auto                 bytes_left = read_little_endian<u32>(stream);
+    std::array<u8, 8192> buf;
+    u32                  buf_pos = u32(buf.size());
 
     read_leb_128_detail(stream, out, expected, bytes_left, buf, buf_pos);
 
@@ -262,18 +258,18 @@ inline void read_leb_128(std::istream& stream, IntType* out, std::size_t expecte
 // the LEB128 algorithm and writes the result on the stream s.
 // See https://en.wikipedia.org/wiki/LEB128 for a description of the compression scheme.
 template<typename IntType>
-inline void write_leb_128(std::ostream& stream, const IntType* values, std::size_t Count) {
+inline void write_leb_128(std::ostream& stream, const IntType* values, usize Count) {
 
     // Write our LEB128 magic string
     stream.write(Leb128MagicString, Leb128MagicStringSize);
 
     static_assert(std::is_signed_v<IntType>, "Not implemented for unsigned types");
 
-    std::uint32_t byte_count = 0;
-    for (std::size_t i = 0; i < Count; ++i)
+    u32 byte_count = 0;
+    for (usize i = 0; i < Count; ++i)
     {
-        IntType      value = values[i];
-        std::uint8_t byte;
+        IntType value = values[i];
+        u8      byte;
         do
         {
             byte = value & 0x7f;
@@ -284,9 +280,9 @@ inline void write_leb_128(std::ostream& stream, const IntType* values, std::size
 
     write_little_endian(stream, byte_count);
 
-    const std::uint32_t BUF_SIZE = 4096;
-    std::uint8_t        buf[BUF_SIZE];
-    std::uint32_t       buf_pos = 0;
+    const u32 BUF_SIZE = 4096;
+    u8        buf[BUF_SIZE];
+    u32       buf_pos = 0;
 
     auto flush = [&]() {
         if (buf_pos > 0)
@@ -296,18 +292,18 @@ inline void write_leb_128(std::ostream& stream, const IntType* values, std::size
         }
     };
 
-    auto write = [&](std::uint8_t b) {
+    auto write = [&](u8 b) {
         buf[buf_pos++] = b;
         if (buf_pos == BUF_SIZE)
             flush();
     };
 
-    for (std::size_t i = 0; i < Count; ++i)
+    for (usize i = 0; i < Count; ++i)
     {
         IntType value = values[i];
         while (true)
         {
-            std::uint8_t byte = value & 0x7f;
+            u8 byte = value & 0x7f;
             value >>= 7;
             if ((byte & 0x40) == 0 ? value == 0 : value == -1)
             {
@@ -321,7 +317,7 @@ inline void write_leb_128(std::ostream& stream, const IntType* values, std::size
     flush();
 }
 
-template<typename IntType, std::size_t Count>
+template<typename IntType, usize Count>
 inline void write_leb_128(std::ostream& stream, const std::array<IntType, Count>& values) {
     write_leb_128(stream, values.data(), Count);
 }

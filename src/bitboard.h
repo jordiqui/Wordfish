@@ -22,9 +22,6 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <cstdint>
-#include <cmath>
-#include <cstdlib>
 #include <string>
 #include <type_traits>
 
@@ -155,11 +152,12 @@ constexpr int constexpr_popcount(T v) {
 
     if constexpr (sizeof(T) <= 8)
     {
-        std::uint64_t b = static_cast<std::make_unsigned_t<T>>(v);
+        u64 b = static_cast<std::make_unsigned_t<T>>(v);
 
         b = b - ((b >> 1) & 0x5555555555555555ULL);
         b = (b & 0x3333333333333333ULL) + ((b >> 2) & 0x3333333333333333ULL);
         b = (b + (b >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+
         return static_cast<int>((b * 0x0101010101010101ULL) >> 56);
     }
     else
@@ -193,9 +191,9 @@ inline constexpr int lsb_index64[64] = {
   21, 44, 38, 32, 29, 23, 17, 11, 4,  62, 46, 55, 26, 59, 40, 36, 15, 53, 34, 51, 20, 43,
   31, 22, 10, 45, 25, 39, 14, 33, 19, 30, 9,  24, 13, 18, 8,  12, 7,  6,  5,  63};
 
-constexpr int constexpr_lsb(std::uint64_t bb) {
+constexpr int constexpr_lsb(u64 bb) {
     assert(bb != 0);
-    constexpr std::uint64_t debruijn64 = 0x03F79D71B4CB0A89ULL;
+    constexpr u64 debruijn64 = 0x03F79D71B4CB0A89ULL;
     return lsb_index64[((bb ^ (bb - 1)) * debruijn64) >> 58];
 }
 

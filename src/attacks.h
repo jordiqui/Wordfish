@@ -20,7 +20,6 @@
 #define ATTACKS_H_INCLUDED
 
 #include <cassert>
-#include <cstdint>
 #include <array>
 #include <initializer_list>
 #include <utility>
@@ -105,7 +104,7 @@ struct alignas(32) DualMagic {
     // Precomputed 2 * square_bb(sq), 2 * reverse(square_bb(sq))
     Bitboard r, rr;
 
-    const std::uint8_t* RESTRICT rankAttacksLookup;
+    const u8* RESTRICT rankAttacksLookup;
     // 8 * rank_of(sq)
     int shift;
 
@@ -159,6 +158,7 @@ struct Magic {
     Bitboard  magic;
     unsigned  shift;
 
+    // Compute the attack's index using the 'magic bitboards' approach
     unsigned index(Bitboard occupied) const {
         if (Is64Bit)
             return unsigned(((occupied & mask) * magic) >> shift);
@@ -368,9 +368,6 @@ inline Bitboard attacks_bb(Piece pc, Square s, Bitboard occupied) {
 }  // namespace Stockfish::Attacks
 
 namespace Stockfish {
-
-// Preserve Wordfish's existing unqualified attack call sites while the
-// implementation and tables live in the official Attacks namespace.
 using Attacks::attacks_bb;
 using Attacks::between_bb;
 using Attacks::both_attacks_bb;
@@ -381,7 +378,6 @@ using Attacks::PawnPushOrAttacks;
 using Attacks::PseudoAttacks;
 using Attacks::ray_pass_bb;
 using Attacks::RayPassBB;
-
-}  // namespace Stockfish
+}
 
 #endif  // #ifndef ATTACKS_H_INCLUDED

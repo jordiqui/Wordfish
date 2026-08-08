@@ -29,7 +29,9 @@
 extern "C" const struct mach_header_64 _mh_execute_header;
 
     #define DEFINE_BUILD(x) \
-        extern int Wordfish_##x##_main(int argc, char* argv[]); \
+        namespace Stockfish_##x { \
+            extern int main(int argc, char* argv[]); \
+        } \
         int entry_##x(int argc, char* argv[]) { \
             char        name[17]; \
             const char* full = #x; \
@@ -39,18 +41,20 @@ extern "C" const struct mach_header_64 _mh_execute_header;
               getsectiondata(&_mh_execute_header, "__DATA", name, &size)); \
             for (unsigned long i = 0; i < size / sizeof(*fns); i++) \
                 fns[i](); \
-            return Wordfish_##x##_main(argc, argv); \
+            return Stockfish_##x::main(argc, argv); \
         }
 #else
     #define DEFINE_BUILD(x) \
-        extern int Wordfish_##x##_main(int argc, char* argv[]); \
+        namespace Stockfish_##x { \
+            extern int main(int argc, char* argv[]); \
+        } \
         extern "C" void (*__start_##x##_init[])(void); \
         extern "C" void (*__stop_##x##_init[])(void); \
         int entry_##x(int argc, char* argv[]) { \
             unsigned count = __stop_##x##_init - __start_##x##_init; \
             for (unsigned i = 0; i < count; i++) \
                 __start_##x##_init[i](); \
-            return Wordfish_##x##_main(argc, argv); \
+            return Stockfish_##x::main(argc, argv); \
         }
 #endif
 

@@ -19,9 +19,6 @@
 #ifndef NETWORK_H_INCLUDED
 #define NETWORK_H_INCLUDED
 
-#include <cstddef>
-#include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -29,12 +26,11 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <filesystem>
 
-#include "../misc.h"
 #include "../types.h"
-#include "nnue_accumulator.h"
+#include "../misc.h"
 #include "nnue_architecture.h"
-#include "nnue_common.h"
 #include "nnue_feature_transformer.h"
 #include "nnue_misc.h"
 
@@ -44,97 +40,80 @@ class Position;
 
 namespace Stockfish::Eval::NNUE {
 
+class AccumulatorStack;
+struct AccumulatorCaches;
+
 using NetworkOutput = std::tuple<Value, Value>;
 
 // The network must be a trivial type, i.e. the memory must be in-line.
 // This is required to allow sharing the network via shared memory, as
 // there is no way to run destructors.
-template<typename Arch, typename Transformer>
-class NetworkImpl {
-    static constexpr IndexType FTDimensions = Arch::TransformedFeatureDimensions;
-
+class Network {
    public:
-    NetworkImpl() = default;
+    Network() = default;
 
-    NetworkImpl(const NetworkImpl& other) = default;
-    NetworkImpl(NetworkImpl&& other)      = default;
+    Network(const Network& other) = default;
+    Network(Network&& other)      = default;
 
-    NetworkImpl& operator=(const NetworkImpl& other) = default;
-    NetworkImpl& operator=(NetworkImpl&& other)      = default;
+    Network& operator=(const Network& other) = default;
+    Network& operator=(Network&& other)      = default;
 
-    void load(const std::filesystem::path& rootDirectory, std::filesystem::path evalfilePath,
-              EvalFile& evalFile);
-    bool save(const EvalFile& evalFile,
-              const std::optional<std::filesystem::path>& filename) const;
+    void load(const std::filesystem::path& rootDirectory,
+              std::filesystem::path        evalfilePath,
+              EvalFile&                    evalFile);
+    bool save(const EvalFile& evalFile, const std::optional<std::filesystem::path>& filename) const;
 
-    std::size_t get_content_hash() const;
+    usize get_content_hash() const;
 
-    NetworkOutput evaluate(const Position&                         pos,
-                           AccumulatorStack&                       accumulatorStack,
-                           AccumulatorCaches::Cache<FTDimensions>& cache) const;
+    NetworkOutput evaluate(const Position&    pos,
+                           AccumulatorStack&  accumulatorStack,
+                           AccumulatorCaches& cache) const;
 
 
-    void verify(const std::function<void(std::string_view)>&, const EvalFile& evalFile,
-                std::filesystem::path evalfilePath) const;
-    NnueEvalTrace trace_evaluate(const Position&                         pos,
-                                 AccumulatorStack&                       accumulatorStack,
-                                 AccumulatorCaches::Cache<FTDimensions>& cache) const;
+    void verify(const std::function<void(std::string_view)>& f,
+                const EvalFile&                              evalFile,
+                std::filesystem::path                        evalfilePath) const;
 
-   private:
-    void load_user_net(const std::filesystem::path&, const std::filesystem::path&, EvalFile&);
+    NnueEvalTrace trace_evaluate(const Position&    pos,
+                                 AccumulatorStack&  accumulatorStack,
+                                 AccumulatorCaches& cache) const;
+
+    void load_external(const std::filesystem::path&, const std::filesystem::path&, EvalFile&);
     void load_internal(EvalFile&);
 
+   private:
     void initialize();
 
-    bool                       save(std::ostream&, const std::filesystem::path&, const std::string&) const;
+    bool                       save(std::ostream&, const std::string&) const;
     std::optional<std::string> load(std::istream&);
 
-    bool read_header(std::istream&, std::uint32_t*, std::string*) const;
-    bool write_header(std::ostream&, std::uint32_t, const std::string&) const;
+    bool read_header(std::istream&, u32*, std::string*) const;
+    bool write_header(std::ostream&, u32, const std::string&) const;
 
     bool read_parameters(std::istream&, std::string&);
     bool write_parameters(std::ostream&, const std::string&) const;
 
     // Input feature converter
-    Transformer featureTransformer;
+    FeatureTransformer featureTransformer;
 
     // Evaluation function
-    Arch network[LayerStacks];
-
+    NetworkArchitecture network[LayerStacks];
 
     bool initialized = false;
 
     // Hash value of evaluation function structure
-    static constexpr std::uint32_t hash = Transformer::get_hash_value() ^ Arch::get_hash_value();
+    static constexpr u32 hash =
+      FeatureTransformer::get_hash_value() ^ NetworkArchitecture::get_hash_value();
 
-    template<IndexType Size>
-    friend struct AccumulatorCaches::Cache;
-};
-
-// Definitions of the network types
-
-
-class Network:
-    public NetworkImpl<NetworkArchitecture<TransformedFeatureDimensions, L2, L3>,
-                       FeatureTransformer<TransformedFeatureDimensions>> {
-   public:
-    using NetworkImpl::NetworkImpl;
+    friend struct AccumulatorCaches;
 };
 
 
-}  // namespace Stockfish
-
-template<typename ArchT, typename FeatureTransformerT>
-struct std::hash<Stockfish::Eval::NNUE::NetworkImpl<ArchT, FeatureTransformerT>> {
-    std::size_t operator()(
-      const Stockfish::Eval::NNUE::NetworkImpl<ArchT, FeatureTransformerT>& network) const noexcept {
-        return network.get_content_hash();
-    }
-};
+}  // namespace Stockfish::Eval::NNUE
 
 template<>
 struct std::hash<Stockfish::Eval::NNUE::Network> {
-    std::size_t operator()(const Stockfish::Eval::NNUE::Network& network) const noexcept {
+    Stockfish::usize operator()(const Stockfish::Eval::NNUE::Network& network) const noexcept {
         return network.get_content_hash();
     }
 };

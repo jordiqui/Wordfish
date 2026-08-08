@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,11 +19,10 @@
 #ifndef ENGINE_H_INCLUDED
 #define ENGINE_H_INCLUDED
 
-#include <cstddef>
-#include <cstdint>
-#include <filesystem>
 #include <functional>
+#include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +30,8 @@
 #include <variant>
 #include <vector>
 
+#include "misc.h"
+#include "history.h"
 #include "nnue/network.h"
 #include "nnue/nnue_misc.h"
 #include "numa.h"
@@ -59,7 +60,7 @@ class Engine {
 
     ~Engine() { wait_for_search_finished(); }
 
-    std::variant<std::uint64_t, PositionSetError> perft(const std::string& fen, Depth depth, bool isChess960);
+    std::variant<u64, PositionSetError> perft(const std::string& fen, Depth depth, bool isChess960);
 
     // non blocking call to start searching
     void go(Search::LimitsType&);
@@ -76,7 +77,7 @@ class Engine {
 
     bool set_numa_config_from_option(const std::string& o);
     void resize_threads();
-    void set_tt_size(size_t mb);
+    void set_tt_size(usize mb);
     void set_ponderhit(bool);
     void search_clear();
 
@@ -89,13 +90,10 @@ class Engine {
 
     // network related
 
-    void verify_network() const;
-    void load_network();
-    void load_big_network(const std::filesystem::path& file);
+    void                                 verify_network() const;
+    std::unique_ptr<Eval::NNUE::Network> get_default_network();
+    void                                 load_network(const std::filesystem::path& file);
     void save_network(const std::optional<std::filesystem::path>& file);
-
-    std::string get_default_network() const;
-    void        load_network(const std::filesystem::path& file);
 
     // utility functions
 
@@ -106,15 +104,15 @@ class Engine {
 
     int get_hashfull(int maxAge = 0) const;
 
-    std::string                            fen() const;
-    std::optional<PositionSetError>        flip();
-    std::string                            visualize() const;
-    std::vector<std::pair<size_t, size_t>> get_bound_thread_count_by_numa_node() const;
-    std::string                            get_numa_config_as_string() const;
-    std::string                            numa_config_information_as_string() const;
-    std::string                            thread_allocation_information_as_string() const;
-    std::string                            thread_binding_information_as_string() const;
-    Position&                              access_position() { return pos; }
+    std::string                          fen() const;
+    std::optional<PositionSetError>      flip();
+    std::string                          visualize() const;
+    std::vector<std::pair<usize, usize>> get_bound_thread_count_by_numa_node() const;
+    std::string                          get_numa_config_as_string() const;
+    std::string                          numa_config_information_as_string() const;
+    std::string                          thread_allocation_information_as_string() const;
+    std::string                          thread_binding_information_as_string() const;
+    Position&                            access_position() { return pos; }
 
    private:
     const std::filesystem::path binaryDirectory;
@@ -124,16 +122,15 @@ class Engine {
     Position     pos;
     StateListPtr states;
 
-    OptionsMap                                         options;
-    ThreadPool                                         threads;
-    TranspositionTable                                 tt;
-    std::map<NumaIndex, SharedHistories>               sharedHists;
-    Eval::NNUE::EvalFile                               networkFile;
-    LazyNumaReplicatedSystemWide<Eval::NNUE::Network> networks;
+    OptionsMap                                        options;
+    ThreadPool                                        threads;
+    TranspositionTable                                tt;
+    Eval::NNUE::EvalFile                              networkFile;
+    LazyNumaReplicatedSystemWide<Eval::NNUE::Network> network;
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetwork;
-    mutable bool                           networksNeedVerification = true;
+    std::map<NumaIndex, SharedHistories>  sharedHists;
 };
 
 }  // namespace Stockfish

@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,13 +19,19 @@
 #include "memory.h"
 
 #include <cstdlib>
+#include <iostream>  // std::cerr
 
 #if __has_include("features.h")
     #include <features.h>
 #endif
 
 #if defined(__linux__) && !defined(__ANDROID__)
+    #include <errno.h>
     #include <sys/mman.h>
+    // IWYU pragma: no_include <bits/mman-map-flags-generic.h>
+    #include <cstring>
+    #include <mutex>
+    #include <map>
 #endif
 
 #if defined(__APPLE__) || defined(__ANDROID__) || defined(__OpenBSD__) \
@@ -45,9 +51,7 @@
         #define NOMINMAX
     #endif
 
-    #include <ios>       // std::hex, std::dec
-    #include <iostream>  // std::cerr
-    #include <ostream>   // std::endl
+    #include <ios>  // std::hex, std::dec
     #include <windows.h>
 
 // The needed Windows API for processor groups could be missed from old Windows
@@ -64,7 +68,7 @@ namespace Stockfish {
 // availability of aligned_alloc(). Memory allocated with std_aligned_alloc()
 // must be freed with std_aligned_free().
 
-void* std_aligned_alloc(size_t alignment, size_t size) {
+void* std_aligned_alloc(usize alignment, usize size) {
 #if defined(_ISOC11_SOURCE)
     return aligned_alloc(alignment, size);
 #elif defined(POSIXALIGNEDALLOC)
@@ -98,19 +102,19 @@ void std_aligned_free(void* ptr) {
 
 #if defined(_WIN32)
 
-static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize) {
+static void* aligned_large_pages_alloc_windows([[maybe_unused]] usize allocSize) {
 
     return windows_try_with_large_page_priviliges(
-      [&](size_t largePageSize) {
+      [&](usize largePageSize) {
           // Round up size to full pages and allocate
-          allocSize = (allocSize + largePageSize - 1) & ~size_t(largePageSize - 1);
+          allocSize = (allocSize + largePageSize - 1) & ~usize(largePageSize - 1);
           return VirtualAlloc(nullptr, allocSize, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES,
                               PAGE_READWRITE);
       },
       []() { return (void*) nullptr; });
 }
 
-void* aligned_large_pages_alloc(size_t allocSize) {
+void* aligned_large_pages_alloc_with_hint(usize allocSize, bool) {
 
     // Try to allocate large pages
     void* mem = aligned_large_pages_alloc_windows(allocSize);
@@ -124,17 +128,45 @@ void* aligned_large_pages_alloc(size_t allocSize) {
 
 #else
 
-void* aligned_large_pages_alloc(size_t allocSize) {
+    #if defined(__linux__) && defined(MAP_HUGE_SHIFT) && defined(__x86_64__)
+        #define HAS_HUGE_PAGES
+
+static std::map<void*, usize> huge_pages;
+static std::mutex             huge_pages_mtx;
+
+static void* try_huge_pages_alloc(usize allocSize) {
+    usize size = ((allocSize + HugePageSize - 1) / HugePageSize) * HugePageSize;
+    void* mem  = mmap(NULL, size, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (30 << MAP_HUGE_SHIFT), -1, 0);
+
+    if (mem == MAP_FAILED)
+        return nullptr;
+
+    std::lock_guard lg(huge_pages_mtx);
+    huge_pages[mem] = size;
+    return mem;
+}
+    #endif  // defined(__linux__) && defined(MAP_HUGE_SHIFT) && defined(__x86_64__)
+
+void* aligned_large_pages_alloc_with_hint(usize allocSize, [[maybe_unused]] bool hugePageHint) {
+    #ifdef HAS_HUGE_PAGES
+    if (hugePageHint && allocSize >= HugePageSize)
+    {
+        void* mem = try_huge_pages_alloc(allocSize);
+        if (mem)
+            return mem;
+    }
+    #endif
 
     #if defined(__linux__)
-    constexpr size_t alignment = 2 * 1024 * 1024;  // 2MB page size assumed
+    constexpr usize alignment = 2 * 1024 * 1024;  // 2MB page size assumed
     #else
-    constexpr size_t alignment = 4096;  // small page size assumed
+    constexpr usize alignment = 4096;  // small page size assumed
     #endif
 
     // Round up to multiples of alignment
-    size_t size = ((allocSize + alignment - 1) / alignment) * alignment;
-    void*  mem  = std_aligned_alloc(alignment, size);
+    usize size = ((allocSize + alignment - 1) / alignment) * alignment;
+    void* mem  = std_aligned_alloc(alignment, size);
     #if defined(MADV_HUGEPAGE)
     madvise(mem, size, MADV_HUGEPAGE);
     #endif
@@ -143,12 +175,16 @@ void* aligned_large_pages_alloc(size_t allocSize) {
 
 #endif
 
+void* aligned_large_pages_alloc(usize size) {
+    return aligned_large_pages_alloc_with_hint(size, false);
+}
+
 bool has_large_pages() {
 
 #if defined(_WIN32)
 
-    constexpr size_t page_size = 2 * 1024 * 1024;  // 2MB page size assumed
-    void*            mem       = aligned_large_pages_alloc_windows(page_size);
+    constexpr usize page_size = 2 * 1024 * 1024;  // 2MB page size assumed
+    void*           mem       = aligned_large_pages_alloc_windows(page_size);
     if (mem == nullptr)
     {
         return false;
@@ -193,7 +229,26 @@ void aligned_large_pages_free(void* mem) {
 
 #else
 
-void aligned_large_pages_free(void* mem) { std_aligned_free(mem); }
+void aligned_large_pages_free(void* mem) {
+    if (!mem)
+        return;
+
+    #ifdef HAS_HUGE_PAGES
+    std::lock_guard lg(huge_pages_mtx);
+    if (auto it = huge_pages.find(mem); it != huge_pages.end())
+    {
+        if (munmap(mem, it->second) != 0)
+        {
+            std::cerr << "munmap failed: " << strerror(errno) << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        huge_pages.erase(it);
+        return;
+    }
+    #endif
+
+    std_aligned_free(mem);
+}
 
 #endif
 }  // namespace Stockfish

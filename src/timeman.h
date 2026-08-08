@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,14 +19,13 @@
 #ifndef TIMEMAN_H_INCLUDED
 #define TIMEMAN_H_INCLUDED
 
-#include <cstdint>
 
 #include "misc.h"
 
 namespace Stockfish {
 
 class OptionsMap;
-enum Color : int8_t;
+enum Color : u8;
 
 namespace Search {
 struct LimitsType;
@@ -44,10 +43,6 @@ class TimeManagement {
 
     TimePoint optimum() const;
     TimePoint maximum() const;
-    TimePoint available_time() const;
-    TimePoint panic_buffer() const;
-    TimePoint panic_reserve() const;
-    bool      panic() const;
     template<typename FUNC>
     TimePoint elapsed(FUNC nodes) const {
         return useNodesTime ? TimePoint(nodes()) : elapsed_time();
@@ -55,19 +50,15 @@ class TimeManagement {
     TimePoint elapsed_time() const { return now() - startTime; };
 
     void clear();
-    void advance_nodes_time(std::int64_t nodes);
+    void advance_nodes_time(i64 nodes);
 
    private:
     TimePoint startTime;
     TimePoint optimumTime;
     TimePoint maximumTime;
-    TimePoint availableTime   = 0;
-    TimePoint panicTimeBuffer = 0;
-    TimePoint panicReserve    = 0;
 
-    std::int64_t availableNodes = -1;     // When in 'nodes as time' mode
-    bool         useNodesTime   = false;  // True if we are in 'nodes as time' mode
-    bool         panicMode      = false;
+    i64  availableNodes = -1;     // When in 'nodes as time' mode
+    bool useNodesTime   = false;  // True if we are in 'nodes as time' mode
 };
 
 }  // namespace Stockfish

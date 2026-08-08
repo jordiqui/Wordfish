@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,11 +32,11 @@ namespace Stockfish::Benchmark {
 // Utility to verify move generation. All the leaf nodes up
 // to the given depth are generated and counted, and the sum is returned.
 template<bool Root>
-uint64_t perft(Position& pos, Depth depth) {
+u64 perft(Position& pos, Depth depth) {
 
     StateInfo st;
 
-    uint64_t   cnt, nodes = 0;
+    u64        cnt, nodes = 0;
     const bool leaf = (depth == 2);
 
     for (const auto& m : MoveList<LEGAL>(pos))
@@ -56,11 +56,13 @@ uint64_t perft(Position& pos, Depth depth) {
     return nodes;
 }
 
-inline std::variant<uint64_t, PositionSetError> perft(const std::string& fen, Depth depth, bool isChess960) {
+inline std::variant<u64, PositionSetError>
+perft(const std::string& fen, Depth depth, bool isChess960) {
     StateInfo st;
     Position  p;
-    if (auto error = p.set(fen, isChess960, &st))
-        return *error;
+
+    if (auto err = p.set(fen, isChess960, &st))
+        return {*err};
 
     return perft<true>(p, depth);
 }

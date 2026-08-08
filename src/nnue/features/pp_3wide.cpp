@@ -38,8 +38,8 @@ constexpr IndexType make_pawn_id(Color color, Square square) {
 
 #ifdef USE_AVX512ICL
 static inline __m256i pp_idx_epi16(__m256i a, __m256i b) {
-    const __m256i hi   = _mm256_max_epstd::uint16_t(a, b);
-    const __m256i lo   = _mm256_min_epstd::uint16_t(a, b);
+    const __m256i hi   = _mm256_max_epu16(a, b);
+    const __m256i lo   = _mm256_min_epu16(a, b);
     const __m256i prod = _mm256_mullo_epi16(hi, _mm256_sub_epi16(hi, _mm256_set1_epi16(1)));
     return _mm256_add_epi16(_mm256_add_epi16(_mm256_srli_epi16(prod, 1), lo),
                             _mm256_set1_epi16(i16(PP_3Wide::IndexBase)));
@@ -48,9 +48,9 @@ static inline __m256i pp_idx_epi16(__m256i a, __m256i b) {
 
 inline sf_always_inline IndexType PP_3Wide::make_index(
   Color perspective, Color color, Square from, Square to, Color pairedColor, Square ksq) {
-    const std::int8_t orientation   = FullThreats::OrientTBL[ksq] ^ (56 * perspective);
-    unsigned from_oriented = std::uint8_t(from) ^ orientation;
-    unsigned to_oriented   = std::uint8_t(to) ^ orientation;
+    const i8 orientation   = FullThreats::OrientTBL[ksq] ^ (56 * perspective);
+    unsigned from_oriented = u8(from) ^ orientation;
+    unsigned to_oriented   = u8(to) ^ orientation;
 
     Color color_oriented       = Color(color ^ perspective);
     Color pairedColor_oriented = Color(pairedColor ^ perspective);
@@ -109,7 +109,7 @@ void PP_3Wide::append_changed_indices(Color                                    p
         return;
 
 #ifdef USE_AVX512ICL
-    const std::uint8_t      orientation = std::uint8_t(FullThreats::OrientTBL[ksq]) ^ std::uint8_t(56 * perspective);
+    const u8      orientation = u8(FullThreats::OrientTBL[ksq]) ^ u8(56 * perspective);
     const __m512i iota        = AllSquares;
     const __m512i adjusted =
       _mm512_sub_epi8(_mm512_xor_si512(iota, _mm512_set1_epi8(orientation)), _mm512_set1_epi8(8));
@@ -130,13 +130,13 @@ void PP_3Wide::append_changed_indices(Color                                    p
             if (!n)
                 continue;
 
-            const std::uint16_t     colorOff = (enemy & a) ? 48 : 0;
-            const std::uint16_t     aId      = std::uint16_t(((std::uint8_t(a) ^ orientation) - 8) + colorOff);
-            const __m256i pids     = _mm256_cvtepstd::uint8_t_epi16(
+            const u16     colorOff = (enemy & a) ? 48 : 0;
+            const u16     aId      = u16(((u8(a) ^ orientation) - 8) + colorOff);
+            const __m256i pids     = _mm256_cvtepu8_epi16(
               _mm512_castsi512_si128(_mm512_maskz_compress_epi8(partners, ids)));
             const __m256i feats = pp_idx_epi16(_mm256_set1_epi16(aId), pids);
 
-            std::uint16_t* w = out.make_space(n);
+            u16* w = out.make_space(n);
             _mm256_storeu_epi16(w, feats);
         }
     };

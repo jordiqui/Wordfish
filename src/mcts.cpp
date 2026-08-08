@@ -187,7 +187,12 @@ std::optional<double> rollout(Position& pos,
         played.push_back(move);
     }
 
-    Value eval = Value(Eval::simple_eval(pos));
+    int material = PawnValue * (pos.count<PAWN>(WHITE) - pos.count<PAWN>(BLACK))
+             + KnightValue * (pos.count<KNIGHT>(WHITE) - pos.count<KNIGHT>(BLACK))
+             + BishopValue * (pos.count<BISHOP>(WHITE) - pos.count<BISHOP>(BLACK))
+             + RookValue * (pos.count<ROOK>(WHITE) - pos.count<ROOK>(BLACK))
+             + QueenValue * (pos.count<QUEEN>(WHITE) - pos.count<QUEEN>(BLACK));
+    Value eval = Value(pos.side_to_move() == WHITE ? material : -material);
 
     for (int i = int(played.size()) - 1; i >= 0; --i)
         pos.undo_move(played[i]);
@@ -439,4 +444,3 @@ Result analyze(Position&                 rootPos,
 
 }  // namespace MCTS
 }  // namespace Stockfish
-

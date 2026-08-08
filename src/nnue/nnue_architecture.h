@@ -42,10 +42,9 @@ using PairFeatureSet   = Features::PP_3Wide;
 using PSQFeatureSet    = Features::HalfKAv2_hm;
 
 // Number of input feature dimensions after conversion
-constexpr IndexType TransformedFeatureDimensions = 1024;
-constexpr int       L2                           = 32;
-constexpr int       L3                           = 32;
-
+constexpr IndexType L1 = 1024;
+constexpr int       L2 = 32;
+constexpr int       L3 = 32;
 
 constexpr IndexType PSQTBuckets = 8;
 constexpr IndexType LayerStacks = 8;
@@ -56,11 +55,11 @@ constexpr IndexType LayerStacks = 8;
 static_assert(PSQTBuckets % 8 == 0,
               "Per feature PSQT values cannot be processed at granularity lower than 8 at a time.");
 
-template<IndexType L1, int L2, int L3>
 struct NetworkArchitecture {
     static constexpr IndexType TransformedFeatureDimensions = L1;
     static constexpr int       FC_0_OUTPUTS                 = L2;
     static constexpr int       FC_1_OUTPUTS                 = L3;
+
     Layers::AffineTransformSparseInput<TransformedFeatureDimensions, FC_0_OUTPUTS> fc_0;
     Layers::SqrClippedReLU<FC_0_OUTPUTS, WeightScaleBits + 1>                      ac_sqr_0;
     Layers::ClippedReLU<FC_0_OUTPUTS, WeightScaleBits + 1>                         ac_0;
@@ -70,9 +69,9 @@ struct NetworkArchitecture {
     Layers::AffineTransform<FC_0_OUTPUTS * 2 + FC_1_OUTPUTS * 2, 1>                fc_2;
 
     // Hash value embedded in the evaluation file
-    static constexpr std::uint32_t get_hash_value() {
+    static constexpr u32 get_hash_value() {
         // input slice hash
-        std::uint32_t hashValue = 0xEC42E90Du;
+        u32 hashValue = 0xEC42E90Du;
         hashValue ^= TransformedFeatureDimensions * 2;
 
         hashValue = decltype(fc_0)::get_hash_value(hashValue);
@@ -100,15 +99,14 @@ struct NetworkArchitecture {
             && fc_2.write_parameters(stream);
     }
 
-    std::int32_t propagate(const TransformedFeatureType* transformedFeatures,
-                           const NNZInfo<L1>&            nnzInfo) const {
+    i32 propagate(const TransformedFeatureType* transformedFeatures,
+                  const NNZInfo<L1>&            nnzInfo) const {
         struct alignas(CacheLineSize) Buffer {
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
             alignas(CacheLineSize) typename decltype(ac_sqr_0)::OutputType
               concat_buffer[ceil_to_multiple<IndexType>(FC_0_OUTPUTS * 2 + FC_1_OUTPUTS * 2, 32)];
             alignas(CacheLineSize) typename decltype(fc_1)::OutputBuffer fc_1_out;
             alignas(CacheLineSize) typename decltype(fc_2)::OutputBuffer fc_2_out;
-
         };
 
         Buffer buffer;
@@ -121,37 +119,36 @@ struct NetworkArchitecture {
         ac_sqr_0.propagate(buffer.fc_0_out, buffer.concat_buffer);
         ac_0.propagate(buffer.fc_0_out, buffer.concat_buffer + FC_0_OUTPUTS);
 #endif
+
         fc_1.propagate(buffer.concat_buffer, buffer.fc_1_out);
 #if defined(USE_PAIR_ACTIVATIONS)
         ac_sqr_1.propagate_pair(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2,
                                 buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
 #else
         ac_sqr_1.propagate(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2);
-        ac_1.propagate(buffer.fc_1_out,
-                       buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
+        ac_1.propagate(buffer.fc_1_out, buffer.concat_buffer + FC_0_OUTPUTS * 2 + FC_1_OUTPUTS);
 #endif
+
         fc_2.propagate(buffer.concat_buffer, buffer.fc_2_out);
 
         static_assert(FC_0_OUTPUTS >= 2);
-        std::int32_t fwdOut = buffer.fc_2_out[0];
-        std::int32_t skip_0 =
-          buffer.fc_0_out[FC_0_OUTPUTS - 2] - buffer.fc_0_out[FC_0_OUTPUTS - 1];
+        i32 fwdOut = buffer.fc_2_out[0];
+        i32 skip_0 = buffer.fc_0_out[FC_0_OUTPUTS - 2] - buffer.fc_0_out[FC_0_OUTPUTS - 1];
         fwdOut += skip_0;
 
         // fwdOut is such that 1.0 is equal to HiddenOneVal*(1<<WeightScaleBits)*2 in
         // quantized form, but we want 1.0 to be equal to 600*OutputScale
         // to make overflow impossible we cast to int64_t
-        constexpr std::int64_t multiplier  = 600 * OutputScale;
-        constexpr std::int64_t denominator = static_cast<std::int64_t>(HiddenOneVal)
-                                           * static_cast<std::int64_t>(1U << WeightScaleBits) * 2;
+        constexpr i64 multiplier = 600 * OutputScale;
+        constexpr i64 denominator =
+          static_cast<i64>(HiddenOneVal) * static_cast<i64>(1U << WeightScaleBits) * 2;
 
-        std::int32_t outputValue =
-          static_cast<std::int32_t>((static_cast<std::int64_t>(fwdOut) * multiplier) / denominator);
+        i32 outputValue = static_cast<i32>((static_cast<i64>(fwdOut) * multiplier) / denominator);
         return outputValue;
     }
 
-    std::size_t get_content_hash() const {
-        std::size_t h = 0;
+    usize get_content_hash() const {
+        usize h = 0;
         hash_combine(h, fc_0.get_content_hash());
         hash_combine(h, ac_sqr_0.get_content_hash());
         hash_combine(h, ac_0.get_content_hash());
@@ -166,10 +163,10 @@ struct NetworkArchitecture {
 
 }  // namespace Stockfish::Eval::NNUE
 
-template<Stockfish::Eval::NNUE::IndexType L1, int L2, int L3>
-struct std::hash<Stockfish::Eval::NNUE::NetworkArchitecture<L1, L2, L3>> {
-    std::size_t
-    operator()(const Stockfish::Eval::NNUE::NetworkArchitecture<L1, L2, L3>& arch) const noexcept {
+template<>
+struct std::hash<Stockfish::Eval::NNUE::NetworkArchitecture> {
+    Stockfish::usize
+    operator()(const Stockfish::Eval::NNUE::NetworkArchitecture& arch) const noexcept {
         return arch.get_content_hash();
     }
 };
