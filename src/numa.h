@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,12 +33,11 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <type_traits>
 #include <utility>
-#include <variant>
 #include <vector>
 #include <cstring>
 
+#include "misc.h"
 #include "shm.h"
 
 // We support linux very well, but we explicitly do NOT support Android,
@@ -55,10 +54,6 @@
         #define _WIN32_WINNT 0x0601  // Force to include needed API prototypes
     #endif
 
-// On Windows each processor group can have up to 64 processors.
-// https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
-static constexpr size_t WIN_PROCESSOR_GROUP_SIZE = 64;
-
     #if !defined(NOMINMAX)
         #define NOMINMAX
     #endif
@@ -73,53 +68,14 @@ using SetThreadSelectedCpuSetMasks_t = BOOL (*)(HANDLE, PGROUP_AFFINITY, USHORT)
 // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getthreadselectedcpusetmasks
 using GetThreadSelectedCpuSetMasks_t = BOOL (*)(HANDLE, PGROUP_AFFINITY, USHORT, PUSHORT);
 
-// Windows 10 and Windows 11 expose different cache relationship layouts.
-// Detect GroupCount at compile time so both SDK layouts remain supported.
-template<typename T, typename = void>
-struct HasGroupCount: std::false_type {};
-
-template<typename T>
-struct HasGroupCount<T, std::void_t<decltype(std::declval<T>().Cache.GroupCount)>>: std::true_type {
-};
-
-template<typename T, typename Pred, std::enable_if_t<HasGroupCount<T>::value, bool> = true>
-std::set<size_t> read_cache_members(const T* info, Pred&& is_cpu_allowed) {
-    std::set<size_t> cpus;
-    const int        groupCount = std::max(info->Cache.GroupCount, WORD(1));
-    for (WORD procGroup = 0; procGroup < groupCount; ++procGroup)
-        for (BYTE number = 0; number < WIN_PROCESSOR_GROUP_SIZE; ++number)
-        {
-            const WORD   groupNumber = info->Cache.GroupMasks[procGroup].Group;
-            const size_t cpu         = static_cast<size_t>(groupNumber) * WIN_PROCESSOR_GROUP_SIZE
-                             + static_cast<size_t>(number);
-            if ((info->Cache.GroupMasks[procGroup].Mask & (1ULL << number)) && is_cpu_allowed(cpu))
-                cpus.insert(cpu);
-        }
-    return cpus;
-}
-
-template<typename T, typename Pred, std::enable_if_t<!HasGroupCount<T>::value, bool> = true>
-std::set<size_t> read_cache_members(const T* info, Pred&& is_cpu_allowed) {
-    std::set<size_t> cpus;
-    for (BYTE number = 0; number < WIN_PROCESSOR_GROUP_SIZE; ++number)
-    {
-        const WORD   groupNumber = info->Cache.GroupMask.Group;
-        const size_t cpu =
-          static_cast<size_t>(groupNumber) * WIN_PROCESSOR_GROUP_SIZE + static_cast<size_t>(number);
-        if ((info->Cache.GroupMask.Mask & (1ULL << number)) && is_cpu_allowed(cpu))
-            cpus.insert(cpu);
-    }
-    return cpus;
-}
-
 #endif
 
 #include "misc.h"
 
 namespace Stockfish {
 
-using CpuIndex  = size_t;
-using NumaIndex = size_t;
+using CpuIndex  = usize;
+using NumaIndex = usize;
 
 inline CpuIndex get_hardware_concurrency() {
     CpuIndex concurrency = std::thread::hardware_concurrency();
@@ -137,6 +93,10 @@ inline CpuIndex get_hardware_concurrency() {
 inline const CpuIndex SYSTEM_THREADS_NB = std::max<CpuIndex>(1, get_hardware_concurrency());
 
 #if defined(_WIN64)
+
+// On Windows each processor group can have up to 64 processors.
+// https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
+static constexpr usize WIN_PROCESSOR_GROUP_SIZE = 64;
 
 struct WindowsAffinity {
     std::optional<std::set<CpuIndex>> oldApi;
@@ -175,7 +135,7 @@ inline std::pair<BOOL, std::vector<USHORT>> get_process_group_affinity() {
 
     // GetProcessGroupAffinity requires the GroupArray argument to be
     // aligned to 4 bytes instead of just 2.
-    static constexpr size_t GroupArrayMinimumAlignment = 4;
+    static constexpr usize GroupArrayMinimumAlignment = 4;
     static_assert(GroupArrayMinimumAlignment >= alignof(USHORT));
 
     // The function should succeed the second time, but it may fail if the group
@@ -258,9 +218,9 @@ inline WindowsAffinity get_process_affinity() {
 
                 for (USHORT i = 0; i < RequiredMaskCount; ++i)
                 {
-                    const size_t procGroupIndex = groupAffinities[i].Group;
+                    const usize procGroupIndex = groupAffinities[i].Group;
 
-                    for (size_t j = 0; j < WIN_PROCESSOR_GROUP_SIZE; ++j)
+                    for (usize j = 0; j < WIN_PROCESSOR_GROUP_SIZE; ++j)
                     {
                         if (groupAffinities[i].Mask & (KAFFINITY(1) << j))
                             cpus.insert(procGroupIndex * WIN_PROCESSOR_GROUP_SIZE + j);
@@ -312,10 +272,10 @@ inline WindowsAffinity get_process_affinity() {
         {
             std::set<CpuIndex> cpus;
 
-            const size_t procGroupIndex = groupAffinity[0];
+            const usize procGroupIndex = groupAffinity[0];
 
-            const uint64_t mask = static_cast<uint64_t>(proc);
-            for (size_t j = 0; j < WIN_PROCESSOR_GROUP_SIZE; ++j)
+            const u64 mask = static_cast<u64>(proc);
+            for (usize j = 0; j < WIN_PROCESSOR_GROUP_SIZE; ++j)
             {
                 if (mask & (KAFFINITY(1) << j))
                     cpus.insert(procGroupIndex * WIN_PROCESSOR_GROUP_SIZE + j);
@@ -353,8 +313,8 @@ inline WindowsAffinity get_process_affinity() {
                     // choice could influence the resulting affinity.
                     // We assume the processor IDs within the group are
                     // filled sequentially from 0.
-                    uint64_t procCombined = std::numeric_limits<uint64_t>::max();
-                    uint64_t sysCombined  = std::numeric_limits<uint64_t>::max();
+                    u64 procCombined = std::numeric_limits<u64>::max();
+                    u64 sysCombined  = std::numeric_limits<u64>::max();
 
                     for (int i = 0; i < std::min(numActiveProcessors, 2); ++i)
                     {
@@ -382,14 +342,14 @@ inline WindowsAffinity get_process_affinity() {
                             return;
                         }
 
-                        procCombined &= static_cast<uint64_t>(proc2);
-                        sysCombined &= static_cast<uint64_t>(sys2);
+                        procCombined &= static_cast<u64>(proc2);
+                        sysCombined &= static_cast<u64>(sys2);
                     }
 
                     if (procCombined != sysCombined)
                         isAffinityFull = false;
 
-                    for (size_t j = 0; j < WIN_PROCESSOR_GROUP_SIZE; ++j)
+                    for (usize j = 0; j < WIN_PROCESSOR_GROUP_SIZE; ++j)
                     {
                         if (procCombined & (KAFFINITY(1) << j))
                             cpus.insert(procGroupIndex * WIN_PROCESSOR_GROUP_SIZE + j);
@@ -480,7 +440,7 @@ inline std::set<CpuIndex> get_process_affinity() {
     if (mask == nullptr)
         std::exit(EXIT_FAILURE);
 
-    const size_t masksize = CPU_ALLOC_SIZE(MaxNumCpus);
+    const usize masksize = CPU_ALLOC_SIZE(MaxNumCpus);
 
     CPU_ZERO_S(masksize, mask);
 
@@ -537,13 +497,13 @@ struct L3Domain {
     std::set<CpuIndex> cpus{};
 };
 
-// Use system NUMA nodes without subdividing them by cache topology.
+// Use system NUMA nodes
 struct SystemNumaPolicy {};
-// Use each system-reported L3 cache domain as a logical NUMA node.
+// Use system-reported L3 domains
 struct L3DomainsPolicy {};
-// Group adjacent L3 domains within a system NUMA node up to bundleSize CPUs.
+// Group system-reported L3 domains until they reach bundleSize
 struct BundledL3Policy {
-    size_t bundleSize;
+    usize bundleSize;
 };
 
 using NumaAutoPolicy = std::variant<SystemNumaPolicy, L3DomainsPolicy, BundledL3Policy>;
@@ -553,9 +513,18 @@ using NumaAutoPolicy = std::variant<SystemNumaPolicy, L3DomainsPolicy, BundledL3
 // it would be complex and expensive to maintain class invariants.
 // The CPU (processor) numbers always correspond to the actual numbering used
 // by the system. The NUMA node numbers MAY NOT correspond to the system's
-// numbering of the NUMA nodes. In particular, empty nodes may be removed, or
-// the user may create custom nodes. It is guaranteed that NUMA nodes are NOT
-// empty: every node exposed by NumaConfig has at least one processor assigned.
+// numbering of the NUMA nodes. In particular, by default, if the processor has
+// non-uniform cache access within a NUMA node (i.e., a non-unified L3 cache structure),
+// then L3 domains within a system NUMA node will be used to subdivide it
+// into multiple logical NUMA nodes in the config. Additionally, empty nodes may
+// be removed, or the user may create custom nodes.
+//
+// As a special case, when performing system-wide replication of read-only data
+// (i.e., LazyNumaReplicatedSystemWide), the system NUMA node is used, rather than
+// custom or L3-aware nodes. See that class's get_discriminator() function.
+//
+// It is guaranteed that NUMA nodes are NOT empty: every node exposed by NumaConfig
+// has at least one processor assigned.
 //
 // We use startup affinities so as not to modify its own behaviour in time.
 //
@@ -570,83 +539,124 @@ class NumaConfig {
         add_cpu_range_to_node(NumaIndex{0}, CpuIndex{0}, numCpus - 1);
     }
 
-    // Build a configuration using either system NUMA nodes or L3-aware subdivisions.
-    static NumaConfig from_system(const NumaAutoPolicy& policy,
-                                  bool                  respectProcessAffinity = true) {
+    // This function gets a NumaConfig based on the system's provided information.
+    // The available policies are documented above.
+    static NumaConfig from_system([[maybe_unused]] const NumaAutoPolicy& policy,
+                                  bool respectProcessAffinity = true) {
         NumaConfig cfg = empty();
 
 #if !((defined(__linux__) && !defined(__ANDROID__)) || defined(_WIN64))
+        // Fallback for unsupported systems.
         for (CpuIndex c = 0; c < SYSTEM_THREADS_NB; ++c)
             cfg.add_cpu_to_node(NumaIndex{0}, c);
 #else
 
     #if defined(_WIN64)
+
         std::optional<std::set<CpuIndex>> allowedCpus;
+
         if (respectProcessAffinity)
             allowedCpus = STARTUP_PROCESSOR_AFFINITY.get_combined();
 
+        // The affinity cannot be determined in all cases on Windows,
+        // but we at least guarantee that the number of allowed processors
+        // is >= number of processors in the affinity mask. In case the user
+        // is not satisfied they must set the processor numbers explicitly.
         auto is_cpu_allowed = [&allowedCpus](CpuIndex c) {
             return !allowedCpus.has_value() || allowedCpus->count(c) == 1;
         };
+
     #elif defined(__linux__) && !defined(__ANDROID__)
+
         std::set<CpuIndex> allowedCpus;
+
         if (respectProcessAffinity)
             allowedCpus = STARTUP_PROCESSOR_AFFINITY;
 
         auto is_cpu_allowed = [respectProcessAffinity, &allowedCpus](CpuIndex c) {
             return !respectProcessAffinity || allowedCpus.count(c) == 1;
         };
+
     #endif
 
         bool l3Success = false;
         if (!std::holds_alternative<SystemNumaPolicy>(policy))
         {
-            size_t bundleSize = 0;
-            if (const auto* bundled = std::get_if<BundledL3Policy>(&policy))
-                bundleSize = bundled->bundleSize;
-
-            if (auto l3Config =
-                  try_get_l3_aware_config(respectProcessAffinity, bundleSize, is_cpu_allowed))
+            usize l3BundleSize = 0;
+            if (const auto* v = std::get_if<BundledL3Policy>(&policy))
             {
-                cfg       = std::move(*l3Config);
+                l3BundleSize = v->bundleSize;
+            }
+            if (auto l3Cfg =
+                  try_get_l3_aware_config(respectProcessAffinity, l3BundleSize, is_cpu_allowed))
+            {
+                cfg       = std::move(*l3Cfg);
                 l3Success = true;
             }
         }
-
         if (!l3Success)
             cfg = from_system_numa(respectProcessAffinity, is_cpu_allowed);
 
     #if defined(_WIN64)
-        // Keep logical nodes within processor groups for reliable Windows scheduling.
+        // Split the NUMA nodes to be contained within a group if necessary.
+        // This is needed between Windows 10 Build 20348 and Windows 11, because
+        // the new NUMA allocation behaviour was introduced while there was
+        // still no way to set thread affinity spanning multiple processor groups.
+        // See https://learn.microsoft.com/en-us/windows/win32/procthread/numa-support
+        // We also do this is if need to force old API for some reason.
+        //
+        // 2024-08-26: It appears that we need to actually always force this behaviour.
+        // While Windows allows this to work now, such assignments have bad interaction
+        // with the scheduler - in particular it still prefers scheduling on the thread's
+        // "primary" node, even if it means scheduling SMT processors first.
+        // See https://github.com/official-stockfish/Stockfish/issues/5551
+        // See https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
+        //
+        //     Each process is assigned a primary group at creation, and by default all
+        //     of its threads' primary group is the same. Each thread's ideal processor
+        //     is in the thread's primary group, so threads will preferentially be
+        //     scheduled to processors on their primary group, but they are able to
+        //     be scheduled to processors on any other group.
+        //
+        // used to be guarded by if (STARTUP_USE_OLD_AFFINITY_API)
         {
-            NumaConfig splitCfg       = empty();
-            NumaIndex  splitNodeIndex = 0;
+            NumaConfig splitCfg = empty();
+
+            NumaIndex splitNodeIndex = 0;
             for (const auto& cpus : cfg.nodes)
             {
                 if (cpus.empty())
                     continue;
 
-                size_t lastProcGroupIndex = *cpus.begin() / WIN_PROCESSOR_GROUP_SIZE;
+                usize lastProcGroupIndex = *(cpus.begin()) / WIN_PROCESSOR_GROUP_SIZE;
                 for (CpuIndex c : cpus)
                 {
-                    const size_t procGroupIndex = c / WIN_PROCESSOR_GROUP_SIZE;
+                    const usize procGroupIndex = c / WIN_PROCESSOR_GROUP_SIZE;
                     if (procGroupIndex != lastProcGroupIndex)
                     {
-                        ++splitNodeIndex;
+                        splitNodeIndex += 1;
                         lastProcGroupIndex = procGroupIndex;
                     }
                     splitCfg.add_cpu_to_node(splitNodeIndex, c);
                 }
-                ++splitNodeIndex;
+                splitNodeIndex += 1;
             }
+
             cfg = std::move(splitCfg);
         }
     #endif
+
 #endif
 
+        // We have to ensure no empty NUMA nodes persist.
         cfg.remove_empty_numa_nodes();
+
+        // If the user explicitly opts out from respecting the current process affinity
+        // then it may be inconsistent with the current affinity (obviously), so we
+        // consider it custom.
         if (!respectProcessAffinity)
             cfg.customAffinity = true;
+
         return cfg;
     }
 
@@ -661,12 +671,16 @@ class NumaConfig {
         for (auto&& nodeStr : split(s, ":"))
         {
             auto indices = indices_from_shortened_string(std::string(nodeStr));
-            if (indices.empty())
-                return std::nullopt;
-            for (auto idx : indices)
-                if (!cfg.add_cpu_to_node(n, CpuIndex(idx)))
-                    return std::nullopt;
-            n += 1;
+            if (!indices.empty())
+            {
+                for (auto idx : indices)
+                {
+                    if (!cfg.add_cpu_to_node(n, CpuIndex(idx)))
+                        return std::nullopt;
+                }
+
+                n += 1;
+            }
         }
 
         if (n == 0)  // failed to parse any nodes
@@ -759,7 +773,7 @@ class NumaConfig {
         if (numThreads <= 1)
             return false;
 
-        size_t largestNodeSize = 0;
+        usize largestNodeSize = 0;
         for (auto&& cpus : nodes)
             if (cpus.size() > largestNodeSize)
                 largestNodeSize = cpus.size();
@@ -770,7 +784,7 @@ class NumaConfig {
                 <= SmallNodeThreshold;
         };
 
-        size_t numNotSmallNodes = 0;
+        usize numNotSmallNodes = 0;
         for (auto&& cpus : nodes)
             if (!is_node_small(cpus))
                 numNotSmallNodes += 1;
@@ -790,7 +804,7 @@ class NumaConfig {
         }
         else
         {
-            std::vector<size_t> occupation(nodes.size(), 0);
+            std::vector<usize> occupation(nodes.size(), 0);
             for (CpuIndex c = 0; c < numThreads; ++c)
             {
                 NumaIndex bestNode{0};
@@ -828,7 +842,7 @@ class NumaConfig {
         if (mask == nullptr)
             std::exit(EXIT_FAILURE);
 
-        const size_t masksize = CPU_ALLOC_SIZE(highestCpuIndex + 1);
+        const usize masksize = CPU_ALLOC_SIZE(highestCpuIndex + 1);
 
         CPU_ZERO_S(masksize, mask);
 
@@ -870,8 +884,8 @@ class NumaConfig {
 
             for (CpuIndex c : nodes[n])
             {
-                const size_t procGroupIndex     = c / WIN_PROCESSOR_GROUP_SIZE;
-                const size_t idxWithinProcGroup = c % WIN_PROCESSOR_GROUP_SIZE;
+                const usize procGroupIndex     = c / WIN_PROCESSOR_GROUP_SIZE;
+                const usize idxWithinProcGroup = c % WIN_PROCESSOR_GROUP_SIZE;
                 groupAffinities[procGroupIndex].Mask |= KAFFINITY(1) << idxWithinProcGroup;
             }
 
@@ -909,12 +923,12 @@ class NumaConfig {
             GROUP_AFFINITY affinity;
             std::memset(&affinity, 0, sizeof(GROUP_AFFINITY));
             // We use an ordered set to be sure to get the smallest cpu number here.
-            const size_t forcedProcGroupIndex = *(nodes[n].begin()) / WIN_PROCESSOR_GROUP_SIZE;
-            affinity.Group                    = static_cast<WORD>(forcedProcGroupIndex);
+            const usize forcedProcGroupIndex = *(nodes[n].begin()) / WIN_PROCESSOR_GROUP_SIZE;
+            affinity.Group                   = static_cast<WORD>(forcedProcGroupIndex);
             for (CpuIndex c : nodes[n])
             {
-                const size_t procGroupIndex     = c / WIN_PROCESSOR_GROUP_SIZE;
-                const size_t idxWithinProcGroup = c % WIN_PROCESSOR_GROUP_SIZE;
+                const usize procGroupIndex     = c / WIN_PROCESSOR_GROUP_SIZE;
+                const usize idxWithinProcGroup = c % WIN_PROCESSOR_GROUP_SIZE;
                 // We skip processors that are not in the same processor group.
                 // If everything was set up correctly this will never be an issue,
                 // but we have to account for bad NUMA node specification.
@@ -1016,8 +1030,8 @@ class NumaConfig {
         return true;
     }
 
-    static std::vector<size_t> indices_from_shortened_string(const std::string& s) {
-        std::vector<size_t> indices;
+    static std::vector<usize> indices_from_shortened_string(const std::string& s) {
+        std::vector<usize> indices;
 
         if (s.empty())
             return indices;
@@ -1031,71 +1045,103 @@ class NumaConfig {
             if (parts.size() == 1)
             {
                 auto c = str_to_size_t(std::string(parts[0]));
-                if (c)
+                if (c.has_value())
                     indices.emplace_back(*c);
             }
             else if (parts.size() == 2)
             {
-                constexpr size_t MaxIndices = 1 << 20;
+                constexpr usize MaxIndices = 1 << 20;  // prevent oom
+
                 auto cfirst = str_to_size_t(std::string(parts[0]));
                 auto clast  = str_to_size_t(std::string(parts[1]));
-                if (cfirst && clast && *cfirst <= *clast && *clast - *cfirst < MaxIndices)
-                    for (size_t c = *cfirst; c <= *clast; ++c)
+                if (cfirst.has_value() && clast.has_value() && *clast - *cfirst < MaxIndices)
+                {
+                    for (usize c = *cfirst; c <= *clast; ++c)
+                    {
                         indices.emplace_back(c);
+                    }
+                }
             }
         }
 
         return indices;
     }
 
+    // This function queries the system for the mapping of processors to NUMA nodes.
+    // On Linux we read from standardized kernel sysfs, with a fallback to single NUMA
+    // node. On Windows we utilize GetNumaProcessorNodeEx, which has its quirks, see
+    // comment for Windows implementation of get_process_affinity.
     template<typename Pred>
     static NumaConfig from_system_numa([[maybe_unused]] bool   respectProcessAffinity,
                                        [[maybe_unused]] Pred&& is_cpu_allowed) {
         NumaConfig cfg = empty();
 
 #if defined(__linux__) && !defined(__ANDROID__)
+
+        // On Linux things are straightforward, since there's no processor groups and
+        // any thread can be scheduled on all processors.
+        // We try to gather this information from the sysfs first
+        // https://www.kernel.org/doc/Documentation/ABI/stable/sysfs-devices-node
+
         bool useFallback = false;
         auto fallback    = [&]() {
             useFallback = true;
             cfg         = empty();
         };
 
+        // /sys/devices/system/node/online contains information about active NUMA nodes
         auto nodeIdsStr = read_file_to_string("/sys/devices/system/node/online");
         if (!nodeIdsStr.has_value() || nodeIdsStr->empty())
+        {
             fallback();
+        }
         else
         {
             remove_whitespace(*nodeIdsStr);
-            for (size_t n : indices_from_shortened_string(*nodeIdsStr))
+            for (usize n : indices_from_shortened_string(*nodeIdsStr))
             {
-                const std::string path =
-                  "/sys/devices/system/node/node" + std::to_string(n) + "/cpulist";
+                // /sys/devices/system/node/node.../cpulist
+                std::string path =
+                  std::string("/sys/devices/system/node/node") + std::to_string(n) + "/cpulist";
                 auto cpuIdsStr = read_file_to_string(path);
+                // Now, we only bail if the file does not exist. Some nodes may be
+                // empty, that's fine. An empty node still has a file that appears
+                // to have some whitespace, so we need to handle that.
                 if (!cpuIdsStr.has_value())
                 {
                     fallback();
                     break;
                 }
-
-                remove_whitespace(*cpuIdsStr);
-                for (size_t c : indices_from_shortened_string(*cpuIdsStr))
-                    if (is_cpu_allowed(c))
-                        cfg.add_cpu_to_node(n, c);
+                else
+                {
+                    remove_whitespace(*cpuIdsStr);
+                    for (usize c : indices_from_shortened_string(*cpuIdsStr))
+                    {
+                        if (is_cpu_allowed(c))
+                            cfg.add_cpu_to_node(n, c);
+                    }
+                }
             }
         }
 
         if (useFallback)
+        {
             for (CpuIndex c = 0; c < SYSTEM_THREADS_NB; ++c)
                 if (is_cpu_allowed(c))
                     cfg.add_cpu_to_node(NumaIndex{0}, c);
+        }
+
 #elif defined(_WIN64)
-        const WORD numProcGroups = GetActiveProcessorGroupCount();
+
+        WORD numProcGroups = GetActiveProcessorGroupCount();
         for (WORD procGroup = 0; procGroup < numProcGroups; ++procGroup)
+        {
             for (BYTE number = 0; number < WIN_PROCESSOR_GROUP_SIZE; ++number)
             {
-                PROCESSOR_NUMBER procnum{};
-                procnum.Group  = procGroup;
-                procnum.Number = number;
+                PROCESSOR_NUMBER procnum;
+                procnum.Group    = procGroup;
+                procnum.Number   = number;
+                procnum.Reserved = 0;
                 USHORT nodeNumber;
 
                 const BOOL     status = GetNumaProcessorNodeEx(&procnum, &nodeNumber);
@@ -1103,27 +1149,35 @@ class NumaConfig {
                                  + static_cast<CpuIndex>(number);
                 if (status != 0 && nodeNumber != std::numeric_limits<USHORT>::max()
                     && is_cpu_allowed(c))
+                {
                     cfg.add_cpu_to_node(nodeNumber, c);
+                }
             }
+        }
+
 #else
-        std::abort();
+
+        abort();  // should not reach here
+
 #endif
+
         return cfg;
     }
 
     template<typename Pred>
     static std::optional<NumaConfig> try_get_l3_aware_config(
-      bool respectProcessAffinity, size_t bundleSize, [[maybe_unused]] Pred&& is_cpu_allowed) {
+      bool respectProcessAffinity, usize bundleSize, [[maybe_unused]] Pred&& is_cpu_allowed) {
+        // Get the normal system configuration so we know to which NUMA node
+        // each L3 domain belongs.
         NumaConfig systemConfig =
           NumaConfig::from_system(SystemNumaPolicy{}, respectProcessAffinity);
         std::vector<L3Domain> l3Domains;
 
 #if defined(__linux__) && !defined(__ANDROID__)
+
         std::set<CpuIndex> seenCpus;
 
-        // Iterate CPUs actually discovered in the system NUMA map. This is the corrected
-        // 564f9f9c algorithm: sparse/offline CPU IDs cannot terminate discovery early.
-        for (const auto& [next, systemNode] : systemConfig.nodeByCpu)
+        for (const auto& [next, _] : systemConfig.nodeByCpu)
         {
             if (seenCpus.count(next))
                 continue;
@@ -1131,91 +1185,99 @@ class NumaConfig {
             auto siblingsStr =
               read_file_to_string("/sys/devices/system/cpu/cpu" + std::to_string(next)
                                   + "/cache/index3/shared_cpu_list");
+
             if (!siblingsStr.has_value() || siblingsStr->empty())
                 continue;
 
-            remove_whitespace(*siblingsStr);
             L3Domain domain;
-            domain.systemNumaIndex = systemNode;
-            for (size_t c : indices_from_shortened_string(*siblingsStr))
+            for (usize c : indices_from_shortened_string(*siblingsStr))
             {
-                seenCpus.insert(c);
-                if (is_cpu_allowed(c) && systemConfig.is_cpu_assigned(c)
-                    && systemConfig.nodeByCpu.at(c) == systemNode)
+                if (is_cpu_allowed(c))
+                {
+                    domain.systemNumaIndex = systemConfig.nodeByCpu.at(c);
                     domain.cpus.insert(c);
+                }
+                seenCpus.insert(c);
             }
-
             if (!domain.cpus.empty())
+            {
                 l3Domains.emplace_back(std::move(domain));
+            }
         }
+
 #elif defined(_WIN64)
-        DWORD bufferSize = 0;
-        GetLogicalProcessorInformationEx(RelationCache, nullptr, &bufferSize);
+
+        DWORD bufSize = 0;
+        GetLogicalProcessorInformationEx(RelationCache, nullptr, &bufSize);
         if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
             return std::nullopt;
 
-        std::vector<char> buffer(bufferSize);
+        std::vector<char> buffer(bufSize);
         auto info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data());
-        if (!GetLogicalProcessorInformationEx(RelationCache, info, &bufferSize))
+        if (!GetLogicalProcessorInformationEx(RelationCache, info, &bufSize))
             return std::nullopt;
 
-        while (reinterpret_cast<char*>(info) < buffer.data() + bufferSize)
+        while (reinterpret_cast<char*>(info) < buffer.data() + bufSize)
         {
             info = std::launder(info);
             if (info->Relationship == RelationCache && info->Cache.Level == 3)
             {
-                L3Domain domain;
-                domain.cpus = read_cache_members(info, is_cpu_allowed);
-                if (!domain.cpus.empty() && systemConfig.is_cpu_assigned(*domain.cpus.begin()))
+                L3Domain domain{};
+                domain.cpus = readCacheMembers(info, is_cpu_allowed);
+                if (!domain.cpus.empty())
                 {
                     domain.systemNumaIndex = systemConfig.nodeByCpu.at(*domain.cpus.begin());
-                    l3Domains.emplace_back(std::move(domain));
+                    l3Domains.push_back(std::move(domain));
                 }
             }
+            // Variable length data structure, advance to next
             info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
               reinterpret_cast<char*>(info) + info->Size);
         }
 #endif
 
-        if (l3Domains.empty())
-            return std::nullopt;
-        return NumaConfig::from_l3_info(std::move(l3Domains), bundleSize);
+        if (!l3Domains.empty())
+            return {NumaConfig::from_l3_info(std::move(l3Domains), bundleSize)};
+
+        return std::nullopt;
     }
 
-    static NumaConfig from_l3_info(std::vector<L3Domain>&& domains, size_t bundleSize) {
+
+    static NumaConfig from_l3_info(std::vector<L3Domain>&& domains, usize bundleSize) {
         assert(!domains.empty());
 
-        std::map<NumaIndex, std::vector<L3Domain>> bySystemNode;
-        for (auto& domain : domains)
-            bySystemNode[domain.systemNumaIndex].emplace_back(std::move(domain));
+        std::map<NumaIndex, std::vector<L3Domain>> list;
+        for (auto& d : domains)
+            list[d.systemNumaIndex].emplace_back(std::move(d));
 
-        NumaConfig cfg  = empty();
-        NumaIndex  node = 0;
-        for (auto& [systemNode, nodeDomains] : bySystemNode)
+        NumaConfig cfg = empty();
+        NumaIndex  n   = 0;
+        for (auto& [_, ds] : list)
         {
-            (void) systemNode;
-            if (bundleSize != 0)
+            bool changed;
+            // Scan through pairs and merge them. With roughly equal L3 sizes, should give
+            // a decent distribution.
+            do
             {
-                bool changed;
-                do
+                changed = false;
+                for (usize j = 0; j + 1 < ds.size(); ++j)
                 {
-                    changed = false;
-                    for (size_t i = 0; i + 1 < nodeDomains.size(); ++i)
-                        if (nodeDomains[i].cpus.size() + nodeDomains[i + 1].cpus.size()
-                            <= bundleSize)
-                        {
-                            nodeDomains[i].cpus.merge(nodeDomains[i + 1].cpus);
-                            nodeDomains.erase(nodeDomains.begin() + i + 1);
-                            changed = true;
-                        }
-                } while (changed);
-            }
-
-            for (const L3Domain& domain : nodeDomains)
+                    if (ds[j].cpus.size() + ds[j + 1].cpus.size() <= bundleSize)
+                    {
+                        changed = true;
+                        ds[j].cpus.merge(ds[j + 1].cpus);
+                        ds.erase(ds.begin() + j + 1);
+                    }
+                }
+                // ds.size() has decreased if changed is true, so this loop will terminate
+            } while (changed);
+            for (const L3Domain& d : ds)
             {
-                for (CpuIndex cpu : domain.cpus)
-                    cfg.add_cpu_to_node(node, cpu);
-                ++node;
+                const NumaIndex dn = n++;
+                for (CpuIndex cpu : d.cpus)
+                {
+                    cfg.add_cpu_to_node(dn, cpu);
+                }
             }
         }
         return cfg;
@@ -1517,14 +1579,14 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
     mutable std::vector<SystemWideSharedConstant<T>> instances;
     mutable std::mutex                               mutex;
 
-    std::size_t get_discriminator(NumaIndex idx) const {
+    usize get_discriminator(NumaIndex idx) const {
         const NumaConfig& cfg     = get_numa_config();
         const NumaConfig& cfg_sys = NumaConfig::from_system(SystemNumaPolicy{}, false);
         // as a discriminator, locate the hardware/system numadomain this cpuindex belongs to
         CpuIndex    cpu     = *cfg.nodes[idx].begin();  // get a CpuIndex from NumaIndex
         NumaIndex   sys_idx = cfg_sys.is_cpu_assigned(cpu) ? cfg_sys.nodeByCpu.at(cpu) : 0;
         std::string s       = cfg_sys.to_string() + "$" + std::to_string(sys_idx);
-        return static_cast<std::size_t>(hash_string(s));
+        return static_cast<usize>(hash_string(s));
     }
 
     void ensure_present(NumaIndex idx) const {

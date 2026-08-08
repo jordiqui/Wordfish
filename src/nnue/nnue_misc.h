@@ -19,16 +19,15 @@
 #ifndef NNUE_MISC_H_INCLUDED
 #define NNUE_MISC_H_INCLUDED
 
-#include <cstddef>
-#include <filesystem>
-#include <optional>
 #include <string>
 #include <string_view>
+#include <optional>
+#include <filesystem>
 
 #include "../misc.h"
 #include "../types.h"
-#include "../evaluate.h"
 #include "nnue_architecture.h"
+#include "../evaluate.h"
 
 namespace Stockfish {
 
@@ -51,15 +50,15 @@ struct EvalFile {
 struct NnueEvalTrace {
     static_assert(LayerStacks == PSQTBuckets);
 
-    Value       psqt[LayerStacks];
-    Value       positional[LayerStacks];
-    std::size_t correctBucket;
+    Value psqt[LayerStacks];
+    Value positional[LayerStacks];
+    usize correctBucket;
 };
 
 class Network;
 struct AccumulatorCaches;
 
-std::string trace(Position& pos, const Network& networks, AccumulatorCaches& caches);
+std::string trace(Position& pos, const Network& network, AccumulatorCaches& caches);
 
 }  // namespace Stockfish::Eval::NNUE
 }  // namespace Stockfish

@@ -26,6 +26,7 @@
 #include <iosfwd>
 
 #include "../nnue_common.h"
+#include "../simd.h"
 
 namespace Stockfish::Eval::NNUE::Layers {
 
@@ -34,8 +35,8 @@ template<IndexType InDims, int WeightScaleBitsLocal = WeightScaleBits>
 class SqrClippedReLU {
    public:
     // Input/output type
-    using InputType  = std::int32_t;
-    using OutputType = std::uint8_t;
+    using InputType  = i32;
+    using OutputType = u8;
 
     // Number of input/output dimensions
     static constexpr IndexType InputDimensions  = InDims;
@@ -46,8 +47,8 @@ class SqrClippedReLU {
     using OutputBuffer = OutputType[PaddedOutputDimensions];
 
     // Hash value embedded in the evaluation file
-    static constexpr std::uint32_t get_hash_value(std::uint32_t prevHash) {
-        std::uint32_t hashValue = 0x538D24C7u;
+    static constexpr u32 get_hash_value(u32 prevHash) {
+        u32 hashValue = 0x538D24C7u;
         hashValue += prevHash;
         // TODO: consider including WeightScaleBitsLocal in the hash value.
         // For now omitted on purpose because not written by trainer (yet)
@@ -60,8 +61,8 @@ class SqrClippedReLU {
     // Write network parameters
     bool write_parameters(std::ostream&) const { return true; }
 
-    std::size_t get_content_hash() const {
-        std::size_t h = 0;
+    usize get_content_hash() const {
+        usize h = 0;
         hash_combine(h, get_hash_value(0));
         return h;
     }
@@ -84,6 +85,7 @@ class SqrClippedReLU {
         const auto in      = reinterpret_cast<const __m512i*>(input);
         auto       sqrOut  = reinterpret_cast<__m256i*>(squared);
         auto       clipOut = reinterpret_cast<__m256i*>(clipped);
+
         const __m512i zero = _mm512_setzero_si512();
 
         for (IndexType i = 0; i < NumChunks; ++i)
@@ -93,32 +95,39 @@ class SqrClippedReLU {
             const __m512i sqrWords =
               _mm512_srli_epi16(_mm512_mulhi_epi16(words, words), SimdShiftAmount);
             _mm256_store_si256(&sqrOut[i], _mm512_cvtsepi16_epi8(sqrWords));
+
             const __m512i clipWords =
               _mm512_srli_epi16(_mm512_max_epi16(words, zero), WeightScaleBitsLocal);
             _mm256_store_si256(&clipOut[i], _mm512_cvtsepi16_epi8(clipWords));
         }
+
     #elif defined(USE_AVX2)
         const auto in      = reinterpret_cast<const __m256i*>(input);
         auto       sqrOut  = reinterpret_cast<__m256i*>(squared);
         auto       clipOut = reinterpret_cast<__m256i*>(clipped);
+
         const __m256i zero = _mm256_setzero_si256();
 
         for (IndexType i = 0; i < NumChunks; ++i)
         {
-            const __m256i words0 = _mm256_packs_epi32(_mm256_load_si256(&in[i * 4]),
+            const __m256i words0 = _mm256_packs_epi32(_mm256_load_si256(&in[i * 4 + 0]),
                                                       _mm256_load_si256(&in[i * 4 + 1]));
             const __m256i words1 = _mm256_packs_epi32(_mm256_load_si256(&in[i * 4 + 2]),
                                                       _mm256_load_si256(&in[i * 4 + 3]));
+
             const __m256i sqr0 =
               _mm256_srli_epi16(_mm256_mulhi_epi16(words0, words0), SimdShiftAmount);
             const __m256i sqr1 =
               _mm256_srli_epi16(_mm256_mulhi_epi16(words1, words1), SimdShiftAmount);
-            _mm256_store_si256(&sqrOut[i], _mm256_packs_epi16(sqr0, sqr1));
+            const __m256i sqrPacked = _mm256_packs_epi16(sqr0, sqr1);
+            _mm256_store_si256(&sqrOut[i], sqrPacked);
+
             const __m256i clip0 =
               _mm256_srli_epi16(_mm256_max_epi16(words0, zero), WeightScaleBitsLocal);
             const __m256i clip1 =
               _mm256_srli_epi16(_mm256_max_epi16(words1, zero), WeightScaleBitsLocal);
-            _mm256_store_si256(&clipOut[i], _mm256_packs_epi16(clip0, clip1));
+            const __m256i clipPacked = _mm256_packs_epi16(clip0, clip1);
+            _mm256_store_si256(&clipOut[i], clipPacked);
         }
     #else
         #error "propagate_pair() requires AVX2 or AVX512"
@@ -135,7 +144,7 @@ class SqrClippedReLU {
         // MulHi strips the lower 16 bits (i.e. shift by 16) so we need to shift out the remaining.
         [[maybe_unused]] constexpr int SimdShiftAmount = WeightScaleBitsLocal * 2 + 7 - 16;
 
-#if defined(USE_SSE2)
+    #if defined(USE_SSE2)
         constexpr IndexType NumChunks = InputDimensions / 16;
         const auto          in        = reinterpret_cast<const __m128i*>(input);
         const auto          out       = reinterpret_cast<__m128i*>(output);
@@ -153,7 +162,7 @@ class SqrClippedReLU {
         }
         constexpr IndexType Start = NumChunks * 16;
 
-#elif defined(USE_LASX)
+    #elif defined(USE_LASX)
         constexpr IndexType NumChunks = InputDimensions / 32;
         const auto          in        = reinterpret_cast<const __m256i*>(input);
         const auto          out       = reinterpret_cast<__m256i*>(output);
@@ -168,7 +177,7 @@ class SqrClippedReLU {
         }
         constexpr IndexType Start = NumChunks * 32;
 
-#elif defined(USE_LSX)
+    #elif defined(USE_LSX)
         constexpr IndexType NumChunks = InputDimensions / 16;
         const auto          in        = reinterpret_cast<const __m128i*>(input);
         const auto          out       = reinterpret_cast<__m128i*>(output);
@@ -182,7 +191,26 @@ class SqrClippedReLU {
         }
         constexpr IndexType Start = NumChunks * 16;
 
-#elif defined(USE_RVV)
+    #elif defined(USE_NEON)
+        constexpr IndexType NumChunks = InputDimensions / 16;
+        const auto          in        = reinterpret_cast<const int32x4_t*>(input);
+        const auto          out       = reinterpret_cast<int8x16_t*>(output);
+        for (IndexType i = 0; i < NumChunks; ++i)
+        {
+            const int16x8_t words0 =
+              vcombine_s16(vqmovn_s32(in[i * 4 + 0]), vqmovn_s32(in[i * 4 + 1]));
+            const int16x8_t words1 =
+              vcombine_s16(vqmovn_s32(in[i * 4 + 2]), vqmovn_s32(in[i * 4 + 3]));
+            // Neon needs to shift by one more since the used simd instruction does
+            // `Saturating Doubling Multiply High` (doubling before shift by 16).
+            const int16x8_t r0 = vshrq_n_s16(vqdmulhq_s16(words0, words0), SimdShiftAmount + 1);
+            const int16x8_t r1 = vshrq_n_s16(vqdmulhq_s16(words1, words1), SimdShiftAmount + 1);
+
+            out[i] = vcombine_s8(vqmovn_s16(r0), vqmovn_s16(r1));
+        }
+        constexpr IndexType Start = NumChunks * 16;
+
+    #elif defined(USE_RVV)
 
         for (usize j = 0; j < InputDimensions;)
         {
@@ -198,9 +226,9 @@ class SqrClippedReLU {
         }
         constexpr IndexType Start = InputDimensions;
 
-#else
+    #else
         constexpr IndexType Start = 0;
-#endif
+    #endif
 
         for (IndexType i = Start; i < InputDimensions; ++i)
         {

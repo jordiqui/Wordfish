@@ -21,12 +21,9 @@
 #ifndef NNUE_FEATURES_HALF_KA_V2_HM_H_INCLUDED
 #define NNUE_FEATURES_HALF_KA_V2_HM_H_INCLUDED
 
-#include <cstdint>
-
 #include "../../misc.h"
 #include "../../types.h"
 #include "../nnue_common.h"
-
 
 namespace Stockfish::Eval::NNUE::Features {
 
@@ -51,7 +48,7 @@ class HalfKAv2_hm {
         PS_NB       = 11 * SQUARE_NB
     };
 
-    static constexpr IndexType PieceSquareIndex[COLOR_NB][PIECE_NB] = {
+    alignas(64) static constexpr u16 PieceSquareIndex[COLOR_NB][PIECE_NB] = {
       // Convention: W - us, B - them
       // Viewed from other side, W and B are reversed
       {PS_NONE, PS_W_PAWN, PS_W_KNIGHT, PS_W_BISHOP, PS_W_ROOK, PS_W_QUEEN, PS_KING, PS_NONE,
@@ -61,7 +58,7 @@ class HalfKAv2_hm {
 
    public:
     // Hash value embedded in the evaluation file
-    static constexpr std::uint32_t HashValue = 0x7f234cb8u;
+    static constexpr u32 HashValue = 0x7f234cb8u;
 
     // Number of feature dimensions
     static constexpr IndexType Dimensions =

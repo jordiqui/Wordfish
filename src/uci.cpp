@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
-#include <cstdint>
+#include <cstdlib>
 #include <iterator>
 #include <optional>
 #include <sstream>
@@ -35,10 +35,10 @@
 #include "benchmark.h"
 #include "engine.h"
 #include "experience.h"
+#include "polybook.h"
 #include "memory.h"
 #include "movegen.h"
 #include "position.h"
-#include "polybook.h"
 #include "score.h"
 #include "search.h"
 #include "types.h"
@@ -51,7 +51,6 @@ using ms   = std::chrono::milliseconds;
 
 constexpr auto BenchmarkCommand = "speedtest";
 
-constexpr auto StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 template<typename... Ts>
 struct overload: Ts... {
     using Ts::operator()...;
@@ -85,12 +84,12 @@ UCIEngine::UCIEngine(CommandLine cli_) :
 }
 
 void UCIEngine::init_search_update_listeners() {
-    engine.set_on_iter([this](const auto& i) { on_iter(i); });
-    engine.set_on_update_no_moves([this](const auto& i) { on_update_no_moves(i); });
+    engine.set_on_iter([](const auto& i) { on_iter(i); });
+    engine.set_on_update_no_moves([](const auto& i) { on_update_no_moves(i); });
     engine.set_on_update_full(
-      [this](const auto& i) { on_update_full(i); });
+      [this](const auto& i) { on_update_full(i, engine.get_options()["UCI_ShowWDL"]); });
     engine.set_on_start([]() {});
-    engine.set_on_bestmove([this](const auto& bm, const auto& p) { on_bestmove(bm, p); });
+    engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
     engine.set_on_verify_network([](const auto& s) { print_info_string(s); });
 }
 
@@ -111,7 +110,7 @@ void UCIEngine::loop() {
         std::istringstream is(cmd);
 
         token.clear();  // Avoid a stale if getline() returns nothing or a blank line
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "quit" || token == "stop")
             engine.stop();
@@ -127,7 +126,6 @@ void UCIEngine::loop() {
         {
             sync_cout << "id name " << engine_info(true) << "\n"
                       << engine.get_options() << sync_endl;
-
             print_info_string(Experience::status_summary());
             sync_cout << "uciok" << sync_endl;
         }
@@ -150,119 +148,58 @@ void UCIEngine::loop() {
         else if (token == "experience")
         {
             std::string subcommand;
-            if (is >> subcommand && subcommand == "dump")
+            if (!(is >> subcommand) || subcommand == "status")
+                print_info_string(Experience::status_summary());
+            else if (subcommand == "dump")
+                for (const auto& line : Experience::dump_entries()) print_info_string(line);
+        }
+        else if (token == "book")
+        {
+            std::string subcommand;
+            is >> subcommand;
+            if (subcommand == "key")
+                sync_cout << "info string polyglot key "
+                          << polybook[0].current_key(engine.access_position()) << sync_endl;
+            else if (subcommand == "generate")
             {
-                for (const auto& line : Experience::dump_entries())
-                    print_info_string(line);
+                std::string path, moveText;
+                std::vector<Move> moves;
+                if (!(is >> path))
+                    print_info_string("Usage: book generate <path> <moves...>");
+                else
+                {
+                    while (is >> moveText)
+                    {
+                        Move parsed = to_move(engine.access_position(), moveText);
+                        if (parsed == Move::none()) { moves.clear(); break; }
+                        moves.push_back(parsed);
+                    }
+                    if (!moves.empty() && PolyBook::generate(path, engine.access_position(), moves, 1, 0))
+                    {
+                        polybook[0].init(path);
+                        print_info_string("Generated polyglot book at " + path);
+                    }
+                    else
+                        print_info_string("Failed to generate polyglot book at " + path);
+                }
             }
             else
-                sync_cout << "Unknown command: '" << cmd << "'. Type help for more information."
-                          << sync_endl;
+            {
+                Move bookMove = polybook[0].probe(engine.access_position(), true);
+                if (bookMove == Move::none()) bookMove = polybook[1].probe(engine.access_position(), true);
+                if (bookMove == Move::none()) sync_cout << "nobook" << sync_endl;
+                else sync_cout << "bestmove "
+                               << move(bookMove, engine.get_options()["UCI_Chess960"]) << sync_endl;
+            }
         }
 
         // Add custom non-UCI commands, mainly for debugging purposes.
-        // These commands must not be used during a search!
-        else if (token == "book")
-        {
-            std::string bookCommand;
-
-            if (!(is >> bookCommand))
-            {
-                Move bookMove = polybook[0].probe(engine.access_position(), true);
-
-                if (bookMove == Move::none())
-                    bookMove = polybook[1].probe(engine.access_position(), true);
-
-                if (bookMove == Move::none())
-                    sync_cout << "nobook" << sync_endl;
-                else
-                    sync_cout << "bestmove "
-                              << move(bookMove, engine.get_options()["UCI_Chess960"]) << sync_endl;
-            }
-            else if (bookCommand == "key")
-                sync_cout << "info string polyglot key "
-                          << polybook[0].current_key(engine.access_position()) << sync_endl;
-            else if (bookCommand == "generate")
-            {
-                std::string       bookPath;
-                std::vector<Move> moves;
-                std::string       tokenMove;
-                uint16_t          weight = 1;
-                uint32_t          learn  = 0;
-
-                if (!(is >> bookPath))
-                {
-                    sync_cout << "info string Usage: book generate <path> <moves...> [weight <n>] "
-                              << "[learn <n>]" << sync_endl;
-                    continue;
-                }
-
-                const Position& pos = engine.access_position();
-
-                while (is >> tokenMove)
-                {
-                    if (tokenMove == "weight")
-                    {
-                        int parsedWeight = 0;
-                        if (is >> parsedWeight)
-                            weight = static_cast<uint16_t>(std::max(parsedWeight, 0));
-                        continue;
-                    }
-
-                    if (tokenMove == "learn")
-                    {
-                        uint32_t parsedLearn = 0;
-                        if (is >> parsedLearn)
-                            learn = parsedLearn;
-                        continue;
-                    }
-
-                    Move parsedMove = to_move(pos, tokenMove);
-                    if (parsedMove == Move::none())
-                    {
-                        sync_cout << "info string Invalid book move: " << tokenMove << sync_endl;
-                        moves.clear();
-                        break;
-                    }
-
-                    moves.push_back(parsedMove);
-                }
-
-                if (moves.empty())
-                {
-                    sync_cout << "info string No valid moves provided for book generation"
-                              << sync_endl;
-                    continue;
-                }
-
-                if (PolyBook::generate(bookPath, pos, moves, weight, learn))
-                {
-                    polybook[0].init(bookPath);
-                    sync_cout << "info string Generated polyglot book at " << bookPath
-                              << sync_endl;
-                }
-                else
-                    sync_cout << "info string Failed to generate polyglot book at " << bookPath
-                              << sync_endl;
-            }
-            else
-            {
-                Move bookMove = polybook[0].probe(engine.access_position(), true);
-
-                if (bookMove == Move::none())
-                    bookMove = polybook[1].probe(engine.access_position(), true);
-
-                if (bookMove == Move::none())
-                    sync_cout << "nobook" << sync_endl;
-                else
-                    sync_cout << "bestmove "
-                              << move(bookMove, engine.get_options()["UCI_Chess960"]) << sync_endl;
-            }
-        }
         else if (token == "flip")
         {
             if (auto err = engine.flip())
+            {
                 terminate_on_critical_error(err->what());
+            }
         }
         else if (token == "bench")
             bench(is);
@@ -277,12 +214,13 @@ void UCIEngine::loop() {
         else if (token == "export_net")
         {
             std::optional<std::filesystem::path> file;
-            std::string filename;
-            if (std::getline(is >> std::ws, filename) && !filename.empty())
+            std::string                          filename;
+
+            if (is >> filename)
                 file = path_from_utf8(filename);
+
             engine.save_network(file);
         }
-
         else if (token == "--help" || token == "help" || token == "--license" || token == "license")
             sync_cout
               << "\nStockfish is a powerful chess engine for playing and analyzing."
@@ -349,10 +287,6 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
 void UCIEngine::go(std::istringstream& is) {
 
     Search::LimitsType limits = parse_limits(is);
-    suppressLowTimeInfo       = !limits.infinite && !limits.ponderMode
-                           && ((limits.time[WHITE] && limits.time[WHITE] <= 1000)
-                               || (limits.time[BLACK] && limits.time[BLACK] <= 1000)
-                               || (limits.movetime && limits.movetime <= 1000));
 
     if (limits.perft)
         perft(limits);
@@ -362,11 +296,13 @@ void UCIEngine::go(std::istringstream& is) {
 
 void UCIEngine::bench(std::istream& args) {
     std::string token;
-    uint64_t    num, nodes = 0, cnt = 1;
-    uint64_t    nodesSearched = 0;
+    u64         num, nodes = 0, cnt = 1;
+    u64         nodesSearched = 0;
+    const auto& options       = engine.get_options();
+
     engine.set_on_update_full([&](const auto& i) {
         nodesSearched = i.nodes;
-        on_update_full(i);
+        on_update_full(i, options["UCI_ShowWDL"]);
     });
 
     std::vector<std::string> list = Benchmark::setup_bench(engine.fen(), args);
@@ -379,7 +315,7 @@ void UCIEngine::bench(std::istream& args) {
     for (const auto& cmd : list)
     {
         std::istringstream is(cmd);
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "go" || token == "eval")
         {
@@ -424,7 +360,7 @@ void UCIEngine::bench(std::istream& args) {
               << "\nNodes/second    : " << 1000 * nodes / elapsed << std::endl;
 
     // reset callback, to not capture a dangling reference to nodesSearched
-    engine.set_on_update_full([this](const auto& i) { on_update_full(i); });
+    engine.set_on_update_full([&](const auto& i) { on_update_full(i, options["UCI_ShowWDL"]); });
 }
 
 void UCIEngine::benchmark(std::istream& args) {
@@ -432,7 +368,7 @@ void UCIEngine::benchmark(std::istream& args) {
     static constexpr int NUM_WARMUP_POSITIONS = 3;
 
     std::string token;
-    uint64_t cnt = 1;
+    u64         cnt = 1;
 
     engine.set_on_update_full([](const auto&) {});
     engine.set_on_iter([](const auto&) {});
@@ -442,8 +378,8 @@ void UCIEngine::benchmark(std::istream& args) {
 
     Benchmark::BenchmarkSetup setup = Benchmark::setup_benchmark(args);
 
-    const int numGoCommands = count_if(setup.commands.begin(), setup.commands.end(),
-                                       [](const std::string& s) { return s.find("go ") == 0; });
+    const auto numGoCommands = count_if(setup.commands.begin(), setup.commands.end(),
+                                        [](const std::string& s) { return s.find("go ") == 0; });
 
 
     // Set options once at the start.
@@ -458,7 +394,7 @@ void UCIEngine::benchmark(std::istream& args) {
     for (const auto& cmd : setup.commands)
     {
         std::istringstream is(cmd);
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "go")
         {
@@ -488,13 +424,14 @@ void UCIEngine::benchmark(std::istream& args) {
 
     int           numHashfullReadings = 0;
     constexpr int hashfullAges[]      = {0, 999};  // Only normal hashfull and touched hash.
-    int           totalHashfull[std::size(hashfullAges)] = {0};
-    int           maxHashfull[std::size(hashfullAges)]   = {0};
+    constexpr int hashfullAgeCount    = std::size(hashfullAges);
+    int           totalHashfull[hashfullAgeCount] = {0};
+    int           maxHashfull[hashfullAgeCount]   = {0};
 
     auto updateHashfullReadings = [&]() {
         numHashfullReadings += 1;
 
-        for (int i = 0; i < static_cast<int>(std::size(hashfullAges)); ++i)
+        for (int i = 0; i < hashfullAgeCount; ++i)
         {
             const int hashfull = engine.get_hashfull(hashfullAges[i]);
             maxHashfull[i]     = std::max(maxHashfull[i], hashfull);
@@ -507,7 +444,7 @@ void UCIEngine::benchmark(std::istream& args) {
     Time::time_point elapsed;
     Time::duration   totalTime(0);
 
-    std::uint64_t nodes = 0, nodesSearched = 0;
+    u64 nodes = 0, nodesSearched = 0;
 
     engine.set_on_update_full([&](const Engine::InfoFull& i) { nodesSearched = i.nodes; });
 
@@ -525,7 +462,7 @@ void UCIEngine::benchmark(std::istream& args) {
     for (const auto& cmd : setup.commands)
     {
         std::istringstream is(cmd);
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "go")
         {
@@ -549,7 +486,7 @@ void UCIEngine::benchmark(std::istream& args) {
     }
 
     // Ensure positivity to avoid a 'divide by zero'
-    const auto totalTimeMs = std::max<std::int64_t>(std::chrono::duration_cast<ms>(totalTime).count(), 1LL);
+    const auto totalTimeMs = std::max<i64>(std::chrono::duration_cast<ms>(totalTime).count(), 1LL);
 
     dbg_print();
 
@@ -597,22 +534,19 @@ void UCIEngine::setoption(std::istringstream& is) {
     engine.get_options().setoption(is);
 }
 
-std::uint64_t UCIEngine::perft(const Search::LimitsType& limits) {
+u64 UCIEngine::perft(const Search::LimitsType& limits) {
     auto result = engine.perft(engine.fen(), limits.perft, engine.get_options()["UCI_Chess960"]);
     if (auto err = std::get_if<PositionSetError>(&result))
         terminate_on_critical_error(err->what());
-    auto nodes = std::get<std::uint64_t>(result);
+
+    auto nodes = std::get<u64>(result);
     sync_cout << "\nNodes searched: " << nodes << "\n" << sync_endl;
     return nodes;
 }
 
-void UCIEngine::terminate_on_critical_error(const std::string& message) {
-    sync_cout << "info string CRITICAL ERROR: Command `" << currentCmd
-              << "` failed. Reason: " << message << '\n' << sync_endl;
-    std::exit(1);
-}
-
 void UCIEngine::position(std::istringstream& is) {
+    const std::string fullCommand = is.str();
+
     std::string token, fen;
 
     is >> token;
@@ -635,8 +569,11 @@ void UCIEngine::position(std::istringstream& is) {
         moves.push_back(token);
     }
 
-    if (auto error = engine.set_position(fen, moves))
-        terminate_on_critical_error(error->what());
+    auto err = engine.set_position(fen, moves);
+    if (err.has_value())
+    {
+        terminate_on_critical_error(err->what());
+    }
 }
 
 namespace {
@@ -683,8 +620,7 @@ std::string UCIEngine::format_score(const Score& s) {
                    return std::string("mate ") + std::to_string(m);
                },
                [](Score::Tablebase tb) -> std::string {
-                   return std::string("cp ")
-                        + std::to_string((tb.win ? TB_CP - tb.plies : -TB_CP - tb.plies));
+                   return std::string("cp ") + std::to_string((tb.win ? TB_CP : -TB_CP) - tb.plies);
                },
                [](Score::InternalUnits units) -> std::string {
                    return std::string("cp ") + std::to_string(units.value);
@@ -703,7 +639,7 @@ int UCIEngine::to_cp(Value v, const Position& pos) {
 
     auto [a, b] = win_rate_params(pos);
 
-    return std::round(100 * int(v) / a);
+    return int(std::round(100 * int(v) / a));
 }
 
 std::string UCIEngine::wdl(Value v, const Position& pos) {
@@ -761,17 +697,10 @@ Move UCIEngine::to_move(const Position& pos, std::string str) {
 }
 
 void UCIEngine::on_update_no_moves(const Engine::InfoShort& info) {
-    if (suppressLowTimeInfo)
-        return;
-
     sync_cout << "info depth " << info.depth << " score " << format_score(info.score) << sync_endl;
 }
 
-void UCIEngine::on_update_full(const Engine::InfoFull& info) {
-    if (suppressLowTimeInfo)
-        return;
-
-    const bool showWDL = engine.get_options()["UCI_ShowWDL"];
+void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
     std::stringstream ss;
 
     ss << "info";
@@ -797,9 +726,6 @@ void UCIEngine::on_update_full(const Engine::InfoFull& info) {
 }
 
 void UCIEngine::on_iter(const Engine::InfoIter& info) {
-    if (suppressLowTimeInfo)
-        return;
-
     std::stringstream ss;
 
     ss << "info";
@@ -811,9 +737,17 @@ void UCIEngine::on_iter(const Engine::InfoIter& info) {
 }
 
 void UCIEngine::on_bestmove(std::string_view bestmove, std::string_view ponder) {
-    sync_cout << "bestmove " << bestmove
-              << (ponder.empty() ? "" : " ponder ")
-              << (ponder.empty() ? std::string_view{} : ponder) << sync_endl;
+    sync_cout << "bestmove " << bestmove;
+    if (!ponder.empty())
+        std::cout << " ponder " << ponder;
+    std::cout << sync_endl;
+}
+
+void UCIEngine::terminate_on_critical_error(const std::string& message) {
+    sync_cout << "info string CRITICAL ERROR: Command `" << currentCmd
+              << "` failed. Reason: " << message << '\n'
+              << sync_endl;
+    std::exit(1);
 }
 
 }  // namespace Stockfish

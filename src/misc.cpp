@@ -53,27 +53,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr std::string_view base = "Wordfish-5.20-040826";
-
-constexpr std::string_view arch_tag() {
-#ifdef BUILD_ARCH_SUFFIX
-    return BUILD_ARCH_SUFFIX;
-#elif defined(USE_AVX512ICL) || defined(USE_AVX512)
-    return "avx512";
-#else
-    if constexpr (HasPext)
-        return "bmi2";
-#if defined(USE_FMA3)
-    return "fma3";
-#elif defined(USE_AVX2)
-    return "avx2";
-#elif defined(USE_SSE41)
-    if constexpr (HasPopCnt)
-        return "sse41popcnt";
-#endif
-    return "unknown";
-#endif
-}
+// Version number or dev.
+constexpr std::string_view version = "Wordfish-5.20-040826";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -146,26 +127,56 @@ class Logger {
 }  // namespace
 
 
+// Returns the full name of the current Stockfish version.
+//
+// For local dev compiles we try to append the commit SHA and
+// commit date from git. If that fails only the local compilation
+// date is set and "nogit" is specified:
+//      Stockfish dev-YYYYMMDD-SHA
+//      or
+//      Stockfish dev-YYYYMMDD-nogit
+//
+// For releases (non-dev builds) we only include the version number:
+//      Stockfish version
 std::string engine_version_info() {
-    std::string version(base);
+    std::stringstream ss;
+    ss << version << std::setfill('0');
 
-#ifdef GIT_DIFFINDEX
-    version += "-m";
+    if constexpr (version == "dev")
+    {
+        ss << "-";
+#ifdef GIT_DATE
+        ss << stringify(GIT_DATE);
+#else
+        constexpr std::string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
+
+        std::string       month, day, year;
+        std::stringstream date(__DATE__);  // From compiler, format is "Sep 21 2008"
+
+        date >> month >> day >> year;
+        ss << year << std::setw(2) << std::setfill('0') << (1 + months.find(month) / 4)
+           << std::setw(2) << std::setfill('0') << day;
 #endif
 
-    version += "-";
-    version += arch_tag();
+#ifdef GIT_DIFFINDEX
+        ss << "-m";
+#endif
 
-    return version;
+        ss << "-";
+
+#ifdef GIT_SHA
+        ss << stringify(GIT_SHA);
+#else
+        ss << "nogit";
+#endif
+    }
+
+    return ss.str();
 }
 
 std::string engine_info(bool to_uci) {
-    return (to_uci ? std::string(base) : engine_version_info())
-         + (to_uci ? "\nid author " : " by ") + engine_author_info();
-}
-
-std::string engine_author_info() {
-    return "Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
+    return engine_version_info() + (to_uci ? "\nid author " : " by ")
+         + "Jorge Ruiz and the Stockfish developers (see AUTHORS file)";
 }
 
 
@@ -271,6 +282,12 @@ std::string compiler_info() {
 #elif defined(USE_NEON)
     compiler += " NEON";
 #endif
+#if defined(USE_LASX)
+    compiler += " LASX";
+#endif
+#if defined(USE_LSX)
+    compiler += " LSX";
+#endif
     compiler += (HasPopCnt ? " POPCNT" : "");
 
 #if !defined(NDEBUG)
@@ -295,17 +312,17 @@ constexpr int MaxDebugSlots = 32;
 
 namespace {
 
-template<size_t N>
+template<usize N>
 struct DebugInfo {
-    std::array<std::atomic<int64_t>, N> data = {0};
+    std::array<std::atomic<i64>, N> data = {0};
 
-    [[nodiscard]] constexpr std::atomic<int64_t>& operator[](size_t index) {
+    [[nodiscard]] constexpr std::atomic<i64>& operator[](usize index) {
         assert(index < N);
         return data[index];
     }
 
     constexpr DebugInfo& operator=(const DebugInfo& other) {
-        for (size_t i = 0; i < N; i++)
+        for (usize i = 0; i < N; i++)
             data[i].store(other.data[i].load());
         return *this;
     }
@@ -313,8 +330,8 @@ struct DebugInfo {
 
 struct DebugExtremes: public DebugInfo<3> {
     DebugExtremes() {
-        data[1] = std::numeric_limits<int64_t>::min();
-        data[2] = std::numeric_limits<int64_t>::max();
+        data[1] = std::numeric_limits<i64>::min();
+        data[2] = std::numeric_limits<i64>::max();
     }
 };
 
@@ -333,32 +350,32 @@ void dbg_hit_on(bool cond, int slot) {
         ++hit.at(slot)[1];
 }
 
-void dbg_mean_of(int64_t value, int slot) {
+void dbg_mean_of(i64 value, int slot) {
 
     ++mean.at(slot)[0];
     mean.at(slot)[1] += value;
 }
 
-void dbg_stdev_of(int64_t value, int slot) {
+void dbg_stdev_of(i64 value, int slot) {
 
     ++stdev.at(slot)[0];
     stdev.at(slot)[1] += value;
     stdev.at(slot)[2] += value * value;
 }
 
-void dbg_extremes_of(int64_t value, int slot) {
+void dbg_extremes_of(i64 value, int slot) {
     ++extremes.at(slot)[0];
 
-    int64_t current_max = extremes.at(slot)[1].load();
+    i64 current_max = extremes.at(slot)[1].load();
     while (current_max < value && !extremes.at(slot)[1].compare_exchange_weak(current_max, value))
     {}
 
-    int64_t current_min = extremes.at(slot)[2].load();
+    i64 current_min = extremes.at(slot)[2].load();
     while (current_min > value && !extremes.at(slot)[2].compare_exchange_weak(current_min, value))
     {}
 }
 
-void dbg_correl_of(int64_t value1, int64_t value2, int slot) {
+void dbg_correl_of(i64 value1, i64 value2, int slot) {
 
     ++correl.at(slot)[0];
     correl.at(slot)[1] += value1;
@@ -370,9 +387,9 @@ void dbg_correl_of(int64_t value1, int64_t value2, int slot) {
 
 void dbg_print() {
 
-    int64_t n;
-    auto    E   = [&n](int64_t x) { return double(x) / n; };
-    auto    sqr = [](double x) { return x * x; };
+    i64  n;
+    auto E   = [&n](i64 x) { return double(x) / n; };
+    auto sqr = [](double x) { return x * x; };
 
     for (int i = 0; i < MaxDebugSlots; ++i)
         if ((n = hit[i][0]))
@@ -436,17 +453,17 @@ void sync_cout_start() { std::cout << IO_LOCK; }
 void sync_cout_end() { std::cout << IO_UNLOCK; }
 
 // Hash function based on public domain MurmurHash64A, by Austin Appleby.
-uint64_t hash_bytes(const char* data, size_t size) {
-    const uint64_t m = 0xc6a4a7935bd1e995ull;
-    const int      r = 47;
+u64 hash_bytes(const char* data, usize size) {
+    const u64 m = 0xc6a4a7935bd1e995ull;
+    const int r = 47;
 
-    uint64_t h = size * m;
+    u64 h = size * m;
 
-    const char* end = data + (size & ~(size_t) 7);
+    const char* end = data + (size & ~(usize) 7);
 
     for (const char* p = data; p != end; p += 8)
     {
-        uint64_t k;
+        u64 k;
         std::memcpy(&k, p, sizeof(k));
 
         k *= m;
@@ -459,9 +476,9 @@ uint64_t hash_bytes(const char* data, size_t size) {
 
     if (size & 7)
     {
-        uint64_t k = 0;
+        u64 k = 0;
         for (int i = (size & 7) - 1; i >= 0; i--)
-            k = (k << 8) | (uint64_t) end[i];
+            k = (k << 8) | u64(end[i]);
 
         h ^= k;
         h *= m;
@@ -481,9 +498,12 @@ std::string utf8_from_wstring(std::wstring_view s) {
 #ifdef _WIN32
     if (s.empty())
         return {};
-    const int size = WideCharToMultiByte(CP_UTF8, 0, s.data(), int(s.size()), nullptr, 0, nullptr, nullptr);
+
+    int size =
+      WideCharToMultiByte(CP_UTF8, 0, s.data(), int(s.size()), nullptr, 0, nullptr, nullptr);
     if (size <= 0)
         return {};
+
     std::string out(size, '\0');
     WideCharToMultiByte(CP_UTF8, 0, s.data(), int(s.size()), out.data(), size, nullptr, nullptr);
     return out;
@@ -494,42 +514,50 @@ std::string utf8_from_wstring(std::wstring_view s) {
 
 fs::path path_from_utf8(const std::string& path) {
 #ifdef _WIN32
-    const int wlen = MultiByteToWideChar(CP_UTF8, 0, path.data(), int(path.size()), nullptr, 0);
-    std::wstring wstr(static_cast<std::size_t>(wlen), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, path.data(), int(path.size()), wstr.data(), wlen);
+    int u8len = static_cast<int>(path.size());
+    int wlen  = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), u8len, NULL, 0);
+
+    std::wstring wstr(static_cast<usize>(wlen), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, path.c_str(), u8len, wstr.data(), wlen);
     return {wstr};
 #else
     return {path};
 #endif
 }
 
-CommandLine::CommandLine(int argc_, char** argv_) : argc(argc_), argv(argv_) {
+CommandLine::CommandLine(int _argc, char** _argv) :
+    argc(_argc),
+    argv(_argv) {
 #ifdef _WIN32
+    // Convert any non-ANSI characters passed on the command line to UTF-8
     int wargc = 0;
     if (LPWSTR* wargv = CommandLineToArgvW(GetCommandLineW(), &wargc))
     {
         for (int i = 0; i < wargc; ++i)
             argv_storage.push_back(utf8_from_wstring(wargv[i]));
         LocalFree(wargv);
-        for (std::string& value : argv_storage)
-            argv_utf8.push_back(value.data());
+
+        for (std::string& s : argv_storage)
+            argv_utf8.push_back(s.data());
         argv_utf8.push_back(nullptr);
+
         argc = wargc;
         argv = argv_utf8.data();
     }
 #endif
 }
 
-std::optional<size_t> str_to_size_t(const std::string& s) {
-    if (s.empty() || s.front() == '-')
+
+std::optional<usize> str_to_size_t(const std::string& s) {
+    if (s.empty() || s[0] == '-')
         return std::nullopt;
-    errno = 0;
-    char* end = nullptr;
-    const unsigned long long value = std::strtoull(s.c_str(), &end, 10);
-    if (errno == ERANGE || end == s.c_str() || (*end != '\0' && !std::isspace(static_cast<unsigned char>(*end)))
-        || value > std::numeric_limits<size_t>::max())
+    errno                           = 0;
+    char*                    endptr = nullptr;
+    const unsigned long long value  = std::strtoull(s.c_str(), &endptr, 10);
+    if (errno == ERANGE || (*endptr != '\0' && !std::isspace(*endptr))
+        || value > std::numeric_limits<usize>::max())
         return std::nullopt;
-    return static_cast<size_t>(value);
+    return static_cast<usize>(value);
 }
 
 std::optional<std::string> read_file_to_string(const std::string& path) {
@@ -548,9 +576,10 @@ bool is_whitespace(std::string_view s) {
 }
 
 fs::path CommandLine::get_binary_directory(fs::path argv0) {
+
 #ifdef _WIN32
-    // Prefer the executable path reported by Windows. This does not depend
-    // on whether the CRT used a narrow or wide entry
+    // Prefer the executable path reported by Windows. Unlike _get_wpgmptr,
+    // this does not depend on whether the CRT used a narrow or wide entry
     // point. Windows paths cannot exceed 32767 characters, so a fixed
     // buffer is always sufficient. Falls back to argv0 if the API fails.
     constexpr DWORD MaxPath = 32768;
@@ -559,13 +588,14 @@ fs::path CommandLine::get_binary_directory(fs::path argv0) {
     if (const DWORD length = GetModuleFileNameW(nullptr, path, MaxPath))
         argv0 = fs::path(path, path + length);
 #endif
+
     auto binaryDirectory = argv0.parent_path();
     if (binaryDirectory.empty())
         binaryDirectory = fs::path(".");
     return binaryDirectory;
 }
 
-fs::path CommandLine::get_working_directory() { return fs::current_path(); }
+fs::path CommandLine::get_working_directory() { return std::filesystem::current_path(); }
 
 void set_console_utf8() {
 #ifdef _WIN32

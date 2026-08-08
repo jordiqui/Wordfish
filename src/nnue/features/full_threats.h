@@ -18,7 +18,6 @@
 #ifndef NNUE_FEATURES_FULL_THREATS_INCLUDED
 #define NNUE_FEATURES_FULL_THREATS_INCLUDED
 
-#include <cstdint>
 
 #include "../../misc.h"
 #include "../../types.h"
@@ -30,20 +29,22 @@ class Position;
 
 namespace Stockfish::Eval::NNUE::Features {
 
+// Pawn diagonal threats only target knights and rooks (pawn-pawn relationships
+// are handled by the PP_3Wide feature set), so pawns have 4 valid targets.
 static constexpr int numValidTargets[PIECE_NB] = {0, 4, 10, 8, 8, 10, 0, 0,
                                                   0, 4, 10, 8, 8, 10, 0, 0};
 
 class FullThreats {
    public:
     // Hash value embedded in the evaluation file
-    static constexpr std::uint32_t HashValue = 0x2e6b9d04u;
+    static constexpr u32 HashValue = 0x2e6b9d04u;
 
     // Number of feature dimensions
     static constexpr IndexType Dimensions = 59808;
 
     // clang-format off
     // Orient a square according to perspective (rotates by 180 for black)
-    static constexpr std::int8_t OrientTBL[SQUARE_NB] = {
+    static constexpr i8 OrientTBL[SQUARE_NB] = {
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,
         SQ_A1, SQ_A1, SQ_A1, SQ_A1, SQ_H1, SQ_H1, SQ_H1, SQ_H1,
@@ -65,7 +66,7 @@ class FullThreats {
     // clang-format on
 
     // Maximum number of simultaneously active features.
-    using IndexList = ValueList<std::uint16_t, 256>;
+    using IndexList = ValueList<u16, 256>;
     using DiffType  = DirtyThreats;
 
     static IndexType

@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 
 #include "benchmark.h"
 #include "numa.h"
+#include "misc.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -455,7 +456,7 @@ BenchmarkSetup setup_benchmark(std::istream& is) {
     int desiredTimeS;
 
     if (!(is >> setup.threads))
-        setup.threads = get_hardware_concurrency();
+        setup.threads = int(get_hardware_concurrency());
     else
         setup.originalInvocation += std::to_string(setup.threads);
 
@@ -483,16 +484,8 @@ BenchmarkSetup setup_benchmark(std::istream& is) {
 
     float totalTime = 0;
     for (const auto& game : BenchmarkPositions)
-    {
-        setup.commands.emplace_back("ucinewgame");
-        int ply = 1;
-        for (int i = 0; i < static_cast<int>(game.size()); ++i)
-        {
-            const float correctedTime = getCorrectedTime(ply);
-            totalTime += correctedTime;
-            ply += 1;
-        }
-    }
+        for (usize i = 0; i < game.size(); ++i)
+            totalTime += float(getCorrectedTime(int(i + 1)));
 
     float timeScaleFactor = static_cast<float>(desiredTimeS * 1000) / totalTime;
 
@@ -503,11 +496,8 @@ BenchmarkSetup setup_benchmark(std::istream& is) {
         for (const std::string& fen : game)
         {
             setup.commands.emplace_back("position fen " + fen);
-
-            const int correctedTime = static_cast<int>(getCorrectedTime(ply) * timeScaleFactor);
+            const int correctedTime = static_cast<int>(getCorrectedTime(ply++) * timeScaleFactor);
             setup.commands.emplace_back("go movetime " + std::to_string(correctedTime));
-
-            ply += 1;
         }
     }
 

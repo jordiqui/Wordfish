@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,9 +20,8 @@
 
 #include <algorithm>
 #include <cassert>
-#include <charconv>
-#include <deque>
 #include <filesystem>
+#include <deque>
 #include <iosfwd>
 #include <memory>
 #include <ostream>
@@ -36,7 +35,6 @@
 #include "misc.h"
 #include "nnue/network.h"
 #include "nnue/nnue_common.h"
-#include "nnue/nnue_misc.h"
 #include "numa.h"
 #include "perft.h"
 #include "polybook.h"
@@ -52,31 +50,14 @@ namespace Stockfish {
 
 namespace NN = Eval::NNUE;
 
-constexpr auto StartFEN   = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-constexpr int  MaxHashMB  = Is64Bit ? 33554432 : 2048;
-int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
+constexpr int MaxHashMB  = Is64Bit ? 33554432 : 2048;
+int           MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
-// The default configuration groups L3 domains up to 32 threads, balancing history
-// sharing against cross-cache access costs. Users can explicitly override this behavior.
+// The default configuration will attempt to group L3 domains up to 32 threads.
+// This size was found to be a good balance between the Elo gain of increased
+// history sharing and the speed loss from more cross-cache accesses (see
+// PR#6526). The user can always explicitly override this behavior.
 constexpr NumaAutoPolicy DefaultNumaPolicy = BundledL3Policy{32};
-
-namespace {
-
-void load_primary_network(NN::Network& network, const std::filesystem::path& binaryDirectory,
-                          const std::filesystem::path& file, NN::EvalFile& networkFile) {
-    network.load(binaryDirectory, file, networkFile);
-}
-
-std::optional<size_t> parse_l3_bundle_size(std::string_view value) {
-    size_t size = 0;
-    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), size);
-    if (error != std::errc{} || end != value.data() + value.size() || size == 0)
-        return std::nullopt;
-    return size;
-}
-
-
-}  // namespace
 
 Engine::Engine(std::optional<std::filesystem::path> path) :
     binaryDirectory(path ? CommandLine::get_binary_directory(*path) : std::filesystem::path{}),
@@ -84,7 +65,7 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     states(new std::deque<StateInfo>(1)),
     threads(),
     networkFile{std::nullopt, ""},
-    networks(numaContext, std::make_unique<NN::Network>()) {
+    network(numaContext, get_default_network()) {
 
     pos.set(StartFEN, false, &states->back());
 
@@ -126,19 +107,9 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     options.add(  //
       "MultiPV", Option(1, 1, MAX_MOVES));
 
-    options.add("Search Strategy", Option("AlphaBeta MCTS Montecarlo", "AlphaBeta"));
-    options.add("MCTS Enabled", Option(false));
-
-    options.add("MCTS Rollout Depth", Option(12, 4, 128));
-    options.add("MCTS Simulations", Option(5000, 0, 1000000));
-    options.add("MCTS Explore", Option(35, 1, 200));
-
     options.add("Skill Level", Option(20, 0, 20));
 
     options.add("Move Overhead", Option(10, 0, 5000));
-    options.add("Minimum Thinking Time", Option(100, 0, 5000));
-    options.add("Panic Time Buffer", Option(200, 0, 5000));
-    options.add("Slow Mover", Option(100, 10, 1000));
 
     options.add("nodestime", Option(0, 0, 10000));
 
@@ -146,16 +117,42 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 
     options.add("UCI_LimitStrength", Option(false));
 
-    options.add("Contempt", Option(0, -200, 200));
-    options.add("Contemp", Option(0, -200, 200));
-
-    options.add("King Safety", Option(100, 0, 200));
-
     options.add("UCI_Elo",
                 Option(Stockfish::Search::Skill::LowestElo, Stockfish::Search::Skill::LowestElo,
                        Stockfish::Search::Skill::HighestElo));
 
     options.add("UCI_ShowWDL", Option(false));
+
+    options.add("Search Strategy", Option("AlphaBeta MCTS Montecarlo", "AlphaBeta"));
+    options.add("MCTS Enabled", Option(false));
+    options.add("MCTS Rollout Depth", Option(12, 4, 128));
+    options.add("MCTS Simulations", Option(5000, 0, 1000000));
+    options.add("MCTS Explore", Option(35, 1, 200));
+    options.add("Contempt", Option(0, -200, 200));
+    options.add("King Safety", Option(100, 0, 200));
+
+    const auto updateExperience = [this](const Option&) { return Experience::update_settings(options); };
+    const auto updatePolyBook = [this](const Option&) { PolyBook::init(options); return std::nullopt; };
+    options.add("Experience Enabled", Option(true, updateExperience));
+    options.add("Experience File", Option("Wordfish.exp", updateExperience));
+    options.add("Experience Readonly", Option(false, updateExperience));
+    options.add("Experience Book", Option(false, updateExperience));
+    options.add("Experience Book Width", Option(1, 1, 32, updateExperience));
+    options.add("Experience Book Eval Importance", Option(5, 0, 10, updateExperience));
+    options.add("Experience Book Min Depth", Option(27, 0, 128, updateExperience));
+    options.add("Experience Book Max Moves", Option(16, 1, 128, updateExperience));
+    options.add("Experience Status", Option([&](const Option&) { return Experience::status_summary(); }));
+    options.add("Experience Sync", Option([&](const Option&) { Experience::flush(); return Experience::status_summary(); }));
+    options.add("Book1", Option(false, updatePolyBook));
+    options.add("Book1 File", Option("", updatePolyBook));
+    options.add("Book1 BestBookMove", Option(false, updatePolyBook));
+    options.add("Book1 Depth", Option(255, 1, 350, updatePolyBook));
+    options.add("Book1 Width", Option(1, 1, 10, updatePolyBook));
+    options.add("Book2", Option(false, updatePolyBook));
+    options.add("Book2 File", Option("", updatePolyBook));
+    options.add("Book2 BestBookMove", Option(false, updatePolyBook));
+    options.add("Book2 Depth", Option(255, 1, 350, updatePolyBook));
+    options.add("Book2 Width", Option(1, 1, 10, updatePolyBook));
 
     options.add(  //
       "SyzygyPath", Option("", [](const Option& o) {
@@ -169,57 +166,20 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 
     options.add("SyzygyProbeLimit", Option(7, 0, 7));
 
-    const auto updateExperience = [this](const Option&) {
-        return Experience::update_settings(options);
-    };
-
-    const auto updatePolyBook = [this](const Option&) {
-        PolyBook::init(options);
-        return std::nullopt;
-    };
-
-    options.add("Experience Enabled", Option(true, updateExperience));
-    options.add("Experience File", Option("Wordfish.exp", updateExperience));
-    options.add("Experience Readonly", Option(false, updateExperience));
-    options.add("Experience Book", Option(false, updateExperience));
-    options.add("Experience Book Width", Option(1, 1, 32, updateExperience));
-    options.add("Experience Book Eval Importance", Option(5, 0, 10, updateExperience));
-    options.add("Experience Book Min Depth", Option(27, 0, 128, updateExperience));
-    options.add("Experience Book Max Moves", Option(16, 1, 128, updateExperience));
-    options.add("Experience Status", Option([&](const Option&) {
-        return Experience::status_summary();
-    }));
-    options.add("Experience Sync", Option([&](const Option&) {
-        Experience::flush();
-        return Experience::status_summary();
-    }));
-
-    options.add("Book1", Option(false, updatePolyBook));
-    options.add("Book1 File", Option("", updatePolyBook));
-    options.add("Book1 BestBookMove", Option(false, updatePolyBook));
-    options.add("Book1 Depth", Option(255, 1, 350, updatePolyBook));
-    options.add("Book1 Width", Option(1, 1, 10, updatePolyBook));
-
-    options.add("Book2", Option(false, updatePolyBook));
-    options.add("Book2 File", Option("", updatePolyBook));
-    options.add("Book2 BestBookMove", Option(false, updatePolyBook));
-    options.add("Book2 Depth", Option(255, 1, 350, updatePolyBook));
-    options.add("Book2 Width", Option(1, 1, 10, updatePolyBook));
-
-    PolyBook::init(options);
-
     options.add(  //
       "EvalFile", Option(EvalFileDefaultName, [this](const Option& o) {
           load_network(path_from_utf8(std::string(o)));
           return std::nullopt;
       }));
 
-    load_network();
+    threads.clear();
+    PolyBook::init(options);
     Experience::update_settings(options);
+    threads.ensure_network_replicated();
     resize_threads();
 }
 
-std::variant<std::uint64_t, PositionSetError>
+std::variant<u64, PositionSetError>
 Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
     verify_network();
 
@@ -229,45 +189,13 @@ Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
     verify_network();
-    threads.ensure_network_replicated();
 
-    const bool searchRequested = limits.depth || limits.nodes || limits.mate || limits.infinite
-                                 || limits.ponderMode || !limits.searchmoves.empty();
-
-    if (!searchRequested)
-    {
-        Move bookMove = polybook[0].probe(pos);
-
-        if (bookMove == Move::none())
-            bookMove = polybook[1].probe(pos);
-
-        if (bookMove != Move::none())
-        {
-            bool tbRootCovered = false;
-            if (!pos.can_castle(ANY_CASTLING)
-                && pos.count<ALL_PIECES>() <= std::min(int(options["SyzygyProbeLimit"]),
-                                                       Tablebases::MaxCardinality))
-            {
-                Search::RootMoves tbRootMoves;
-                for (const Move m : MoveList<LEGAL>(pos))
-                    tbRootMoves.emplace_back(m);
-
-                if (!tbRootMoves.empty())
-                    tbRootCovered = Tablebases::rank_root_moves(options, pos, tbRootMoves).rootInTB;
-            }
-
-            if (!tbRootCovered)
-            {
-                const auto bestmove = UCIEngine::move(bookMove, options["UCI_Chess960"]);
-
-                if (updateContext.onBestmove)
-                    updateContext.onBestmove(bestmove, std::string_view{});
-
-                return;
-            }
-        }
+    Move bookMove = polybook[0].probe(pos);
+    if (bookMove == Move::none()) bookMove = polybook[1].probe(pos);
+    if (bookMove != Move::none()) {
+        updateContext.onBestmove(UCIEngine::move(bookMove, options["UCI_Chess960"]), "");
+        return;
     }
-
     threads.start_thinking(options, pos, states, limits);
 }
 void Engine::stop() { threads.stop = true; }
@@ -277,11 +205,10 @@ void Engine::search_clear() {
 
     tt.clear(threads);
     threads.clear();
-
-    // @TODO wont work with multiple instances
-    Tablebases::init(options["SyzygyPath"]);  // Free mapped files
-
     Experience::new_game();
+
+    // TODO: does not work with multiple instances
+    Tablebases::init(options["SyzygyPath"]);  // Free mapped files
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -304,31 +231,24 @@ void Engine::set_on_start(std::function<void()>&& f) { updateContext.onStart = s
 
 void Engine::set_on_verify_network(std::function<void(std::string_view)>&& f) {
     onVerifyNetwork = std::move(f);
-    networksNeedVerification = true;
 }
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
 
 std::optional<PositionSetError> Engine::set_position(const std::string&              fen,
-                                                       const std::vector<std::string>& moves) {
-    // Validate before replacing the active position, so rejected input leaves it unchanged.
-    Position  candidate;
-    StateInfo candidateState;
-    auto      error = candidate.set(fen, options["UCI_Chess960"], &candidateState);
-    if (error.has_value())
-        return error;
-
+                                                     const std::vector<std::string>& moves) {
     // Drop the old state and create a new one
-    states = StateListPtr(new std::deque<StateInfo>(1));
-    error  = pos.set(fen, options["UCI_Chess960"], &states->back());
-    assert(!error.has_value());
+    states   = StateListPtr(new std::deque<StateInfo>(1));
+    auto err = pos.set(fen, options["UCI_Chess960"], &states->back());
+    if (err.has_value())
+        return err;
 
     for (const auto& move : moves)
     {
         auto m = UCIEngine::to_move(pos, move);
 
         if (m == Move::none())
-            break;
+            return PositionSetError("Illegal move: " + move);
 
         states->emplace_back();
         pos.do_move(m, states->back());
@@ -341,24 +261,22 @@ std::optional<PositionSetError> Engine::set_position(const std::string&         
 
 bool Engine::set_numa_config_from_option(const std::string& o) {
     if (o == "auto" || o == "system")
-        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy));
-    else if (o == "hardware")
-        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy, false));
-    else if (o == "l3")
-        numaContext.set_numa_config(NumaConfig::from_system(L3DomainsPolicy{}));
-    else if (o.rfind("l3:", 0) == 0)
     {
-        const auto bundleSize = parse_l3_bundle_size(std::string_view(o).substr(3));
-        if (!bundleSize)
-            return false;
-        numaContext.set_numa_config(NumaConfig::from_system(BundledL3Policy{*bundleSize}));
+        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy));
+    }
+    else if (o == "hardware")
+    {
+        // Don't respect affinity set in the system.
+        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy, false));
     }
     else if (o == "none")
+    {
         numaContext.set_numa_config(NumaConfig{});
+    }
     else
     {
         auto parsed = NumaConfig::from_string(o);
-        if (!parsed)
+        if (!parsed.has_value())
             return false;
         numaContext.set_numa_config(std::move(*parsed));
     }
@@ -371,7 +289,7 @@ bool Engine::set_numa_config_from_option(const std::string& o) {
 
 void Engine::resize_threads() {
     threads.wait_for_search_finished();
-    threads.set(numaContext.get_numa_config(), {options, threads, tt, sharedHists, networks},
+    threads.set(numaContext.get_numa_config(), {options, threads, tt, sharedHists, network},
                 updateContext);
 
     // Reallocate the hash with the new threadpool size
@@ -379,7 +297,7 @@ void Engine::resize_threads() {
     threads.ensure_network_replicated();
 }
 
-void Engine::set_tt_size(size_t mb) {
+void Engine::set_tt_size(usize mb) {
     wait_for_search_finished();
     tt.resize(mb, threads);
 }
@@ -388,19 +306,12 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 
 // network related
 
-std::string Engine::get_default_network() const {
-    return options["EvalFile"];
-}
-
 void Engine::verify_network() const {
-    if (!networksNeedVerification)
-        return;
+    const auto file = path_from_utf8(std::string(options["EvalFile"]));
+    network->verify(onVerifyNetwork, networkFile, file);
 
-    networks->verify(onVerifyNetwork, networkFile,
-                     path_from_utf8(std::string(options["EvalFile"])));
-
-    auto statuses = networks.get_status_and_errors();
-    for (size_t i = 0; i < statuses.size(); ++i)
+    auto statuses = network.get_status_and_errors();
+    for (usize i = 0; i < statuses.size(); ++i)
     {
         const auto [status, error] = statuses[i];
         std::string message        = "Network replica " + std::to_string(i + 1) + ": ";
@@ -428,37 +339,27 @@ void Engine::verify_network() const {
 
         onVerifyNetwork(message);
     }
-
-    networksNeedVerification = false;
 }
 
-void Engine::load_network() {
-    networks.modify_and_replicate([this](NN::Network& networks_) {
-        load_primary_network(networks_, binaryDirectory,
-                             path_from_utf8(std::string(options["EvalFile"])), networkFile);
-    });
-    threads.clear();
-    networksNeedVerification = true;
-    threads.ensure_network_replicated();
+std::unique_ptr<Eval::NNUE::Network> Engine::get_default_network() {
+
+    auto network_ = std::make_unique<NN::Network>();
+
+    network_->load(binaryDirectory, std::filesystem::path{}, networkFile);
+
+    return network_;
 }
 
 void Engine::load_network(const std::filesystem::path& file) {
-    load_big_network(file);
-}
-
-void Engine::load_big_network(const std::filesystem::path& file) {
-    networks.modify_and_replicate([this, &file](NN::Network& networks_) {
-        load_primary_network(networks_, binaryDirectory, file, networkFile);
-    });
+    network.modify_and_replicate(
+      [this, &file](NN::Network& network_) { network_.load(binaryDirectory, file, networkFile); });
     threads.clear();
-    networksNeedVerification = true;
     threads.ensure_network_replicated();
 }
 
-
 void Engine::save_network(const std::optional<std::filesystem::path>& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Network& network) { network.save(networkFile, file); });
+    network.modify_and_replicate(
+      [&file, this](NN::Network& network_) { network_.save(networkFile, file); });
 }
 
 // utility functions
@@ -470,7 +371,7 @@ void Engine::trace_eval() const {
 
     verify_network();
 
-    sync_cout << "\n" << Eval::trace(p, *networks) << sync_endl;
+    sync_cout << "\n" << Eval::trace(p, *network) << sync_endl;
 }
 
 const OptionsMap& Engine::get_options() const { return options; }
@@ -488,11 +389,11 @@ std::string Engine::visualize() const {
 
 int Engine::get_hashfull(int maxAge) const { return tt.hashfull(maxAge); }
 
-std::vector<std::pair<size_t, size_t>> Engine::get_bound_thread_count_by_numa_node() const {
-    auto                                   counts = threads.get_bound_thread_count_by_numa_node();
-    const NumaConfig&                      cfg    = numaContext.get_numa_config();
-    std::vector<std::pair<size_t, size_t>> ratios;
-    NumaIndex                              n = 0;
+std::vector<std::pair<usize, usize>> Engine::get_bound_thread_count_by_numa_node() const {
+    auto                                 counts = threads.get_bound_thread_count_by_numa_node();
+    const NumaConfig&                    cfg    = numaContext.get_numa_config();
+    std::vector<std::pair<usize, usize>> ratios;
+    NumaIndex                            n = 0;
     for (; n < counts.size(); ++n)
         ratios.emplace_back(counts[n], cfg.num_cpus_in_numa_node(n));
     if (!counts.empty())
@@ -532,7 +433,7 @@ std::string Engine::thread_binding_information_as_string() const {
 std::string Engine::thread_allocation_information_as_string() const {
     std::stringstream ss;
 
-    size_t threadsSize = threads.size();
+    usize threadsSize = threads.size();
     ss << "Using " << threadsSize << (threadsSize > 1 ? " threads" : " thread");
 
     auto boundThreadsByNodeStr = thread_binding_information_as_string();

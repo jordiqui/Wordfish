@@ -31,7 +31,7 @@ namespace Stockfish::Eval::NNUE::Features {
 
 class PP_3Wide {
    public:
-    static constexpr std::uint32_t HashValue = 0x86f2b1ddu;
+    static constexpr u32 HashValue = 0x86f2b1ddu;
 
     static constexpr IndexType PawnIds    = COLOR_NB * 48;
     static constexpr IndexType Dimensions = PawnIds * (PawnIds - 1) / 2;
@@ -39,7 +39,7 @@ class PP_3Wide {
     // Pawn pair feature indices are concatenated to threats, so this must equal ThreatFeatureSet::Dimensions;
     // see nnue_feature_transformer.h
     static constexpr IndexType IndexBase = 59808;
-    using IndexList                      = ValueList<std::uint16_t, 256>;
+    using IndexList                      = ValueList<u16, 256>;
     using DiffType                       = DirtyPawnPairs;
 
     static IndexType make_index(
