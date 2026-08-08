@@ -77,7 +77,8 @@ alignas(64) constexpr auto RankAttacks = []() {
     return table;
 }();
 
-static void init_dual_magics(DualMagic magics[]) {
+static constexpr auto make_dual_magics() {
+    std::array<DualMagic, SQUARE_NB> magics{};
     for (Square s = SQ_A1; s <= SQ_H8; ++s)
     {
         DualMagic& m        = magics[s];
