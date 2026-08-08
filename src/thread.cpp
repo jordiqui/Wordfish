@@ -55,6 +55,8 @@ size_t next_power_of_two(size_t n) {
 Thread::Thread(Search::SharedState&                    sharedState,
                std::unique_ptr<Search::ISearchManager> sm,
                size_t                                  n,
+               size_t                                  numaThreadId,
+               size_t                                  numaTotalThreads,
                OptionalThreadToNumaNodeBinder          binder) :
     idx(n),
     nthreads(sharedState.options["Threads"]),
@@ -62,13 +64,13 @@ Thread::Thread(Search::SharedState&                    sharedState,
 
     wait_for_search_finished();
 
-    run_custom_job([this, &binder, &sharedState, &sm, n]() {
+    run_custom_job([this, &binder, &sharedState, &sm, n, numaThreadId, numaTotalThreads]() {
         // Use the binder to [maybe] bind the threads to a NUMA node before doing
         // the Worker allocation. Ideally we would also allocate the SearchManager
         // here, but that's minor.
         this->numaAccessToken = binder();
-        this->worker = make_unique_large_page<Search::Worker>(sharedState, std::move(sm), n,
-                                                              this->numaAccessToken);
+        this->worker = make_unique_large_page<Search::Worker>(
+          sharedState, std::move(sm), n, numaThreadId, numaTotalThreads, this->numaAccessToken);
     });
 
     wait_for_search_finished();
@@ -217,6 +219,11 @@ void ThreadPool::set(const NumaConfig&                           numaConfig,
         {
             const size_t    threadId = threads.size();
             const NumaIndex numaId   = doBindThreads ? boundThreadToNumaNode[threadId] : 0;
+            const size_t numaThreadId =
+              doBindThreads ? std::count(boundThreadToNumaNode.begin(),
+                                         boundThreadToNumaNode.begin() + threadId, numaId)
+                            : threadId;
+            const size_t numaTotalThreads = counts.at(numaId);
             auto            manager  = threadId == 0 ? std::unique_ptr<Search::ISearchManager>(
                                              std::make_unique<Search::SearchManager>(updateContext))
                                                      : std::make_unique<Search::NullSearchManager>();
@@ -228,8 +235,8 @@ void ThreadPool::set(const NumaConfig&                           numaConfig,
             auto binder = doBindThreads ? OptionalThreadToNumaNodeBinder(numaConfig, numaId)
                                         : OptionalThreadToNumaNodeBinder(numaId);
 
-            threads.emplace_back(
-              std::make_unique<Thread>(sharedState, std::move(manager), threadId, binder));
+            threads.emplace_back(std::make_unique<Thread>(sharedState, std::move(manager), threadId,
+                                                          numaThreadId, numaTotalThreads, binder));
         }
 
         clear();

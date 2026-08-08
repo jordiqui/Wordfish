@@ -36,6 +36,7 @@
 namespace Stockfish {
 
 class TranspositionTable;
+struct SharedHistories;
 
 // StateInfo struct stores information needed to restore a Position object to
 // its previous state when we retract a move. Whenever a move is made on the
@@ -148,7 +149,8 @@ class Position {
                  StateInfo&                newSt,
                  bool                      givesCheck,
                  Dirties&                  dirties,
-                 const TranspositionTable* tt);
+                 const TranspositionTable* tt,
+                 const SharedHistories*    history);
     void undo_move(Move m);
     void do_null_move(StateInfo& newSt, const TranspositionTable& tt);
     void undo_null_move();
@@ -432,7 +434,7 @@ inline void Position::swap_piece(Square s, Piece pc, DirtyThreats* const dts) {
 inline void Position::do_move(Move m, StateInfo& newSt, const TranspositionTable* tt = nullptr) {
     new (&scratchDirties.dirtyThreats) DirtyThreats;
     new (&scratchDirties.dirtyPawnPairs) DirtyPawnPairs;
-    do_move(m, newSt, gives_check(m), scratchDirties, tt);
+    do_move(m, newSt, gives_check(m), scratchDirties, tt, nullptr);
 }
 
 inline StateInfo* Position::state() const { return st; }

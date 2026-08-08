@@ -185,11 +185,15 @@ Value king_safety_adjustment(const Position& pos, int kingSafetySetting)
 Search::Worker::Worker(SharedState&                    sharedState,
                        std::unique_ptr<ISearchManager> sm,
                        size_t                          threadId,
+                       size_t                          numaThreadId,
+                       size_t                          numaTotalThreads,
                        NumaReplicatedAccessToken       token) :
     // Unpack the SharedState struct into member variables
     sharedHistory(sharedState.sharedHistories.at(token.get_numa_index())),
     continuationHistory(sharedHistory.continuationHistory),
     threadIdx(threadId),
+    numaThreadIdx(numaThreadId),
+    numaTotal(numaTotalThreads),
     numaAccessToken(token),
     manager(std::move(sm)),
     options(sharedState.options),
@@ -833,7 +837,7 @@ void Search::Worker::do_move(
     ++nodes;
 
     Dirties& dirties = accumulatorStack.push();
-    pos.do_move(move, st, givesCheck, dirties, &tt);
+    pos.do_move(move, st, givesCheck, dirties, &tt, &sharedHistory);
 
     if (ss != nullptr)
     {
@@ -866,8 +870,18 @@ void Search::Worker::clear() {
     mainHistory.fill(0);
     captureHistory.fill(-689);
 
-    sharedHistory.correctionHistory.clear_range(0, sharedHistory.get_size());
-    sharedHistory.pawnHistory.clear_range(0, sharedHistory.pawnHistory.get_size());
+    // Each worker clears one disjoint segment of the histories shared on its NUMA node.
+    const size_t correctionStart =
+      uint64_t(numaThreadIdx) * sharedHistory.get_size() / numaTotal;
+    const size_t correctionEnd =
+      uint64_t(numaThreadIdx + 1) * sharedHistory.get_size() / numaTotal;
+    const size_t pawnStart =
+      uint64_t(numaThreadIdx) * sharedHistory.pawnHistory.get_size() / numaTotal;
+    const size_t pawnEnd =
+      uint64_t(numaThreadIdx + 1) * sharedHistory.pawnHistory.get_size() / numaTotal;
+
+    sharedHistory.correctionHistory.clear_range(0, correctionStart, correctionEnd);
+    sharedHistory.pawnHistory.clear_range(-1238, pawnStart, pawnEnd);
 
     ttMoveHistory = 0;
 
