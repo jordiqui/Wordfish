@@ -56,9 +56,9 @@ constexpr auto StartFEN   = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq 
 constexpr int  MaxHashMB  = Is64Bit ? 33554432 : 2048;
 int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
-// Preserve Wordfish's existing automatic/system behavior. L3-aware subdivisions
-// are available through explicit NumaPolicy values.
-constexpr NumaAutoPolicy DefaultNumaPolicy = SystemNumaPolicy{};
+// The default configuration groups L3 domains up to 32 threads, balancing history
+// sharing against cross-cache access costs. Users can explicitly override this behavior.
+constexpr NumaAutoPolicy DefaultNumaPolicy = BundledL3Policy{32};
 
 namespace {
 
