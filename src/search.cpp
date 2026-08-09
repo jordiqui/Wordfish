@@ -164,7 +164,7 @@ Value king_safety_adjustment(const Position& pos, int setting) {
     if (setting == 100)
         return VALUE_ZERO;
     auto pressure = [&](Color color) {
-        Bitboard zone = attacks_bb<KING>(pos.square<KING>(color))
+        Bitboard zone = Attacks::attacks_bb<KING>(pos.square<KING>(color))
                       | square_bb(pos.square<KING>(color));
         int danger = 0;
         while (zone)

@@ -27,16 +27,6 @@
 #include "types.h"
 #include "bitboard.h"
 
-#ifndef RESTRICT
-    #ifdef __GNUC__
-        #define RESTRICT __restrict__
-    #elif defined(_MSC_VER)
-        #define RESTRICT __restrict
-    #else
-        #define RESTRICT
-    #endif
-#endif
-
 #ifdef __aarch64__
     #include <arm_acle.h>
     #define USE_HYPERBOLA_QUINT
@@ -366,18 +356,5 @@ inline Bitboard attacks_bb(Piece pc, Square s, Bitboard occupied) {
 }
 
 }  // namespace Stockfish::Attacks
-
-namespace Stockfish {
-using Attacks::attacks_bb;
-using Attacks::between_bb;
-using Attacks::both_attacks_bb;
-using Attacks::BetweenBB;
-using Attacks::line_bb;
-using Attacks::LineBB;
-using Attacks::PawnPushOrAttacks;
-using Attacks::PseudoAttacks;
-using Attacks::ray_pass_bb;
-using Attacks::RayPassBB;
-}
 
 #endif  // #ifndef ATTACKS_H_INCLUDED
