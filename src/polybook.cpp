@@ -580,7 +580,7 @@ Key PolyBook::polyglot_key(const Position& pos) {
         key ^= PG.Zobrist.castle[3];
 
     if (pos.ep_square() != SQ_NONE
-        && (attacks_bb<PAWN>(pos.ep_square(), ~pos.side_to_move())
+        && (Attacks::attacks_bb<PAWN>(pos.ep_square(), ~pos.side_to_move())
             & pos.pieces(pos.side_to_move(), PAWN)))
         key ^= PG.Zobrist.enpassant[file_of(pos.ep_square())];
 
